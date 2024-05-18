@@ -9,11 +9,15 @@ import productsReducer, { productsFetch } from "./features/productsSlice";
 import cartReducer, { getTotals } from "./features/cartSlice"
 import authReducer, { loadUser } from "./features/authSlice";
 import { productsApi } from "./features/productsApi";
+import ordersSlice from "./features/ordersSlice";
+import usersSlice from "./features/usersSlice";
 
 
 const store = configureStore({
   reducer: {
     products: productsReducer,
+    orders: ordersSlice,
+    users: usersSlice,
     cart: cartReducer,
     auth: authReducer, 
     [productsApi.reducerPath]: productsApi.reducer,
@@ -24,7 +28,7 @@ const store = configureStore({
 
 store.dispatch(productsFetch());
 store.dispatch(getTotals());
-// store.dispatch(loadUser(null));
+store.dispatch(loadUser(null));
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

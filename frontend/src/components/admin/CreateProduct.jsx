@@ -7,6 +7,7 @@ import { productsCreate } from "../../features/productsSlice";
 
 const CreateProduct = () => {
   const dispatch = useDispatch();
+  const { createStatus } = useSelector((state) => state.products);
 
   const [productImg, setProductImg] = useState("");
   const [name, setName] = useState("");
@@ -74,7 +75,7 @@ const CreateProduct = () => {
           onChange={(e) => setWeight(e.target.value)}
           required
         />
-        <PrimaryButton>Submit</PrimaryButton>
+        <PrimaryButton>{createStatus === "pending" ? "Submitting" : "Submit"}</PrimaryButton>
       </StyledForm>
       <ImagePreview>
         {productImg ? (

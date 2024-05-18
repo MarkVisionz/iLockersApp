@@ -106,9 +106,9 @@ const authSlice = createSlice({
           token: action.payload,
           name: user.name,
           email: user.email,
-          id: user._id,
+          _id: user._id,
           isAdmin: user.isAdmin,
-          registerStatus: "Success",
+          registerStatus: "success",
         };
       } else return state;
     });
@@ -135,7 +135,7 @@ const authSlice = createSlice({
           email: user.email,
           _id: user._id,
           isAdmin: user.isAdmin,
-          loginStatus: "Success",
+          loginStatus: "success",
         };
       } else return state;
     });

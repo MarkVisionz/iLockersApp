@@ -14,15 +14,19 @@ const NavBar = () => {
   return (
     <nav className="nav-bar">
       <Link to="/">
-        <h2>Online Laundry</h2>
+        {/* <h2>Online Laundry</h2> */}
+        <div className="img-logo">
+          <img src="https://res.cloudinary.com/mkocloud/image/upload/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png" alt="img" width="150"
+            height="150" />
+        </div>
       </Link>
 
       <Link to="/cart">
         <div className="nav-bag">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="25"
+            height="25"
             fill="currentColor"
             class-name="bi bi-bag"
             viewBox="0 0 16 16"

@@ -17,20 +17,20 @@ const Cart = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  useEffect(()=>{
-    dispatch(getTotals())
-  }, [cart, dispatch])
+  useEffect(() => {
+    dispatch(getTotals());
+  }, [cart, dispatch]);
 
-  const handleRemoveFromCart = (cartItem) => {
-    dispatch(removeFromCart(cartItem));
+  const handleIncreaseCart = (cartItem) => {
+    dispatch(addToCart(cartItem));
   };
 
   const handleDecreaseCart = (cartItem) => {
     dispatch(decreaseCart(cartItem));
   };
 
-  const handleIncreaseCart = (cartItem) => {
-    dispatch(addToCart(cartItem));
+  const handleRemoveFromCart = (cartItem) => {
+    dispatch(removeFromCart(cartItem));
   };
 
   const handleClearCart = () => {
@@ -71,32 +71,35 @@ const Cart = () => {
             <h3 className="total">Total</h3>
           </div>
           <div className="cart-items">
-            {cart.cartItems.map((cartItem) => (
-              <div className="cart-item" key={cartItem._id}>
-                <div className="cart-product">
-                  <img src={cartItem.image?.url} alt={cartItem.name} />
-                  <div>
-                    <h3>{cartItem.name}</h3>
-                    <button onClick={() => handleRemoveFromCart(cartItem)}>
-                      Remove
+            {cart.cartItems &&
+              cart.cartItems.map((cartItem) => (
+                <div className="cart-item" key={cartItem._id}>
+                  <div className="cart-product">
+                    <Link to={`/product/${cartItem._id}`}>
+                      <img src={cartItem.image?.url} alt={cartItem.name} />
+                    </Link>
+                    <div>
+                      <h3>{cartItem.name}</h3>
+                      <button onClick={() => handleRemoveFromCart(cartItem)}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div className="cart-product-price">${cartItem.price}</div>
+                  <div className="cart-product-quantity">
+                    <button onClick={() => handleDecreaseCart(cartItem)}>
+                      -
+                    </button>
+                    <div className="count">{cartItem.cartQuantity}</div>
+                    <button onClick={() => handleIncreaseCart(cartItem)}>
+                      +
                     </button>
                   </div>
+                  <div className="cart-product-total-price">
+                    ${cartItem.cartQuantity * cartItem.price}
+                  </div>
                 </div>
-                <div className="cart-product-price">${cartItem.price}</div>
-                <div className="cart-product-quantity">
-                  <button onClick={() => handleDecreaseCart(cartItem)}>
-                    -
-                  </button>
-                  <div className="count">{cartItem.cartQuantity}</div>
-                  <button onClick={() => handleIncreaseCart(cartItem)}>
-                    +
-                  </button>
-                </div>
-                <div className="cart-product-total-price">
-                  ${cartItem.cartQuantity * cartItem.price}
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
           <div className="cart-summary">
             <button className="clear-cart" onClick={() => handleClearCart()}>
@@ -109,7 +112,7 @@ const Cart = () => {
               </div>
               <p>Taxes and shipping calculated at checkout</p>
               {auth._id ? (
-                <PayButton cartItems= {cart.cartItems}></PayButton> 
+                <PayButton cartItems={cart.cartItems}></PayButton>
               ) : (
                 <button
                   className="cart-login"

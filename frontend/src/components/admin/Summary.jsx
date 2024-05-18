@@ -1,16 +1,20 @@
-import { useState, useEffect } from "react";
 import styled from "styled-components";
-import { FaUsers, FaChartBar, FaClipboard } from "react-icons/fa";
 import Widget from "./summary-components/Widget";
-import axios from "axios";
+import { FaUsers, FaChartBar, FaClipboard } from "react-icons/fa";
+import Chart from "./summary-components/Chart";
+import { useState, useEffect } from "react";
 import { setHeaders, url } from "../../features/api";
+import axios from "axios";
+import Transactions from "./summary-components/Transactions";
+import AllTimeData from "./summary-components/AllTimeData";
 
 const Summary = () => {
   const [users, setUsers] = useState([]);
   const [usersPerc, setUsersPerc] = useState(0);
   const [orders, setOrders] = useState([]);
   const [ordersPerc, setOrdersPerc] = useState(0);
-
+  const [income, setIncome] = useState([]);
+  const [incomePerc, setIncomePerc] = useState(0);
 
   function compare(a, b) {
     if (a._id < b._id) {
@@ -21,7 +25,27 @@ const Summary = () => {
     }
     return;
   }
+  
+  // USERS FETCH
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const res = await axios.get(`${url}/users/stats`, setHeaders());
 
+        res.data.sort(compare);
+        setUsers(res.data);
+        setUsersPerc(
+          ((res.data[0].total - res.data[1].total) / res.data[1].total) * 100
+        );
+      } catch (err) {
+        console.log(err);
+      }
+    }
+    fetchData();
+  }, []);
+
+
+  // ORDERS FETCH
   useEffect(() => {
     async function fetchData() {
       try {
@@ -39,14 +63,16 @@ const Summary = () => {
     fetchData();
   }, []);
 
+
+  // EARNINGS FETCH
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await axios.get(`${url}/users/stats`, setHeaders());
+        const res = await axios.get(`${url}/orders/income/stats`, setHeaders());
 
         res.data.sort(compare);
-        setUsers(res.data);
-        setUsersPerc(
+        setIncome(res.data);
+        setIncomePerc(
           ((res.data[0].total - res.data[1].total) / res.data[1].total) * 100
         );
       } catch (err) {
@@ -77,12 +103,12 @@ const Summary = () => {
     },
     {
       icon: <FaChartBar />,
-      digits: 5000,
+      digits: income[0]?.total ? income[0]?.total / 100 : "",
       isMoney: true,
       title: "Earnings",
       color: "rgb(253, 181, 40)",
       bgColor: "rgb(253, 181, 40, 0.12)",
-      percentage: -60,
+      percentage: incomePerc,
     },
   ];
   return (
@@ -99,8 +125,12 @@ const Summary = () => {
             ))}
           </WidgetWrapper>
         </Overview>
+        <Chart />
       </MainStats>
-      <SideStats></SideStats>
+      <SideStats>
+        <Transactions/>
+        <AllTimeData/>
+      </SideStats>
     </StyledSummary>
   );
 };
