@@ -25,17 +25,21 @@ const Transactions = () => {
   return (
     <StyledTransactions>
       {isLoading ? (
-        <p>Transaction Loading...</p>
+        <Loading>Loading transactions...</Loading>
       ) : (
         <>
-          <h3>Latest Transactions</h3>
-          {orders?.map((order, index) => (
-            <Transaction key={index}>
-              <p>{order.shipping.name}</p>
-              <p>${(order.total / 100).toLocaleString()}</p>
-              <p>{moment(order.createdAt).fromNow()}</p>
-            </Transaction>
-          ))}
+          <Title>Latest Transactions</Title>
+          {orders.length > 0 ? (
+            orders.map((order, index) => (
+              <Transaction key={index}>
+                <CustomerName>{order.shipping.name}</CustomerName>
+                <Amount>{(order.total / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}</Amount>
+                <Time>{moment(order.createdAt).fromNow()}</Time>
+              </Transaction>
+            ))
+          ) : (
+            <EmptyState>No transactions found.</EmptyState>
+          )}
         </>
       )}
     </StyledTransactions>
@@ -51,6 +55,14 @@ const StyledTransactions = styled.div`
   border-radius: 5px;
 `;
 
+const Loading = styled.p`
+  margin-top: 1rem;
+`;
+
+const Title = styled.h3`
+  margin-bottom: 1rem;
+`;
+
 const Transaction = styled.div`
   display: flex;
   font-size: 14px;
@@ -58,10 +70,25 @@ const Transaction = styled.div`
   padding: 0.5rem;
   border-radius: 3px;
   background: rgba(38, 198, 249, 0.12);
-  p {
-    flex: 1;
-  }
   &:nth-child(even) {
     background: rgba(102, 108, 255, 0.12);
   }
+`;
+
+const CustomerName = styled.p`
+  flex: 1;
+`;
+
+const Amount = styled.p`
+  flex: 1;
+  margin-left: 1.5rem
+`;
+
+const Time = styled.p`
+  flex: 1;
+`;
+
+const EmptyState = styled.p`
+  margin-top: 1rem;
+  color: rgba(234, 234, 255, 0.6);
 `;

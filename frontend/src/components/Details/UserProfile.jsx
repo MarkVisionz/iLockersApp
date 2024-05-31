@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import axios from "axios";
 import { setHeaders, url } from "../../features/api";
 import { toast } from "react-toastify";
+import { ClipLoader } from "react-spinners";
 
 const UserProfile = () => {
   const params = useParams();
@@ -15,18 +16,18 @@ const UserProfile = () => {
     password: "",
   });
 
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [viewAllOrders, setViewAllOrders] = useState(false);
+  const [sortOrder, setSortOrder] = useState('desc');
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(
-          `${url}/users/find/${params.id}`,
-          setHeaders()
-        );
-
+        const res = await axios.get(`${url}/users/find/${params.id}`, setHeaders());
         setUser({ ...res.data, password: "" });
         setLoading(false);
       } catch (err) {
@@ -35,7 +36,20 @@ const UserProfile = () => {
       }
     };
 
+    const fetchOrders = async () => {
+      try {
+        setLoading(true);
+        const res = await axios.get(`${url}/orders/find/${params.id}`, setHeaders());
+        setOrders(res.data);
+        setLoading(false);
+      } catch (err) {
+        console.log(err);
+        setLoading(false);
+      }
+    };
+
     fetchUser();
+    fetchOrders();
   }, [params.id]);
 
   const handleSubmit = async (e) => {
@@ -57,6 +71,7 @@ const UserProfile = () => {
       });
 
       setUpdating(false);
+      setEditing(false);
     } catch (err) {
       console.log(err);
       setUpdating(false);
@@ -66,42 +81,97 @@ const UserProfile = () => {
     }
   };
 
+  const sortedOrders = orders.sort((a, b) => {
+    if (sortOrder === 'asc') {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    } else {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    }
+  });
+
   return (
     <StyledProfile>
       <ProfileContainer>
         {loading ? (
-          <p>Loading...</p>
+          <LoaderContainer>
+            <ClipLoader size={50} color={"#007bff"} loading={loading} />
+          </LoaderContainer>
         ) : (
-          <form onSubmit={handleSubmit}>
-            <h3>User Profile</h3>
-            {user.isAdmin ? (
-              <Admin>Admin</Admin>
-            ) : (
-              <Customer>Customer</Customer>
-            )}
-            <label htmlFor="name">Name:</label>
-            <input
-              type="text"
-              id="name"
-              value={user.name}
-              onChange={(e) => setUser({ ...user, name: e.target.value })}
-            />
-            <label htmlFor="email">Email:</label>
-            <input
-              type="text"
-              id="email"
-              value={user.email}
-              onChange={(e) => setUser({ ...user, email: e.target.value })}
-            />
-            <label htmlFor="password">Password:</label>
-            <input
-              type="text"
-              value={user.password}
-              id="password"
-              onChange={(e) => setUser({ ...user, password: e.target.value })}
-            />
-            <button>{updating ? "Updating" : "Update Profile"}</button>
-          </form>
+          <>
+            <Card>
+              <CardContent>
+                <h3>{user.name}</h3>
+                {user.isAdmin ? (
+                  <Admin>Admin</Admin>
+                ) : (
+                  <Customer>Customer</Customer>
+                )}
+                <p>Email: {user.email}</p>
+                <Button onClick={() => setEditing(!editing)}>
+                  {editing ? "Cancel" : "Edit Profile"}
+                </Button>
+                {editing && (
+                  <form onSubmit={handleSubmit}>
+                    <FormField>
+                      <label htmlFor="name">Name:</label>
+                      <input
+                        type="text"
+                        id="name"
+                        value={user.name}
+                        onChange={(e) => setUser({ ...user, name: e.target.value })}
+                      />
+                    </FormField>
+                    <FormField>
+                      <label htmlFor="email">Email:</label>
+                      <input
+                        type="text"
+                        id="email"
+                        value={user.email}
+                        onChange={(e) => setUser({ ...user, email: e.target.value })}
+                      />
+                    </FormField>
+                    <FormField>
+                      <label htmlFor="password">Password:</label>
+                      <input
+                        type="password"
+                        value={user.password}
+                        id="password"
+                        onChange={(e) => setUser({ ...user, password: e.target.value })}
+                      />
+                    </FormField>
+                    <Button type="submit">{updating ? "Updating" : "Update Profile"}</Button>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <h4>Orders</h4>
+                <OrderControls>
+                  <Button onClick={() => setViewAllOrders(!viewAllOrders)}>
+                    {viewAllOrders ? "Show Less" : "View All Orders"}
+                  </Button>
+                  <Select
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                  >
+                    <option value="desc">Newest First</option>
+                    <option value="asc">Oldest First</option>
+                  </Select>
+                </OrderControls>
+                <OrderList>
+                  {sortedOrders.slice(0, viewAllOrders ? orders.length : 3).map((order) => (
+                    <Order key={order._id}>
+                      <p><strong>Order ID:</strong> {order._id}</p>
+                      <p><strong>Date:</strong> {new Date(order.createdAt).toLocaleDateString()}</p>
+                      <p><strong>Total:</strong> ${order.total}</p>
+                    </Order>
+                  ))}
+                  {orders.length === 0 && <p>No orders found</p>}
+                </OrderList>
+              </CardContent>
+            </Card>
+          </>
         )}
       </ProfileContainer>
     </StyledProfile>
@@ -117,49 +187,106 @@ const StyledProfile = styled.div`
 `;
 
 const ProfileContainer = styled.div`
-  max-width: 500px;
+  max-width: 600px;
   width: 100%;
-  height: auto;
   display: flex;
-  box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
-  border-radius: 5px;
+  flex-direction: column;
+  gap: 2rem;
+`;
+
+const Card = styled.div`
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 12px;
+`;
+
+const CardContent = styled.div`
   padding: 2rem;
+`;
 
-  form {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+const FormField = styled.div`
+  margin-bottom: 1rem;
 
-    h3 {
-      margin-bottom: 0.5rem;
-    }
+  label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #555;
+  }
 
-    label {
-      margin-bottom: 0.2rem;
-      color: gray;
-    }
-    input {
-      margin-bottom: 1rem;
-      outline: none;
-      border: none;
-      border-bottom: 1px solid gray;
-    }
+  input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+`;
+
+const Button = styled.button`
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 1rem;
+
+  &:hover {
+    background-color: #0056b3;
   }
 `;
 
 const Admin = styled.div`
   color: rgb(253, 181, 40);
+  width:10%;
   background: rgb(253, 181, 40, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 14px;
   margin-bottom: 1rem;
+  margin-top: 1rem;
 `;
+
 const Customer = styled.div`
   color: rgb(38, 198, 249);
+  width:12%;
   background-color: rgb(38, 198, 249, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 14px;
   margin-bottom: 1rem;
+  margin-top: 1rem;`;
+
+const OrderControls = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+`;
+
+const Select = styled.select`
+  padding: 0.5rem;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+`;
+
+const OrderList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const Order = styled.div`
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+
+  p {
+    margin: 0.5rem 0;
+  }
+`;
+
+const LoaderContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
 `;

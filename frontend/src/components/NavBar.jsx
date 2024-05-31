@@ -9,15 +9,18 @@ const NavBar = () => {
   const dispatch = useDispatch();
   const { cartTotalQuantity } = useSelector((state) => state.cart);
   const auth = useSelector((state) => state.auth);
-   
 
   return (
     <nav className="nav-bar">
       <Link to="/">
         {/* <h2>Online Laundry</h2> */}
         <div className="img-logo">
-          <img src="https://res.cloudinary.com/mkocloud/image/upload/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png" alt="img" width="150"
-            height="150" />
+          <img
+            src="https://res.cloudinary.com/mkocloud/image/upload/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png"
+            alt="img"
+            width="150"
+            height="150"
+          />
         </div>
       </Link>
 
@@ -41,12 +44,15 @@ const NavBar = () => {
 
       {auth._id ? (
         <Links>
-        {auth.isAdmin ?(
-          <div>
-          <Link to="/admin/summary">Admin</Link>
-        </div>
-        ) : (null) }
-          
+          {!auth.isAdmin ? (
+            <div>
+              <Link to="/user/profile">User Profile</Link>
+            </div>
+          ) : (
+            <div>
+              <Link to="/admin/summary">Admin</Link>
+            </div>
+          )}
           <div
             onClick={() => {
               dispatch(logoutUser(null));

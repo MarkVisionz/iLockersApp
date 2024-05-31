@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import { PrimaryButton } from "./CommonStyled";
 import { productsCreate } from "../../features/productsSlice";
@@ -14,17 +13,13 @@ const CreateProduct = () => {
   const [price, setPrice] = useState("");
   const [weight, setWeight] = useState("");
 
-  // console.log(productImg);
-
   const handleProductImageUpload = (e) => {
     const file = e.target.files[0];
-
     TransformFileData(file);
   };
 
   const TransformFileData = (file) => {
     const reader = new FileReader();
-
     if (file) {
       reader.readAsDataURL(file);
       reader.onloadend = () => {
@@ -35,55 +30,64 @@ const CreateProduct = () => {
     }
   };
 
-  const handleSubmit = async(e) => {
-    e.preventDefault()
-
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     dispatch(productsCreate({
       name,
       price,
       weight,
       image: productImg
-    }))
+    }));
   };
 
   return (
     <StyledCreateProduct>
-      <StyledForm onSubmit={handleSubmit}>
+      <FormContainer>
         <h3>Create a Product</h3>
-        <input
-          id="imgUpload"
-          accept="image/*"
-          type="file"
-          onChange={handleProductImageUpload}
-          required
-        />
-        <input
-          type="text"
-          placeholder="Name"
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          placeholder="Price"
-          onChange={(e) => setPrice(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          placeholder="Weight of the product in (g)"
-          onChange={(e) => setWeight(e.target.value)}
-          required
-        />
-        <PrimaryButton>{createStatus === "pending" ? "Submitting" : "Submit"}</PrimaryButton>
-      </StyledForm>
+        <StyledForm onSubmit={handleSubmit}>
+          <InputLabel htmlFor="imgUpload">Upload Image</InputLabel>
+          <FileInput
+            id="imgUpload"
+            accept="image/*"
+            type="file"
+            onChange={handleProductImageUpload}
+            required
+          />
+          <InputLabel htmlFor="name">Name</InputLabel>
+          <TextInput
+            id="name"
+            type="text"
+            placeholder="Product Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+          <InputLabel htmlFor="price">Price</InputLabel>
+          <TextInput
+            id="price"
+            type="number"
+            placeholder="Product Price"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            required
+          />
+          <InputLabel htmlFor="weight">Weight (g)</InputLabel>
+          <TextInput
+            id="weight"
+            type="number"
+            placeholder="Product Weight"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            required
+          />
+          <SubmitButton>{createStatus === "pending" ? "Submitting..." : "Submit"}</SubmitButton>
+        </StyledForm>
+      </FormContainer>
       <ImagePreview>
         {productImg ? (
-          <>
-            <img src={productImg} alt="error!" />
-          </>
+          <img src={productImg} alt="Product Preview" />
         ) : (
-          <p>Image preview will appear here</p>
+          <PlaceholderText>Image preview will appear here</PlaceholderText>
         )}
       </ImagePreview>
     </StyledCreateProduct>
@@ -94,47 +98,90 @@ export default CreateProduct;
 
 const StyledCreateProduct = styled.div`
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  padding: 2rem;
+  gap: 2rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+`;
+
+const FormContainer = styled.div`
+  flex: 1;
+  max-width: 500px;
+  min-width: 300px;
+
+  h3 {
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    color: #333;
+  }
 `;
 
 const StyledForm = styled.form`
   display: flex;
   flex-direction: column;
-  max-width: 300px;
-  margin-top: 2rem;
+`;
 
-  select,
-  input {
-    padding: 7px;
-    min-height: 30px;
+const InputLabel = styled.label`
+  margin-bottom: 0.5rem;
+  color: #555;
+  font-weight: bold;
+`;
+
+const FileInput = styled.input`
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+
+  &:focus {
+    border-color: #007bff;
     outline: none;
-    border-radius: 5px;
-    border: 1px solid rgb(182, 182, 182);
-    margin: 0.3rem 0;
-
-    &:focus {
-      border: 2px solid rgb(0, 208, 255);
-    }
-  }
-
-  select {
-    color: rgb(95, 95, 95);
   }
 `;
 
+const TextInput = styled.input`
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+
+  &:focus {
+    border-color: #007bff;
+    outline: none;
+  }
+`;
+
+const SubmitButton = styled(PrimaryButton)`
+  padding: 0.75rem;
+  font-size: 1rem;
+  border-radius: 4px;
+`;
+
 const ImagePreview = styled.div`
-  margin: 2rem 0 2rem 2rem;
-  padding: 2rem;
-  border: 1px solid rgb(183, 183, 183);
+  flex: 1;
   max-width: 300px;
-  width: 100%;
+  min-width: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
-  color: rgb(78, 78, 78);
-
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
   img {
     max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: 4px;
   }
+`;
+
+const PlaceholderText = styled.p`
+  color: #777;
 `;

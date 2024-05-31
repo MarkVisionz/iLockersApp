@@ -176,7 +176,7 @@ export default function EditProduct({ prodId }) {
 const Edit = styled.button`
   border: none;
   outline: none;
-  padding: 3px 5px;
+  padding: 5px 10px;
   color: white;
   border-radius: 3px;
   cursor: pointer;
