@@ -8,7 +8,6 @@ const Order = () => {
   const params = useParams();
 
   const [order, setOrder] = useState({});
-  console.log(order)
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -55,11 +54,16 @@ const Order = () => {
             <Items>
               {order.products?.map((product, index) => (
                 <Item key={index}>
-                  <span>{product.description}</span>
-                  <span>{product.quantity}</span>
-                  <span>
-                    {"$" + (product.amount_total / 100).toLocaleString()}
-                  </span>
+                  <ProductDetails>
+                    <ProductInfo>
+                      <ProductImage src={product.image} alt={product.description} />
+                      <ProductName>{product.description}</ProductName>
+                      <ProductQuantity>x{product.quantity}</ProductQuantity>
+                      <ProductPrice>
+                        {"$" + (product.amount_total / 100).toLocaleString()}
+                      </ProductPrice>
+                    </ProductInfo>
+                  </ProductDetails>
                 </Item>
               ))}
             </Items>
@@ -69,7 +73,7 @@ const Order = () => {
             </div>
             <div>
               <h3>Shipping Details</h3>
-              <p>Customer: {order.shipping?.name}</p>
+              <p>Customer Name: {order.shipping?.name}</p>
               <p>City: {order.shipping?.address.city}</p>
               <p>Email: {order.shipping?.email}</p>
             </div>
@@ -102,17 +106,48 @@ const OrdersContainer = styled.div`
 `;
 
 const Items = styled.div`
-  span {
-    margin-right: 1.5rem;
-    &:first-child {
-      font-weight: bold;
-    }
-  }
+  margin-top: 1rem;
 `;
 
-const Item = styled.li`
-  margin-left: 0.5rem;
-  margin-bottom: 0.5rem;
+const Item = styled.div`
+  display: flex;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 0.1rem;
+  margin-bottom: 1rem;
+`;
+
+const ProductImage = styled.img`
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  margin-right: 1rem;
+`;
+
+const ProductDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+`;
+
+const ProductName = styled.span`
+  font-weight: bold;
+  margin-bottom: 0.5rem; /* Agrega un margen inferior para separar el nombre del producto del resto de la información */
+`;
+
+const ProductInfo = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly; /* Esto asegura que el precio esté alineado al final */
+`;
+
+const ProductQuantity = styled.span`
+  margin-right: 1rem; /* Ajusta el margen derecho para un mejor espaciado */
+`;
+
+const ProductPrice = styled.span`
+  font-weight: bold; /* Puedes agregar este estilo para resaltar el precio */
 `;
 
 const Pending = styled.span`
@@ -122,6 +157,7 @@ const Pending = styled.span`
   border-radius: 3px;
   font-size: 14px;
 `;
+
 const Dispatched = styled.span`
   color: rgb(38, 198, 249);
   background-color: rgb(38, 198, 249, 0.12);

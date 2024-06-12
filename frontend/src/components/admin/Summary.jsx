@@ -23,9 +23,9 @@ const Summary = () => {
     if (a._id > b._id) {
       return -1;
     }
-    return;
+    return 0;
   }
-  
+
   // USERS FETCH
   useEffect(() => {
     async function fetchData() {
@@ -44,7 +44,6 @@ const Summary = () => {
     fetchData();
   }, []);
 
-
   // ORDERS FETCH
   useEffect(() => {
     async function fetchData() {
@@ -62,7 +61,6 @@ const Summary = () => {
     }
     fetchData();
   }, []);
-
 
   // EARNINGS FETCH
   useEffect(() => {
@@ -111,13 +109,14 @@ const Summary = () => {
       percentage: incomePerc,
     },
   ];
+
   return (
     <StyledSummary>
       <MainStats>
         <Overview>
           <Title>
             <h2>Overview</h2>
-            <p>How your Laundry is performing to the previous month</p>
+            <p>How your Laundry is performing compared to the previous month</p>
           </Title>
           <WidgetWrapper>
             {data?.map((data, index) => (
@@ -128,8 +127,8 @@ const Summary = () => {
         <Chart />
       </MainStats>
       <SideStats>
-        <Transactions/>
-        <AllTimeData/>
+        <Transactions />
+        <AllTimeData />
       </SideStats>
     </StyledSummary>
   );
@@ -138,13 +137,23 @@ const Summary = () => {
 export default Summary;
 
 const StyledSummary = styled.div`
-  width: 100%;
   display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding: 1rem;
+  width: 100%;
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 1rem;
+  }
 `;
 
 const MainStats = styled.div`
   flex: 2;
   width: 100%;
+  @media (max-width: 768px) {
+    flex: 1;
+  }
 `;
 
 const Title = styled.div`
@@ -157,24 +166,39 @@ const Title = styled.div`
 const Overview = styled.div`
   background: rgb(48, 51, 78);
   color: rgba(234, 234, 255, 0.87);
-  width: 100%;
   padding: 1.5rem;
-  height: 170px;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  margin-bottom: 2rem;
+
+  @media (max-width: 768px) {
+    margin-bottom: 1rem;
+    padding: 1rem;
+  }
 `;
 
 const WidgetWrapper = styled.div`
   display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
   width: 100%;
   justify-content: space-between;
+
+  @media (max-width: 768px) {
+    justify-content: center;
+  }
 `;
+
 const SideStats = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-left: 2rem;
+  gap: 2rem;
   width: 100%;
+  @media (max-width: 768px) {
+    flex: 1;
+    margin-top:1rem;
+  }
 `;

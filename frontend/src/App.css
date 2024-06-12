@@ -321,6 +321,10 @@
   border-left: 3px solid #4b70e2;
   padding-left: 5px;
   border-radius: 2px;
+  @media (max-width: 768px){
+    border-bottom: 3px solid #4b70e2;
+    border-left: none;
+  }
 }
 .link-inactive {
   color: rgb(97, 97, 97);

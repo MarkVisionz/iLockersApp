@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import axios from "axios";
+import { useSelector } from "react-redux";
 import { setHeaders, url } from "../../features/api";
 import { toast } from "react-toastify";
 import { ClipLoader } from "react-spinners";
 
 const UserProfile = () => {
   const params = useParams();
+  const auth = useSelector((state) => state.auth);
 
   const [user, setUser] = useState({
     name: "",
@@ -24,10 +26,12 @@ const UserProfile = () => {
   const [sortOrder, setSortOrder] = useState('desc');
 
   useEffect(() => {
+    const userId = auth.isAdmin ? params.id : auth._id;
+
     const fetchUser = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`${url}/users/find/${params.id}`, setHeaders());
+        const res = await axios.get(`${url}/users/find/${userId}`, setHeaders());
         setUser({ ...res.data, password: "" });
         setLoading(false);
       } catch (err) {
@@ -36,10 +40,12 @@ const UserProfile = () => {
       }
     };
 
+    console.log(userId);
+
     const fetchOrders = async () => {
       try {
         setLoading(true);
-        const res = await axios.get(`${url}/orders/find/${params.id}`, setHeaders());
+        const res = await axios.get(`${url}/orders/find/${userId}`, setHeaders());
         setOrders(res.data);
         setLoading(false);
       } catch (err) {
@@ -50,7 +56,7 @@ const UserProfile = () => {
 
     fetchUser();
     fetchOrders();
-  }, [params.id]);
+  }, [params.id, auth._id, auth.isAdmin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,7 +64,7 @@ const UserProfile = () => {
     try {
       setUpdating(true);
       const res = await axios.put(
-        `${url}/users/${params.id}`,
+        `${url}/users/${auth._id}`,
         {
           ...user,
         },
@@ -162,9 +168,23 @@ const UserProfile = () => {
                 <OrderList>
                   {sortedOrders.slice(0, viewAllOrders ? orders.length : 3).map((order) => (
                     <Order key={order._id}>
-                      <p><strong>Order ID:</strong> {order._id}</p>
-                      <p><strong>Date:</strong> {new Date(order.createdAt).toLocaleDateString()}</p>
-                      <p><strong>Total:</strong> ${order.total}</p>
+                      <Link to={`/order/${order._id}`}>
+                        <p><strong>Order ID:</strong> {order._id}</p>
+                        <p><strong>Date:</strong> {new Date(order.createdAt).toLocaleDateString()}</p>
+                        <p><strong>Total:</strong> ${order.total / 100}</p>
+                        <p>
+                          <strong>Status:</strong>{" "}
+                          {order.delivery_status === "pending" ? (
+                            <Pending>Pending</Pending>
+                          ) : order.delivery_status === "dispatched" ? (
+                            <Dispatched>Dispatched</Dispatched>
+                          ) : order.delivery_status === "delivered" ? (
+                            <Delivered>Delivered</Delivered>
+                          ) : (
+                            "error"
+                          )}
+                        </p>
+                      </Link>
                     </Order>
                   ))}
                   {orders.length === 0 && <p>No orders found</p>}
@@ -237,7 +257,7 @@ const Button = styled.button`
 
 const Admin = styled.div`
   color: rgb(253, 181, 40);
-  width:10%;
+  width: 10%;
   background: rgb(253, 181, 40, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
@@ -248,13 +268,14 @@ const Admin = styled.div`
 
 const Customer = styled.div`
   color: rgb(38, 198, 249);
-  width:12%;
+  width: 12%;
   background-color: rgb(38, 198, 249, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 14px;
   margin-bottom: 1rem;
-  margin-top: 1rem;`;
+  margin-top: 1rem;
+`;
 
 const OrderControls = styled.div`
   display: flex;
@@ -278,10 +299,40 @@ const Order = styled.div`
   padding: 1rem;
   border: 1px solid #ddd;
   border-radius: 5px;
+  background-color: #f8f9fa;
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
 
   p {
     margin: 0.5rem 0;
   }
+`;
+
+const Pending = styled.span`
+  color: rgb(253, 181, 40);
+  background: rgb(253, 181, 40, 0.12);
+  padding: 3px 5px;
+  border-radius: 3px;
+  font-size: 14px;
+`;
+
+const Dispatched = styled.span`
+  color: rgb(38, 198, 249);
+  background-color: rgb(38, 198, 249, 0.12);
+  padding: 3px 5px;
+  border-radius: 3px;
+  font-size: 14px;
+`;
+
+const Delivered = styled.span`
+  color: rgb(102, 108, 255);
+  background-color: rgba(102, 108, 255, 0.12);
+  padding: 3px 5px;
+  border-radius: 3px;
+  font-size: 14px;
 `;
 
 const LoaderContainer = styled.div`

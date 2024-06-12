@@ -137,4 +137,21 @@ router.get("/find/:id", async (req, res) => {
   }
 });
 
+// ADD PRODUCT IMAGE TO LINE ITEMS
+router.post("/add-product-image-to-line-items", async (req, res) => {
+  try {
+    const product = await Product.findById(req.body.productId);
+
+    if (!product) return res.status(404).send("Product not found...");
+
+    // Obtener la URL de la imagen del producto
+    const imageURL = product.image.url;
+
+    res.status(200).send(imageURL);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+
 module.exports = router;

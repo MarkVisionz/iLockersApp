@@ -31,7 +31,7 @@ router.delete("/:id", isAdmin, async (req, res) => {
 });
 
 //GET USER ORDERS
-router.get("/find/:userId", isUser, async (req, res) => {
+router.get("/find/:userId", auth, async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.params.userId });
     res.status(200).send(orders);
@@ -61,14 +61,20 @@ router.get("/findOne/:id", auth, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
-    if (req.user._id !== order.userId || !req.user.isAdmin)
-      return res.status(403).send("Access denied. Not authorized...");
+    if (!order) {
+      return res.status(404).send("Order not found");
+    }
 
-    res.status(200).send(order);
+    if (req.user.isAdmin || order.userId.toString() === req.user._id.toString()) {
+      res.status(200).send(order);
+    } else {
+      res.status(403).send("Access denied. Not authorized...");
+    }
   } catch (error) {
     res.status(500).send(error);
   }
 });
+
 
 // Get Orders Stats
 
