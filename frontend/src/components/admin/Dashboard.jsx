@@ -89,7 +89,7 @@ const SidebarToggle = styled.button`
 
 const SideNav = styled.div`
   /* border-right: 1px solid gray; */
-  height: 100vh;
+  height: auto;
   width: 200px;
   display: flex;
   flex-direction: column;

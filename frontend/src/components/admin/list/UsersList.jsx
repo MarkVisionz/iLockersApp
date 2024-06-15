@@ -8,23 +8,16 @@ const UsersList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { list } = useSelector((state) => state.users);
-  const [sortConfig, setSortConfig] = useState({ key: 'uName', direction: 'ascending' });
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState({ field: "", direction: "ascending" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showNewUsers, setShowNewUsers] = useState(false);
+  const [onlyShow, setOnlyShow] = useState("");
   const itemsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     dispatch(usersFetch());
   }, [dispatch]);
-
-  useEffect(() => {
-    setFilteredUsers(list.filter(user => 
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (user.isAdmin ? "admin" : "customer").includes(searchQuery.toLowerCase())
-    ));
-  }, [list, searchQuery]);
 
   const handleDelete = (id) => {
     try {
@@ -34,20 +27,54 @@ const UsersList = () => {
     }
   };
 
-  const handleSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
+  const handleSortChange = (e) => {
+    const field = e.target.value;
+    setSortConfig({
+      field,
+      direction:
+        sortConfig.field === field && sortConfig.direction === "ascending"
+          ? "descending"
+          : "ascending",
+    });
   };
 
-  const sortedUsers = [...filteredUsers].sort((a, b) => {
-    if (a[sortConfig.key] < b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? -1 : 1;
+  const handleToggleNewUsers = () => {
+    setShowNewUsers(!showNewUsers);
+  };
+
+  const handleOnlyShowChange = (e) => {
+    setOnlyShow(e.target.value);
+  };
+
+  const filteredUsers = list.filter((user) => {
+    if (onlyShow === "newUsers") {
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      return new Date(user.createdAt) > oneWeekAgo;
     }
-    if (a[sortConfig.key] > b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? 1 : -1;
+    return true;
+  });
+
+  const sortedUsers = filteredUsers.sort((a, b) => {
+    if (sortConfig.field === "name") {
+      return sortConfig.direction === "ascending"
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    } else if (sortConfig.field === "email") {
+      return sortConfig.direction === "ascending"
+        ? a.email.localeCompare(b.email)
+        : b.email.localeCompare(a.email);
+    } else if (sortConfig.field === "isAdmin") {
+      return sortConfig.direction === "ascending"
+        ? a.isAdmin
+          ? -1
+          : 1
+        : b.isAdmin
+        ? -1
+        : 1;
+    } else if (sortConfig.field === "createdAt") {
+      return sortConfig.direction === "ascending"
+        ? new Date(a.createdAt) - new Date(b.createdAt)
+        : new Date(b.createdAt) - new Date(a.createdAt);
     }
     return 0;
   });
@@ -57,63 +84,70 @@ const UsersList = () => {
     currentPage * itemsPerPage
   );
 
-  const getSortArrow = (key) => {
-    if (sortConfig.key === key) {
-      return sortConfig.direction === 'ascending' ? ' ↑' : ' ↓';
-    }
-    return '';
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
   };
 
   return (
     <Container>
-      <SearchContainer>
-        <SearchInput 
-          type="text" 
-          placeholder="Search by name, email, or role" 
-          value={searchQuery} 
-          onChange={(e) => setSearchQuery(e.target.value)} 
+      <TopBar>
+        <SearchInput
+          type="text"
+          placeholder="Search by name, email, or role"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
         />
-      </SearchContainer>
-      <Table>
-        <thead>
-          <tr>
-            <Th onClick={() => handleSort('id')}>ID {getSortArrow('id')}</Th>
-            <Th onClick={() => handleSort('name')}>Name {getSortArrow('name')}</Th>
-            <Th onClick={() => handleSort('email')}>Email {getSortArrow('email')}</Th>
-            <Th onClick={() => handleSort('isAdmin')}>Role {getSortArrow('isAdmin')}</Th>
-            <Th>Actions</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {paginatedUsers.map((user) => (
-            <Tr key={user._id}>
-              <Td>{user._id}</Td>
-              <Td>{user.name}</Td>
-              <Td>{user.email}</Td>
-              <Td>
-                {user.isAdmin ? <Admin>Admin</Admin> : <Customer>Customer</Customer>}
-              </Td>
-              <Td>
-                <Actions>
-                  <Delete onClick={() => handleDelete(user._id)}>Delete</Delete>
-                  <View onClick={() => navigate(`/user/${user._id}`)}>View</View>
-                </Actions>
-              </Td>
-            </Tr>
-          ))}
-        </tbody>
-      </Table>
+        <SortSelect value={sortConfig.field} onChange={handleSortChange}>
+          <option value="">Sort by</option>
+          <option value="name">Name</option>
+          <option value="email">Email</option>
+          <option value="isAdmin">Role</option>
+          <option value="createdAt">Antigüedad</option>
+        </SortSelect>
+        <ShowSelect value={onlyShow} onChange={handleOnlyShowChange}>
+          <option value="">Only show</option>
+          <option value="newUsers">New Users</option>
+        </ShowSelect>
+      </TopBar>
+      <CardsContainer>
+        {paginatedUsers.map((user) => (
+          <Card key={user._id}>
+            <CardInfo>
+              <UserId>ID: {user._id}</UserId>
+              <UserName>Name: {user.name}</UserName>
+              <UserEmail>Email: {user.email}</UserEmail>
+              <UserRole>
+                {user.isAdmin ? (
+                  <Admin>Admin</Admin>
+                ) : (
+                  <Customer>Customer</Customer>
+                )}
+              </UserRole>
+            </CardInfo>
+            <CardActions>
+              <DeleteButton onClick={() => handleDelete(user._id)}>
+                Delete
+              </DeleteButton>
+              <ViewButton onClick={() => navigate(`/user/${user._id}`)}>
+                View
+              </ViewButton>
+            </CardActions>
+          </Card>
+        ))}
+      </CardsContainer>
       <Pagination>
         <Button
-          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
         >
           Previous
         </Button>
         <PageNumber>{currentPage}</PageNumber>
         <Button
-          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, Math.ceil(filteredUsers.length / itemsPerPage)))}
-          disabled={currentPage === Math.ceil(filteredUsers.length / itemsPerPage)}
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={
+            currentPage === Math.ceil(filteredUsers.length / itemsPerPage)
+          }
         >
           Next
         </Button>
@@ -129,58 +163,78 @@ const Container = styled.div`
   margin-top: 2rem;
 `;
 
-const SearchContainer = styled.div`
-  margin-bottom: 1rem;
+const TopBar = styled.div`
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
 `;
 
 const SearchInput = styled.input`
   padding: 0.5rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 300px;
   border: 1px solid #ccc;
   border-radius: 4px;
 `;
 
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-`;
-
-const Th = styled.th`
-  background-color: #f8f8f8;
-  color: #333;
-  padding: 1rem;
+const SortSelect = styled.select`
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
   cursor: pointer;
-  text-align: left;
 `;
 
-const Tr = styled.tr`
-  &:nth-child(even) {
-    background-color: #f2f2f2;
-  }
+const ShowSelect = styled.select`
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
 `;
 
-const Td = styled.td`
-  padding: 1rem;
-  text-align: left;
-  border-bottom: 1px solid #ddd;
-`;
-
-const Actions = styled.div`
+const CardsContainer = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-around;
-  gap: 10px;
+  flex-direction: column;
+  gap: 1rem;
 `;
 
-const Delete = styled.button`
+const Card = styled.div`
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const CardInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`;
+
+const UserId = styled.div`
+  font-weight: bold;
+`;
+
+const UserName = styled.div``;
+
+const UserEmail = styled.div``;
+
+const UserRole = styled.div``;
+
+const CardActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`;
+
+const DeleteButton = styled.button`
   background-color: rgb(255, 77, 73);
   color: white;
   border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
+  padding: 0.5rem;
+  border-radius: 4px;
   cursor: pointer;
 
   &:hover {
@@ -188,12 +242,12 @@ const Delete = styled.button`
   }
 `;
 
-const View = styled.button`
+const ViewButton = styled.button`
   background-color: rgb(114, 225, 40);
   color: white;
   border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
+  padding: 0.5rem;
+  border-radius: 4px;
   cursor: pointer;
 
   &:hover {
@@ -201,24 +255,20 @@ const View = styled.button`
   }
 `;
 
-const Admin = styled.button`
+const Admin = styled.span`
   color: rgb(253, 181, 40);
-  background: rgb(253, 181, 40, 0.12);
+  background: rgba(253, 181, 40, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 14px;
-  border: none;
-  outline: none;
 `;
 
-const Customer = styled.button`
+const Customer = styled.span`
   color: rgb(38, 198, 249);
-  background-color: rgb(38, 198, 249, 0.12);
+  background-color: rgba(38, 198, 249, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 14px;
-  border: none;
-  outline: none;
 `;
 
 const Pagination = styled.div`
@@ -233,21 +283,16 @@ const Button = styled.button`
   color: white;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 3px;
+  margin: 0 0.5rem;
+  border-radius: 4px;
   cursor: pointer;
 
   &:disabled {
-    background-color: #cccccc;
+    background-color: #ccc;
     cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background-color: #0056b3;
   }
 `;
 
 const PageNumber = styled.span`
-  margin: 0 1rem;
-  font-size: 1.2rem;
-  font-weight: bold;
+  margin: 0 0.5rem;
 `;

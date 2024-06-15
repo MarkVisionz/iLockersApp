@@ -116,22 +116,24 @@ const OrdersList = () => {
         {paginatedOrders.length ? (
           paginatedOrders.map((order) => (
             <OrderBox key={order._id} onClick={() => handleOrderView(order._id)}>
-              <OrderId>ID: {order._id}</OrderId>
-              <OrderName>Name: {order.shipping.name}</OrderName>
-              <OrderAmount>Amount: ${(order.total / 100)?.toLocaleString()}</OrderAmount>
-              <OrderStatus>
-                Status: 
-                {order.delivery_status === "pending" ? (
-                  <Pending>Pending</Pending>
-                ) : order.delivery_status === "dispatched" ? (
-                  <Dispatched>Dispatched</Dispatched>
-                ) : order.delivery_status === "delivered" ? (
-                  <Delivered>Delivered</Delivered>
-                ) : (
-                  "Error"
-                )}
-              </OrderStatus>
-              <OrderDate>Date: {moment(order.createdAt).format('MM/DD/YYYY')}</OrderDate>
+              <OrderInfo>
+                <OrderId>ID: {order._id}</OrderId>
+                <OrderName>Name: {order.shipping.name}</OrderName>
+                <OrderAmount>Amount: ${(order.total / 100)?.toLocaleString()}</OrderAmount>
+                <OrderStatus>
+                  Status: 
+                  {order.delivery_status === "pending" ? (
+                    <Pending>Pending</Pending>
+                  ) : order.delivery_status === "dispatched" ? (
+                    <Dispatched>Dispatched</Dispatched>
+                  ) : order.delivery_status === "delivered" ? (
+                    <Delivered>Delivered</Delivered>
+                  ) : (
+                    "Error"
+                  )}
+                </OrderStatus>
+                <OrderDate>Date: {moment(order.createdAt).format('MM/DD/YYYY')}</OrderDate>
+              </OrderInfo>
               <Actions>
                 <DispatchBtn onClick={(e) => { e.stopPropagation(); handleOrderDispatch(order._id); }}>
                   Dispatch
@@ -168,7 +170,7 @@ const FiltersContainer = styled.div`
 const SearchInput = styled.input`
   padding: 0.5rem;
   width: 100%;
-  max-width: 400px;
+  max-width: 300px;
   border: 1px solid #ccc;
   border-radius: 4px;
 `;
@@ -177,12 +179,14 @@ const SortSelect = styled.select`
   padding: 0.5rem;
   border: 1px solid #ccc;
   border-radius: 4px;
+  cursor: pointer;
 `;
 
 const ShowSelect = styled.select`
   padding: 0.5rem;
   border: 1px solid #ccc;
   border-radius: 4px;
+  cursor: pointer;
 `;
 
 const OrderContainer = styled.div`
@@ -196,7 +200,15 @@ const OrderBox = styled.div`
   padding: 1rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   cursor: pointer;
+`;
+
+const OrderInfo = styled.div`
+  display: flex;
+  flex-direction: column;
 `;
 
 const OrderId = styled.p`
@@ -223,7 +235,7 @@ const OrderDate = styled.p`
 
 const Actions = styled.div`
   display: flex;
-  justify-content: flex-end;
+  gap: 10px;
 `;
 
 const DispatchBtn = styled.button`
@@ -233,7 +245,6 @@ const DispatchBtn = styled.button`
   padding: 5px 10px;
   border-radius: 3px;
   cursor: pointer;
-  margin-right: 5px;
 `;
 
 const DeliveryBtn = styled.button`
@@ -303,4 +314,3 @@ const PageNumber = styled.span`
   margin: 0 1rem;
   font-size: 1.2rem;
 `;
-
