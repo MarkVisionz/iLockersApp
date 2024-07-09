@@ -1,8 +1,8 @@
 const products = [
     {
         id: 1,
-        name: "T-Shirt",
-        weight:200, 
+        name: "Dress",
+        weight:500, 
         price: 10,
         image: "https://res.cloudinary.com/mkocloud/image/upload/v1711692257/OnlineLaundry/laundry_cfro9i.png",
     },

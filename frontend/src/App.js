@@ -28,6 +28,7 @@ import Orders from "./components/admin/Orders";
 import Product from "./components/Details/Product";
 import Order from "./components/Details/Order";
 import UserProfile from "./components/Details/UserProfile";
+import LaundryNote from "./components/admin/list/NotasList";
 
 function App() {
   const dispatch = useDispatch();
@@ -44,6 +45,7 @@ function App() {
         <div className="content-container">
           <Routes>
             <Route path="/" exact element={<Home />} />
+            <Route path="/laundry-note" element={<LaundryNote />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
             <Route path="register" element={<Register />} />

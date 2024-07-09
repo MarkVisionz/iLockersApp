@@ -7,6 +7,7 @@ const orders = require("./routes/orders")
 const stripe = require("./routes/stripe")
 const users = require("./routes/users")
 const productsRoute = require("./routes/products")
+const notesRoute = require("./routes/laundryNotes")
 
 const products = require("./products");
 
@@ -23,6 +24,9 @@ app.use("/api/orders", orders)
 app.use("/api/stripe", stripe)
 app.use("/api/products", productsRoute)
 app.use("/api/users", users)
+app.use("/api/notes", notesRoute);
+
+
 
 app.get("/", (req, res) => {
   res.send("Welcome to our Online Laundry API...");

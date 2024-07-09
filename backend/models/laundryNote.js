@@ -1,0 +1,20 @@
+const mongoose = require("mongoose");
+
+const noteSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    folio: { type: String, required: true },
+    date: { type: Date, required: true },
+    services: { type: Object, required: true },
+    observations: { type: String },
+    abono: { type: Number, default: 0 },
+    suavitelDesired: { type: Boolean, default: false },
+    total: { type: Number, required: true },
+    note_status: { type: String, default: "pendiente" }
+  },
+  { timestamps: true }
+);
+
+const LaundryNote = mongoose.model("LaundryNote", noteSchema);
+
+exports.LaundryNote = LaundryNote;

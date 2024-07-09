@@ -7,7 +7,6 @@ import { setHeaders, url } from "../../features/api";
 import axios from "axios";
 import Transactions from "./summary-components/Transactions";
 import AllTimeData from "./summary-components/AllTimeData";
-import LaundryNote from "./list/NotasList";
 
 const Summary = () => {
   const [users, setUsers] = useState([]);
@@ -131,8 +130,6 @@ const Summary = () => {
         <Transactions />
         <AllTimeData />
       </SideStats>
-
-      <LaundryNote></LaundryNote>
     </StyledSummary>
   );
 };
