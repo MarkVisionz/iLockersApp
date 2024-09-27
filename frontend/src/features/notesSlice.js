@@ -16,10 +16,10 @@ export const notesFetch = createAsyncThunk(
   async () => {
     try {
       const response = await axios.get(`${url}/notes`);
-
       return response.data;
     } catch (error) {
       console.log(error);
+      throw error;
     }
   }
 );
@@ -33,11 +33,11 @@ export const notesCreate = createAsyncThunk(
         values,
         setHeaders()
       );
-
       return response.data;
     } catch (error) {
       console.log(error);
       toast.error(error.response?.data);
+      throw error;
     }
   }
 );
@@ -47,7 +47,7 @@ export const notesEdit = createAsyncThunk(
   async (values) => {
     try {
       const response = await axios.put(
-        `${url}/notes/${values.product._id}`,
+        `${url}/notes/${values._id}`,
         values,
         setHeaders()
       );
@@ -57,23 +57,24 @@ export const notesEdit = createAsyncThunk(
       toast.error(error.response?.data, {
         position: "bottom-left",
       });
+      throw error;
     }
   }
 );
 
 export const notesDelete = createAsyncThunk(
-  "products/productDelete",
+  "notes/notesDelete",
   async (id) => {
     try {
       const response = await axios.delete(
         `${url}/notes/${id}`,
         setHeaders()
       );
-
       return response.data;
     } catch (error) {
       console.log(error);
       toast.error(error.response?.data);
+      throw error;
     }
   }
 );
@@ -82,23 +83,22 @@ const notesSlice = createSlice({
   name: "notes",
   initialState,
   reducers: {},
-
   extraReducers: (builder) => {
     builder
-      /////////// PRODUCTS FETCH
-      .addCase(notesFetch.pending, (state, action) => {
+      // NOTES FETCH
+      .addCase(notesFetch.pending, (state) => {
         state.status = "pending";
       })
       .addCase(notesFetch.fulfilled, (state, action) => {
         state.status = "success";
         state.items = action.payload;
       })
-      .addCase(notesFetch.rejected, (state, action) => {
+      .addCase(notesFetch.rejected, (state) => {
         state.status = "rejected";
       })
 
-      /////////// PRODUCTS CREATE
-      .addCase(notesCreate.pending, (state, action) => {
+      // NOTES CREATE
+      .addCase(notesCreate.pending, (state) => {
         state.createStatus = "pending";
       })
       .addCase(notesCreate.fulfilled, (state, action) => {
@@ -106,13 +106,12 @@ const notesSlice = createSlice({
         state.createStatus = "success";
         toast.success("Note Created!");
       })
-      .addCase(notesCreate.rejected, (state, action) => {
+      .addCase(notesCreate.rejected, (state) => {
         state.createStatus = "rejected";
       })
 
-      /////////// PRODUCTS DELETE
-
-      .addCase(notesDelete.pending, (state, action) => {
+      // NOTES DELETE
+      .addCase(notesDelete.pending, (state) => {
         state.deleteStatus = "pending";
       })
       .addCase(notesDelete.fulfilled, (state, action) => {
@@ -123,28 +122,23 @@ const notesSlice = createSlice({
         state.deleteStatus = "success";
         toast.error("Note Deleted");
       })
-      .addCase(notesDelete.rejected, (state, action) => {
+      .addCase(notesDelete.rejected, (state) => {
         state.deleteStatus = "rejected";
       })
 
-      /////////// PRODUCTS EDIT
-
-      .addCase(notesEdit.pending, (state, action) => {
+      // NOTES EDIT
+      .addCase(notesEdit.pending, (state) => {
         state.editStatus = "pending";
       })
       .addCase(notesEdit.fulfilled, (state, action) => {
         const updatedNotes = state.items.map((note) =>
           note._id === action.payload._id ? action.payload : note
         );
-        console.log(updatedNotes);
-        console.log(action.payload);
-        console.log("stateI",state.items);
-  
         state.items = updatedNotes;
         state.editStatus = "success";
         toast.info("Note Edited");
       })
-      .addCase(notesEdit.rejected, (state, action) => {
+      .addCase(notesEdit.rejected, (state) => {
         state.editStatus = "rejected";
       });
   },

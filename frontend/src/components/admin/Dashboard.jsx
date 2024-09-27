@@ -56,6 +56,14 @@ const Dashboard = () => {
           >
             <FaUsers /> Users
           </NavLink>
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? "link-active" : "link-inactive"
+            }
+            to="/admin/notes-summary"
+          >
+            <FaTachometerAlt /> Local Laundry
+          </NavLink>
         </SideNav>
       )}
       <Content isSidebarOpen={isSidebarOpen}>

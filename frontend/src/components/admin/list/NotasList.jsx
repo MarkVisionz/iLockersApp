@@ -34,7 +34,6 @@ const LaundryNote = () => {
     cubrecolchon: 0,
     hamaca: 0,
     tennis: 0,
-    // desengrasante: 0,
     edredon: {},
     cobija: {},
     extras: {},
@@ -44,19 +43,15 @@ const LaundryNote = () => {
   const [abono, setAbono] = useState(0);
   const [suavitelDesired, setSuavitelDesired] = useState(false);
   const [total, setTotal] = useState(0);
-  const [noteStatus, setNoteStatus] = useState("pendiente");
   const [errors, setErrors] = useState({});
   const [isPaid, setIsPaid] = useState(false);
+  const [paidAt, setPaidAt] = useState("");
   const [selectedSize, setSelectedSize] = useState({
     edredon: "individual",
     cobija: "individual",
     almohada: "chica",
     extras: "suavitel",
   });
-
-  useEffect(() => {
-    setTotal(calculateTotal());
-  }, [services, abono, suavitelDesired]);
 
   const validate = () => {
     const errors = {};
@@ -92,59 +87,12 @@ const LaundryNote = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    try {
-      await dispatch(
-        notesCreate({
-          name,
-          folio,
-          date,
-          services,
-          observations,
-          abono,
-          suavitelDesired,
-          total: calculatedTotal,
-          note_status: isPaid ? "pagado" : "pendiente",
-        })
-      );
-      setClientName("");
-      setFolio(generateFolio());
-      setDate(getCurrentDate());
-      setServices({
-        ropaPorKilo: 0,
-        secado: 0,
-        lavadoExpress: 0,
-        toallasSabanas: 0,
-        cortinasManteles: 0,
-        cubrecolchon: 0,
-        hamaca: 0,
-        tennis: 0,
-        vanishCloroSuavitel: 0,
-        // desengrasante: 0,
-        edredon: {},
-        cobija: {},
-        extras: {},
-        almohada: {},
-      });
-      setObservations("");
-      setAbono(0);
-      setSuavitelDesired(false);
-      setIsPaid(false);
-      setTotal(0);
-      setErrors({});
-    } catch (error) {
-      console.error("Error creating note:", error);
-    }
-  };
-
   const prices = {
     ropaPorKilo: 14,
     secado: 10,
     lavadoExpress: 18,
     toallasSabanas: 16,
+    vanishCloroSuavitel: 15,
     edredon: {
       individual: 70,
       matrimonial: 80,
@@ -169,7 +117,6 @@ const LaundryNote = () => {
     hamaca: 70,
     tennis: 120,
     cortinasManteles: 16,
-    // desengrasante: 25,
   };
 
   const calculateTotal = () => {
@@ -201,27 +148,89 @@ const LaundryNote = () => {
     [services, abono, suavitelDesired]
   );
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    if (name.includes("Type") || name.includes("Quantity")) {
-      const serviceName = name.split(/(?=[A-Z])/)[0];
-      const serviceKey = name.includes("Type") ? "type" : "quantity";
-      setServices({
-        ...services,
-        [serviceName]: {
-          ...services[serviceName],
-          [serviceKey]: serviceKey === "type" ? value : Number(value),
-        },
-      });
-    } else {
-      if (name === "ropaPorKilo" && value !== "") {
-        const kgRopa = Number(value);
-        setServices({ ...services, [name]: kgRopa });
-      } else {
-        setServices({ ...services, [name]: Number(value) });
+  const transformServices = () => {
+    const transformedServices = {};
+
+    for (const service in services) {
+      if (typeof services[service] === "object") {
+        transformedServices[service] = {};
+        for (const size in services[service]) {
+          if (services[service][size] > 0) {
+            transformedServices[service][size] = {
+              quantity: services[service][size],
+              unitPrice: prices[service][size],
+            };
+          }
+        }
+      } else if (services[service] > 0) {
+        transformedServices[service] = {
+          quantity: services[service],
+          unitPrice: prices[service],
+        };
       }
     }
+
+    return transformedServices;
   };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    try {
+      const transformedServices = transformServices();
+      await dispatch(
+        notesCreate({
+          name,
+          folio,
+          date,
+          services: transformedServices,
+          observations,
+          abono,
+          suavitelDesired,
+          total: calculatedTotal,
+          note_status: isPaid ? "pagado" : "pendiente",
+          paidAt: isPaid ? paidAt : null,
+        })
+      );
+      
+      setClientName("");
+      setFolio(generateFolio());
+      setDate(getCurrentDate());
+      setServices({
+        ropaPorKilo: 0,
+        secado: 0,
+        lavadoExpress: 0,
+        toallasSabanas: 0,
+        cortinasManteles: 0,
+        cubrecolchon: 0,
+        hamaca: 0,
+        tennis: 0,
+        edredon: {},
+        cobija: {},
+        extras: {},
+        almohada: {},
+      });
+      setObservations("");
+      setAbono(0);
+      setSuavitelDesired(false);
+      setIsPaid(false);
+      setPaidAt("");
+      setTotal(0);
+      setErrors({});
+    } catch (error) {
+      console.error("Error creating note:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (isPaid) {
+      setPaidAt(getCurrentDate());
+    } else {
+      setPaidAt("");
+    }
+  }, [isPaid]);
+
 
   const capitalizeFirstLetter = (str) => {
     return str.replace(
@@ -310,9 +319,20 @@ const LaundryNote = () => {
       {errors.noService && <ErrorMessage>{errors.noService}</ErrorMessage>}
       {errors.total && <ErrorMessage>{errors.total}</ErrorMessage>}
 
+  
+      <Section>
+        <Label htmlFor="observations">Observaciones:</Label>
+        <Textarea
+          id="observations"
+          name="observations"
+          value={observations}
+          onChange={(e) => setObservations(e.target.value)}
+        ></Textarea>
+      </Section>
+
       <Section>
         <Label htmlFor="abono">Abono:</Label>
-        <Input
+        <AbonoInput
           className="abono"
           type="number"
           id="abono"
@@ -322,16 +342,6 @@ const LaundryNote = () => {
           min="0"
         />
         {errors.abono && <ErrorMessage>{errors.abono}</ErrorMessage>}
-      </Section>
-
-      <Section>
-        <Label htmlFor="observations">Observaciones:</Label>
-        <Textarea
-          id="observations"
-          name="observations"
-          value={observations}
-          onChange={(e) => setObservations(e.target.value)}
-        ></Textarea>
       </Section>
 
       <Section>
@@ -369,17 +379,22 @@ const LaundryNote = () => {
   );
 };
 
-// Styled components
-
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   padding: 20px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  background-color: #f7f7f7;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   max-width: 600px;
   margin: 20px auto;
+  font-family: 'Arial', sans-serif;
+  color: #333;
+
+  @media (max-width: 768px) {
+    padding: 15px;
+    max-width: 90%;
+  }
 `;
 
 const NoteHeader = styled.div`
@@ -387,8 +402,15 @@ const NoteHeader = styled.div`
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+
   h2 {
     margin: 0;
+    font-size: 24px;
+    color: #222;
+
+    @media (max-width: 768px) {
+      font-size: 20px;
+    }
   }
 `;
 
@@ -396,73 +418,128 @@ const FolioDateContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  gap: 4px;
 
   .folio {
     font-weight: bold;
+    color: #007bff;
+  }
+
+  @media (max-width: 768px) {
+    align-items: flex-start;
   }
 `;
 
 const Section = styled.div`
   display: flex;
   flex-direction: column;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+
+  @media (max-width: 768px) {
+    margin-bottom: 10px;
+  }
 `;
 
 const Label = styled.label`
   margin-bottom: 5px;
   font-weight: bold;
+  color: #444;
 `;
 
 const Input = styled.input`
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border 0.3s;
+
+  &:focus {
+    border-color: #007bff;
+    outline: none;
+  }
 `;
 
 const Textarea = styled.textarea`
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border 0.3s;
+
+  &:focus {
+    border-color: #007bff;
+    outline: none;
+  }
 `;
 
 const ServiceSection = styled.div`
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 5px;
+  gap: 12px;
+  margin-bottom: 20px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const CheckboxLabel = styled.label`
   display: flex;
   align-items: center;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #555;
+
   input {
-    margin-right: 5px;
+    margin-right: 8px;
   }
 `;
 
 const Total = styled.div`
-  font-size: 18px;
+  font-size: 20px;
   font-weight: bold;
   margin-bottom: 10px;
+  color: #222;
 `;
 
 const Button = styled.button`
-  padding: 10px 15px;
+  padding: 12px 20px;
   background-color: #007bff;
+  margin-top: 15px;
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
+  font-size: 16px;
   cursor: pointer;
+  transition: background-color 0.3s, transform 0.3s;
+
   &:hover {
     background-color: #0056b3;
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 768px) {
+    font-size: 14px;
+    padding: 10px 15px;
   }
 `;
 
 const ErrorMessage = styled.div`
   color: red;
-  font-size: 18px;
+  font-size: 14px;
   margin-top: 5px;
   margin-bottom: 5px;
 `;
+
+const AbonoInput = styled(Input)`
+  max-width: 200px;
+
+  @media (max-width: 768px) {
+    max-width: 100%;
+  }
+`;
+
+
+
 
 export default LaundryNote;

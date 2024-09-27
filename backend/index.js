@@ -8,6 +8,7 @@ const stripe = require("./routes/stripe")
 const users = require("./routes/users")
 const productsRoute = require("./routes/products")
 const notesRoute = require("./routes/laundryNotes")
+const ServiceRoute = require("./routes/laundryServices")
 
 const products = require("./products");
 
@@ -25,6 +26,7 @@ app.use("/api/stripe", stripe)
 app.use("/api/products", productsRoute)
 app.use("/api/users", users)
 app.use("/api/notes", notesRoute);
+app.use("/api/services", ServiceRoute);
 
 
 

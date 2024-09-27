@@ -27,8 +27,10 @@ import Users from "./components/admin/Users";
 import Orders from "./components/admin/Orders";
 import Product from "./components/Details/Product";
 import Order from "./components/Details/Order";
+import Note from "./components/Details/Note";
 import UserProfile from "./components/Details/UserProfile";
 import LaundryNote from "./components/admin/list/NotasList";
+import LocalSummary from "./components/admin/LocalSummary";
 
 function App() {
   const dispatch = useDispatch();
@@ -46,12 +48,14 @@ function App() {
           <Routes>
             <Route path="/" exact element={<Home />} />
             <Route path="/laundry-note" element={<LaundryNote />} />
+            
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
             <Route path="register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route path="/product/:id" element={<Product />} />
             <Route path="/order/:id" element={<Order />} />
+            <Route path="/note/:id" element={<Note />} />
             <Route path="/user/:id" element={<UserProfile />} />
             <Route path="/admin" element={<Dashboard />}>
               <Route path="products" element={<Products />}>
@@ -61,6 +65,7 @@ function App() {
               <Route path="summary" element={<Summary />} />
               <Route path="users" element={<Users />} />
               <Route path="orders" element={<Orders />} />
+              <Route path="notes-summary" element={<LocalSummary/>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

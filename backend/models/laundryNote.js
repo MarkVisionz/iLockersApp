@@ -10,7 +10,8 @@ const noteSchema = new mongoose.Schema(
     abono: { type: Number, default: 0 },
     suavitelDesired: { type: Boolean, default: false },
     total: { type: Number, required: true },
-    note_status: { type: String, default: "pendiente" }
+    note_status: { type: String, default: "pendiente" },
+    paidAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
