@@ -30,23 +30,23 @@ const NotesSummary = () => {
         note.total.toString().includes(searchQuery) ||
         note.folio.includes(searchQuery)
     );
-  
+
     if (onlyShow) {
       if (onlyShow === "day") {
         // Obtenemos el inicio del día actual en UTC
         const today = moment.utc().startOf("day");
-        
+
         filtered = filtered.filter((note) => {
           // Convertimos la fecha de la nota a UTC y la comparamos con el día actual
           const noteDate = moment.utc(note.date).startOf("day");
-          return noteDate.isSame(today, 'day'); // Comparación de fecha exacta en UTC
+          return noteDate.isSame(today, "day"); // Comparación de fecha exacta en UTC
         });
       } else {
-        // Filtrar por otros estados: pending, dispatched, delivered
+        // Filtrar por otros estados: pendiente, pagado, entregado
         filtered = filtered.filter((note) => note.note_status === onlyShow);
       }
     }
-  
+
     if (sortField) {
       filtered = filtered.sort((a, b) => {
         if (sortField === "date") {
@@ -65,14 +65,12 @@ const NotesSummary = () => {
         return 0;
       });
     }
-  
+
     setFilteredNotes(filtered);
   }, [items, searchQuery, sortField, sortOrder, onlyShow]);
-  
-  
 
   const handleNoteDispatch = (id) => {
-    const paidAt = new Date().toISOString(); 
+    const paidAt = new Date().toISOString();
     dispatch(notesEdit({ _id: id, note_status: "pagado", paidAt }));
   };
 
@@ -118,29 +116,37 @@ const NotesSummary = () => {
   return (
     <Container>
       <FiltersContainer>
-        <SearchInput
-          type="text"
-          placeholder="Search by name, amount, or folio"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-        <SortSelect onChange={(e) => setSortField(e.target.value)}>
-          <option value="">Sort by</option>
-          <option value="date">Date</option>
-          <option value="name">Name</option>
-          <option value="status">Status</option>
-        </SortSelect>
-        <SortOrderSelect onChange={(e) => setSortOrder(e.target.value)}>
-          <option value="desc">Descending</option>
-          <option value="asc">Ascending</option>
-        </SortOrderSelect>
-        <ShowSelect onChange={(e) => setOnlyShow(e.target.value)}>
-          <option value="">Only show</option>
-          <option value="pendiente">Pending</option>
-          <option value="pagado">Dispatched</option>
-          <option value="entregado">Delivered</option>
-          <option value="day">Notes of the day</option>
-        </ShowSelect>
+        <FilterItem>
+          <SortSelect onChange={(e) => setSortField(e.target.value)}>
+            <option value="">Sort by</option>
+            <option value="date">Date</option>
+            <option value="name">Name</option>
+            <option value="status">Status</option>
+          </SortSelect>
+        </FilterItem>
+        <FilterItem>
+          <SortOrderSelect onChange={(e) => setSortOrder(e.target.value)}>
+            <option value="desc">Descending</option>
+            <option value="asc">Ascending</option>
+          </SortOrderSelect>
+        </FilterItem>
+        <FilterItem>
+          <ShowSelect onChange={(e) => setOnlyShow(e.target.value)}>
+            <option value="">Only show</option>
+            <option value="pendiente">Pending</option>
+            <option value="pagado">Dispatched</option>
+            <option value="entregado">Delivered</option>
+            <option value="day">Notes of the day</option>
+          </ShowSelect>
+        </FilterItem>
+        <FilterItem>
+          <SearchInput
+            type="text"
+            placeholder="Search by name, amount, or folio"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </FilterItem>
       </FiltersContainer>
       <NoteContainer>
         {paginatedNotes.length ? (
@@ -162,9 +168,7 @@ const NotesSummary = () => {
                     "Error"
                   )}
                 </NoteStatus>
-                <NoteDate>
-                  Date: {moment.utc(note.date).format("MM/DD/YYYY")}
-                </NoteDate>
+                <NoteDate>Date: {new Date(note.date).toISOString().split("T")[0]}</NoteDate>
               </NoteInfo>
               <Actions>
                 <DispatchBtn
@@ -197,45 +201,62 @@ const NotesSummary = () => {
 
 export default NotesSummary;
 
+// Styled Components
 
 const Container = styled.div`
   width: 100%;
   margin-top: 2rem;
+  padding: 0 1rem;
 `;
 
 const FiltersContainer = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+`;
+
+const FilterItem = styled.div`
+  flex: 1 1 100px;
+  min-width: 150px;
+
+  @media (max-width: 600px) {
+    flex: 1 1 100%;
+  }
 `;
 
 const SearchInput = styled.input`
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   width: 100%;
-  max-width: 300px;
   border: 1px solid #ccc;
   border-radius: 4px;
+  font-size: 1rem;
 `;
 
 const SortSelect = styled.select`
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
   border: 1px solid #ccc;
   border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
 `;
 
 const SortOrderSelect = styled.select`
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
   border: 1px solid #ccc;
   border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
 `;
 
 const ShowSelect = styled.select`
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
   border: 1px solid #ccc;
   border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
 `;
 
@@ -247,22 +268,34 @@ const NoteContainer = styled.div`
 const NoteBox = styled.div`
   border: 1px solid #ddd;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 1.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   cursor: pointer;
+  transition: box-shadow 0.3s ease;
+  background-color: white;
+
+  &:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
 `;
 
 const NoteInfo = styled.div`
   display: flex;
   flex-direction: column;
+  flex: 1;
 `;
 
 const NoteId = styled.p`
   margin: 0 0 0.5rem;
+  font-weight: bold;
 `;
 
 const NoteName = styled.p`
@@ -277,27 +310,43 @@ const NoteStatus = styled.p`
   margin: 0 0 0.5rem;
   display: flex;
   align-items: center;
+  font-weight: bold;
 `;
 
 const NoteDate = styled.p`
   margin: 0;
+  font-weight: bold;
 `;
 
 const Actions = styled.div`
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: 1rem;
+
+  @media (max-width: 768px) {
+    margin-left: 0;
+    margin-top: 1rem;
+    flex-direction: row;
+  }
 `;
 
 const DispatchBtn = styled.button`
   background-color: rgb(38, 198, 249);
   color: white;
   border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
   cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s ease;
 
   &:hover {
     background-color: rgb(0, 180, 249);
+  }
+
+  &:focus {
+    outline: none;
   }
 `;
 
@@ -305,61 +354,83 @@ const DeliveryBtn = styled.button`
   background-color: rgb(102, 108, 255);
   color: white;
   border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
   cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s ease;
 
   &:hover {
     background-color: rgb(82, 85, 167);
+  }
+
+  &:focus {
+    outline: none;
   }
 `;
 
 const Pending = styled.span`
   color: rgb(253, 181, 40);
   background: rgba(253, 181, 40, 0.12);
-  padding: 3px 5px;
-  margin-left: 5px;
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.9rem;
 `;
 
 const Dispatched = styled.span`
   color: rgb(38, 198, 249);
   background-color: rgba(38, 198, 249, 0.12);
-  padding: 3px 5px;
+  padding: 0.3rem 0.5rem;
   border-radius: 3px;
-  margin-left: 5px;
+  font-size: 0.9rem;
 `;
 
 const Delivered = styled.span`
   color: rgb(102, 108, 255);
   background-color: rgba(102, 108, 255, 0.12);
-  padding: 3px 5px;
+  padding: 0.3rem 0.5rem;
   border-radius: 3px;
-  margin-left: 5px;
+  font-size: 0.9rem;
 `;
 
 const Pagination = styled.div`
   display: flex;
   justify-content: center;
-  margin-top: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 `;
 
 const Button = styled.button`
   background-color: #007bff;
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.2rem;
   border-radius: 4px;
   cursor: pointer;
-  margin: 0 0.5rem;
+  font-size: 1rem;
+  min-width: 100px;
+  transition: background-color 0.3s ease;
 
   &:disabled {
     background-color: #ddd;
     cursor: not-allowed;
   }
+
+  &:hover:not(:disabled) {
+    background-color: #0056b3;
+  }
+
+  &:focus {
+    outline: none;
+  }
 `;
 
 const PageNumber = styled.span`
-  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: bold;
 `;
 
 const NoNotes = styled.p`

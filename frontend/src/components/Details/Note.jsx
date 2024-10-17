@@ -7,7 +7,7 @@ import { setHeaders, url } from "../../features/api";
 const Note = () => {
   const params = useParams();
 
-  const [note, setNote] = useState({ services: [] });
+  const [note, setNote] = useState({ services: {} });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ const Note = () => {
           </Item>
         );
       } else if (typeof details === "object" && details !== null) {
-        items.push(...renderServices(details, parentName + serviceName));
+        items.push(...renderServices(details, fullServiceName));
       }
     });
 
@@ -70,74 +70,72 @@ const Note = () => {
   return (
     <StyledNote>
       {loading ? (
-        <p>Loading...</p>
+        <LoadingMessage>Loading...</LoadingMessage>
       ) : (
-        <>
-          <NoteContainer>
-            <Header>
-              <h2>Note Details</h2>
-            </Header>
+        <NoteContainer>
+          <Header>
+            <h2>Note Details</h2>
+          </Header>
 
-            <Status>
-              Note Status:{" "}
-              {note.note_status === "pendiente" ? (
-                <Pending>Pending</Pending>
-              ) : note.note_status === "pagado" ? (
-                <Paid>Paid</Paid>
-              ) : note.note_status === "entregado" ? (
-                <Delivered>Delivered</Delivered>
-              ) : (
-                "error"
-              )}
-            </Status>
-
-            
-
-            <Section>
-              <h3>Customer Details</h3>
-              <p>Customer Name: {note.name}</p>
-              <p>Folio: {note.folio}</p>
-              <p>Date: {new Date(note.date).toLocaleDateString()}</p>
-              <p>
-                <Suav>Suavitel: {note.suavitelDesired ? "Yes" : "No"}</Suav>
-              </p>
-            </Section>
-
-            <Section>
-              <h3>Ordered Services</h3>
-              {renderServices(note.services).length > 0 ? (
-                renderServices(note.services)
-              ) : (
-                <p>No services available</p>
-              )}
-            </Section>
-
-            <TotalPrice>
-              Total Price: <span>${note.total}</span>
-            </TotalPrice>
-
-            <Section>
-              <h3>Observations</h3>
-              <p>{note.observations}</p>
-              
-            </Section>
-
-            {note.note_status === "pagado" && note.paidAt && (
-              <PaidAtContainer>
-                <PaidAtLabel>Paid At:</PaidAtLabel>
-                <PaidAtDate>
-                  {new Date(note.paidAt).toLocaleString()}
-                </PaidAtDate>
-              </PaidAtContainer>
+          <Status>
+            Note Status:{" "}
+            {note.note_status === "pendiente" ? (
+              <Pending>Pending</Pending>
+            ) : note.note_status === "pagado" ? (
+              <Paid>Paid</Paid>
+            ) : note.note_status === "entregado" ? (
+              <Delivered>Delivered</Delivered>
+            ) : (
+              "Error"
             )}
-          </NoteContainer>
-        </>
+          </Status>
+
+          <Section>
+            <h3>Customer Details</h3>
+            <p>Customer Name: {note.name}</p>
+            <p>Folio: {note.folio}</p>
+            <p>Date: {note.date.split("T")[0]}</p>
+            <p>
+              <Suav>Suavitel: {note.suavitelDesired ? "Yes" : "No"}</Suav>
+            </p>
+          </Section>
+
+          <Section>
+            <h3>Ordered Services</h3>
+            {renderServices(note.services).length > 0 ? (
+              renderServices(note.services)
+            ) : (
+              <p>No services available</p>
+            )}
+          </Section>
+
+          <TotalPrice>
+            Total Price: <span>${note.total}</span>
+          </TotalPrice>
+
+          <Section>
+            <h3>Observations</h3>
+            <p>{note.observations}</p>
+          </Section>
+
+          {/* Renderizar paidAt si existe y el estado es "pagado" o "entregado" */}
+          {(note.note_status === "pagado" || note.note_status === "entregado") && note.paidAt && (
+            <PaidAtContainer>
+              <PaidAtLabel>Paid At:</PaidAtLabel>
+              <PaidAtDate>
+                {new Date(note.paidAt).toLocaleString()}
+              </PaidAtDate>
+            </PaidAtContainer>
+          )}
+        </NoteContainer>
       )}
     </StyledNote>
   );
 };
 
 export default Note;
+
+// Styled Components
 
 const StyledNote = styled.div`
   margin: 3rem;
@@ -261,7 +259,7 @@ const ServiceQuantity = styled.span`
 
 const Pending = styled.span`
   color: rgb(253, 181, 40);
-  background: rgb(253, 181, 40, 0.12);
+  background: rgba(253, 181, 40, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 16px;
@@ -269,7 +267,7 @@ const Pending = styled.span`
 
 const Suav = styled.span`
   color: rgb(253, 181, 40);
-  background: rgb(253, 181, 40, 0.12);
+  background: rgba(253, 181, 40, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 16px;
@@ -277,7 +275,7 @@ const Suav = styled.span`
 
 const Paid = styled.span`
   color: rgb(38, 198, 249);
-  background-color: rgb(38, 198, 249, 0.12);
+  background-color: rgba(38, 198, 249, 0.12);
   padding: 3px 5px;
   border-radius: 3px;
   font-size: 16px;
@@ -331,4 +329,40 @@ const PaidAtDate = styled.span`
   color: black;
   font-size: 1rem;
   font-style: italic;
+`;
+
+const Actions = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const DispatchBtn = styled.button`
+  background-color: rgb(38, 198, 249);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgb(0, 180, 249);
+  }
+`;
+
+const DeliveryBtn = styled.button`
+  background-color: rgb(102, 108, 255);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgb(82, 85, 167);
+  }
+`;
+
+const LoadingMessage = styled.p`
+  font-size: 1.2rem;
+  color: #555;
 `;

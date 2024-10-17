@@ -12,6 +12,7 @@ const noteSchema = new mongoose.Schema(
     total: { type: Number, required: true },
     note_status: { type: String, default: "pendiente" },
     paidAt: { type: Date, default: null },
+    deliveredAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

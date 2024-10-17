@@ -63,16 +63,31 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// EDIT NOTE
+// EDIT NOTE - Modificación aquí
 router.put("/:id", async (req, res) => {
   try {
-    const updatedNote = await LaundryNote.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: req.body,
-      },
-      { new: true }
-    );
+    const note = await LaundryNote.findById(req.params.id);
+
+    if (!note) return res.status(404).send("Note not found...");
+
+    const { note_status } = req.body;
+
+    // Si el estado cambia a "pagado" y aún no se ha registrado `paidAt`
+    if (note_status === "pagado" && !note.paidAt) {
+      note.paidAt = new Date(); // Registra la fecha de pago
+    }
+
+    // Si el estado cambia a "entregado", solo actualiza `deliveredAt`
+    if (note_status === "entregado") {
+      note.deliveredAt = new Date(); // Registra la fecha de entrega
+    }
+
+    // Actualiza el estado de la nota
+    note.note_status = note_status;
+
+    // Guarda los cambios
+    const updatedNote = await note.save();
+
     res.status(200).send(updatedNote);
   } catch (err) {
     res.status(500).send(err);
@@ -91,7 +106,6 @@ router.get("/findOne/:id", async (req, res) => {
     res.status(500).send(err);
   }
 });
-
 
 // GET INCOME STATS
 router.get("/income/stats", async (req, res) => {
