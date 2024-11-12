@@ -9,6 +9,7 @@ import { validate } from "./validateNote";
 import moment from "moment";
 import styled from "styled-components";
 
+// Función para generar un folio único
 const generateFolio = () => `FOLIO-${Math.floor(Math.random() * 1000000)}`;
 
 const LaundryNote = () => {
@@ -17,6 +18,7 @@ const LaundryNote = () => {
   const [folio, setFolio] = useState(() => generateFolio());
   const [date, setDate] = useState(() => moment().format("YYYY-MM-DD HH:mm")); // Guarda la fecha en formato local
 
+  // Estado inicial de los servicios
   const initialServicesState = {
     ropaPorKilo: 0,
     secado: 0,
@@ -269,9 +271,15 @@ const LaundryNote = () => {
 
   const formattedDate = moment(date).format("YYYY-MM-DD / HH:mm");
 
+  const handleBackButtonClick = () => {
+    window.history.back();
+  };
+
   return (
     <Container>
+      <BackButton onClick={handleBackButtonClick}>Regresar al Menú</BackButton>
       <NoteHeader>
+
         <h2>Nota de Lavandería</h2>
         <FolioDateContainer>
           <div className="folio">{folio}</div>
@@ -389,17 +397,32 @@ const LaundryNote = () => {
   );
 };
 
+const BackButton = styled.button`
+  padding: 12px 20px;
+  background-color: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #5a6268;
+  }
+`;
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   padding: 20px;
-  background-color: #f7f7f7;
+  background-color: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 700px;
   margin: 20px auto;
-  font-family: "Arial", sans-serif;
+  font-family: "Roboto", sans-serif;
   color: #333;
 
   @media (max-width: 768px) {
@@ -417,7 +440,7 @@ const NoteHeader = styled.div`
   h2 {
     margin: 0;
     font-size: 24px;
-    color: #222;
+    color: #007bff;
 
     @media (max-width: 768px) {
       font-size: 20px;
@@ -433,7 +456,8 @@ const FolioDateContainer = styled.div`
 
   .folio {
     font-weight: bold;
-    color: #007bff;
+    font-size:1.2em;
+    color: #28a745;
   }
 
   @media (max-width: 768px) {
@@ -452,13 +476,14 @@ const Section = styled.div`
 `;
 
 const Label = styled.label`
+  font-size:1.2em;
   margin-bottom: 5px;
   font-weight: bold;
   color: #444;
 `;
 
 const Input = styled.input`
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
@@ -471,7 +496,7 @@ const Input = styled.input`
 `;
 
 const Textarea = styled.textarea`
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 16px;
@@ -498,7 +523,7 @@ const CheckboxLabel = styled.label`
   display: flex;
   align-items: center;
   margin-bottom: 10px;
-  font-size: 16px;
+  font-size:1.2em;
   color: #555;
 
   input {
@@ -507,7 +532,7 @@ const CheckboxLabel = styled.label`
 `;
 
 const Total = styled.div`
-  font-size: 20px;
+  font-size: 30px;
   font-weight: bold;
   margin-bottom: 10px;
   color: #222;
@@ -520,7 +545,7 @@ const Button = styled.button`
   color: #fff;
   border: none;
   border-radius: 8px;
-  font-size: 16px;
+  font-size: 1.2em;
   cursor: pointer;
   transition: background-color 0.3s, transform 0.3s;
 

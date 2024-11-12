@@ -1,4 +1,3 @@
-// NoteList.js
 import React from "react";
 import styled from "styled-components";
 import moment from "moment";
@@ -11,9 +10,9 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
           <NoteBox key={note._id} onClick={() => onView(note._id)}>
             <NoteInfo>
               <NoteId>Folio: {note.folio}</NoteId>
-              <NoteName>Name: {note.name}</NoteName>
-              <NoteAmount>Amount: ${note.total}</NoteAmount>
-              <NoteStatus>Status: {renderStatus(note.note_status)}</NoteStatus>
+              <NoteName>Nombre: {note.name}</NoteName>
+              <NoteAmount>Monto: ${note.total.toFixed(2)}</NoteAmount>
+              <NoteStatus>{renderStatus(note.note_status)}</NoteStatus>
               <NoteDate>
                 {moment(note.date).format("YYYY-MM-DD HH:mm")}
               </NoteDate>
@@ -25,7 +24,7 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
                   onDispatch(note._id);
                 }}
               >
-                Dispatch
+                Pagar
               </DispatchBtn>
               <DeliveryBtn
                 onClick={(e) => {
@@ -33,13 +32,13 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
                   onDeliver(note._id);
                 }}
               >
-                Deliver
+                Entregar
               </DeliveryBtn>
             </Actions>
           </NoteBox>
         ))
       ) : (
-        <NoNotes>No notes found.</NoNotes>
+        <NoNotes>No se encontraron notas.</NoNotes>
       )}
     </NoteContainer>
   );
@@ -74,11 +73,12 @@ const NoteBox = styled.div`
   justify-content: space-between;
   align-items: flex-start;
   cursor: pointer;
-  transition: box-shadow 0.3s ease;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
   background-color: white;
 
   &:hover {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
   }
 
   @media (max-width: 768px) {
@@ -95,14 +95,17 @@ const NoteInfo = styled.div`
 const NoteId = styled.p`
   margin: 0 0 0.5rem;
   font-weight: bold;
+  color: #007bff;
 `;
 
 const NoteName = styled.p`
   margin: 0 0 0.5rem;
+  font-size: 1rem;
 `;
 
 const NoteAmount = styled.p`
   margin: 0 0 0.5rem;
+  font-weight: bold;
 `;
 
 const NoteStatus = styled.p`
@@ -116,6 +119,7 @@ const NoteDate = styled.p`
   margin: 0;
   font-weight: lighter;
   font-size: 15px;
+  color: #6c757d;
 `;
 
 const Actions = styled.div`
@@ -136,13 +140,14 @@ const DispatchBtn = styled.button`
   color: white;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 4px;
+ border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
     background-color: rgb(0, 180, 249);
+    transform: scale(1.05);
   }
 
   &:focus {
@@ -151,17 +156,18 @@ const DispatchBtn = styled.button`
 `;
 
 const DeliveryBtn = styled.button`
-  background-color: rgb(102, 108, 255);
+  background-color: #6f42c1;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
     background-color: rgb(82, 85, 167);
+    transform: scale(1.05);
   }
 
   &:focus {

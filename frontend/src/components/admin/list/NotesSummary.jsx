@@ -7,6 +7,7 @@ import { notesFetch, notesEdit } from "../../../features/notesSlice";
 import Filters from "./SummaryHelpers/filters";
 import Pagination from "./SummaryHelpers/pagination";
 import NoteList from "./SummaryHelpers/NoteList";
+import ColorPalette from "../../ColorPalette";
 
 const NotesSummary = () => {
   const navigate = useNavigate();
@@ -133,6 +134,8 @@ const NotesSummary = () => {
           itemsPerPage={itemsPerPage}
         />
       )}
+
+      <ColorPalette></ColorPalette>
     </Container>
   );
 };

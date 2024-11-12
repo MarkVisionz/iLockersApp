@@ -17,9 +17,13 @@ const ServiceWithSize = ({ service, sizes, selectedSize, quantities, onSelectSiz
     <SizeContainer key={size}>
       <SizeLabel>{size.charAt(0).toUpperCase() + size.slice(1)}</SizeLabel>
       <QuantityControl>
-        <IconButton onClick={() => handleDecrease(size)}><FaMinus /></IconButton>
+        <IconButton onClick={() => handleDecrease(size)} disabled={quantities[size] === 0}>
+          <FaMinus />
+        </IconButton>
         <Quantity>{quantities[size] || 0}</Quantity>
-        <IconButton onClick={() => handleIncrease(size)}><FaPlus /></IconButton>
+        <IconButton onClick={() => handleIncrease(size)}>
+          <FaPlus />
+        </IconButton>
       </QuantityControl>
     </SizeContainer>
   );
@@ -32,20 +36,23 @@ const ServiceWithSize = ({ service, sizes, selectedSize, quantities, onSelectSiz
   );
 };
 
-export default ServiceWithSize;
-
 const ServiceContainer = styled.div`
-  padding: 15px;
-  margin-bottom: 5px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-  background-color: #f9f9f9;
+  padding: 20px; /* Aumenté el padding para mayor espacio */
+  margin-bottom: 15px; /* Aumenté el margen inferior */
+  border: 1px solid #ddd; /* Cambié el color del borde para ser más sutil */
+  border-radius: 12px; /* Bordes más redondeados */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* Sombra más suave */
+  background: linear-gradient(145deg, #f9f9f9, #eaeaea); /* Degradado de fondo */
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px); /* Efecto de elevación al pasar el mouse */
+  }
 `;
 
 const ServiceTitle = styled.h3`
   margin-bottom: 15px;
-  font-size: 1.2em;
+  font-size: 1.5em; /* Aumenté el tamaño de la fuente */
   font-weight: bold;
   text-transform: capitalize;
   color: #333;
@@ -55,13 +62,14 @@ const SizeContainer = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 15px; /* Aumenté el margen inferior entre tamaños */
 `;
 
 const SizeLabel = styled.label`
-  font-size: 1em;
+  font-size: 1.2em; /* Aumenté el tamaño de la fuente */
   text-transform: capitalize;
   flex: 1;
+  color: #555; /* Color más suave para el texto */
 `;
 
 const QuantityControl = styled.div`
@@ -76,19 +84,23 @@ const IconButton = styled.button`
   border: none;
   cursor: pointer;
   padding: 5px;
-  font-size: 1.2em;
+  font-size: 1.5em; /* Aumenté el tamaño del ícono */
   color: #007bff;
+  transition: color 0.3s ease, transform 0.2s ease;
 
   &:hover {
     color: #0056b3;
+    transform: scale(1.1); /* Efecto de aumento al pasar el mouse */
   }
+ 
 `;
 
 const Quantity = styled.span`
-  margin: 0 10px;
-  font-size: 1.2em;
-  min-width: 30px;
+  margin: 0 15px; font-size: 1.5em; /* Aumenté el tamaño de la fuente */
+  min-width: 40px; /* Aumenté el ancho mínimo */
   text-align: center;
+  font-weight: bold;
+  color: #333;
 `;
 
-
+export default ServiceWithSize; 
