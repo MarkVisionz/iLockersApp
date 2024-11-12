@@ -13,6 +13,7 @@ const noteSchema = new mongoose.Schema(
     note_status: { type: String, default: "pendiente" },
     paidAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+    phoneNumber: { type: String }
   },
   { timestamps: true }
 );

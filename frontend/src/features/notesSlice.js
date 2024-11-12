@@ -11,6 +11,8 @@ const initialState = {
   deleteStatus: null,
 };
 
+
+
 export const notesFetch = createAsyncThunk(
   "notes/notesFetch",
   async () => {
@@ -35,12 +37,13 @@ export const notesCreate = createAsyncThunk(
       );
       return response.data;
     } catch (error) {
-      console.log(error);
-      toast.error(error.response?.data);
+      console.log("Error details:", error.response);  // Loguea más información
+      toast.error(error.response?.data.message || "An error occurred");
       throw error;
     }
   }
 );
+
 
 export const notesEdit = createAsyncThunk(
   "notes/notesEdit",
@@ -103,6 +106,7 @@ const notesSlice = createSlice({
       })
       .addCase(notesCreate.fulfilled, (state, action) => {
         state.items.push(action.payload);
+        console.log(action.payload);
         state.createStatus = "success";
         toast.success("Note Created!");
       })
@@ -140,7 +144,8 @@ const notesSlice = createSlice({
       })
       .addCase(notesEdit.rejected, (state) => {
         state.editStatus = "rejected";
-      });
+      })
+
   },
 });
 

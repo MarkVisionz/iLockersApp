@@ -2,16 +2,24 @@ import React from "react";
 import styled from "styled-components";
 import { FaPlus, FaMinus } from "react-icons/fa";
 
-const ServiceButton = ({ service, quantity, onIncrease, onDecrease }) => (
-  <ServiceContainer>
-    <ServiceName>{service.charAt(0).toUpperCase() + service.slice(1)}</ServiceName>
-    <QuantityControl>
-      <IconButton onClick={onDecrease}><FaMinus /></IconButton>
-      <Quantity>{quantity}</Quantity>
-      <IconButton onClick={onIncrease}><FaPlus /></IconButton>
-    </QuantityControl>
-  </ServiceContainer>
-);
+const ServiceButton = ({ service, quantity, onIncrease, onDecrease }) => {
+  const capitalizeServiceName = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+  return (
+    <ServiceContainer>
+      <ServiceName>{capitalizeServiceName(service)}</ServiceName>
+      <QuantityControl>
+        <IconButton onClick={onDecrease} disabled={quantity === 0}>
+          <FaMinus />
+        </IconButton>
+        <Quantity>{quantity}</Quantity>
+        <IconButton onClick={onIncrease}>
+          <FaPlus />
+        </IconButton>
+      </QuantityControl>
+    </ServiceContainer>
+  );
+};
 
 const IconButton = styled.button`
   background: none;

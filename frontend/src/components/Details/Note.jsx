@@ -3,24 +3,26 @@ import styled from "styled-components";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { setHeaders, url } from "../../features/api";
+import { useNavigate } from "react-router-dom";
+import { LoadingSpinner } from "../LoadingAndError";
+import moment from "moment";
 
 const Note = () => {
   const params = useParams();
-
   const [note, setNote] = useState({ services: {} });
   const [loading, setLoading] = useState(true);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchNote = async () => {
       try {
         setLoading(true);
-
         const noteRes = await axios.get(
           `${url}/notes/findOne/${params.id}`,
           setHeaders()
         );
         const noteData = noteRes.data;
-
         setNote(noteData);
         setLoading(false);
       } catch (err) {
@@ -42,10 +44,8 @@ const Note = () => {
 
   const renderServices = (services, parentName = "") => {
     const items = [];
-
     Object.entries(services).forEach(([serviceName, details]) => {
       const fullServiceName = parentName + serviceName;
-
       if (details.quantity > 0) {
         const totalPrice = details.unitPrice * details.quantity;
         items.push(
@@ -63,14 +63,13 @@ const Note = () => {
         items.push(...renderServices(details, fullServiceName));
       }
     });
-
     return items;
   };
 
   return (
     <StyledNote>
       {loading ? (
-        <LoadingMessage>Loading...</LoadingMessage>
+        <LoadingSpinner message={`Loading...`}></LoadingSpinner>
       ) : (
         <NoteContainer>
           <Header>
@@ -93,8 +92,9 @@ const Note = () => {
           <Section>
             <h3>Customer Details</h3>
             <p>Customer Name: {note.name}</p>
+            <p>Phone Number: {note.phoneNumber}</p>
             <p>Folio: {note.folio}</p>
-            <p>Date: {note.date.split("T")[0]}</p>
+            <p>Date: {moment(note.date).format("YYYY-MM-DD HH:mm")}</p>
             <p>
               <Suav>Suavitel: {note.suavitelDesired ? "Yes" : "No"}</Suav>
             </p>
@@ -116,17 +116,22 @@ const Note = () => {
           <Section>
             <h3>Observations</h3>
             <p>{note.observations}</p>
+
+            <BackButton onClick={() => navigate("/admin/notes-summary")}>
+              Back to Dashboard
+            </BackButton>
           </Section>
 
-          {/* Renderizar paidAt si existe y el estado es "pagado" o "entregado" */}
-          {(note.note_status === "pagado" || note.note_status === "entregado") && note.paidAt && (
-            <PaidAtContainer>
-              <PaidAtLabel>Paid At:</PaidAtLabel>
-              <PaidAtDate>
-                {new Date(note.paidAt).toLocaleString()}
-              </PaidAtDate>
-            </PaidAtContainer>
-          )}
+          {(note.note_status === "pagado" ||
+            note.note_status === "entregado") &&
+            note.paidAt && (
+              <PaidAtContainer>
+                <PaidAtLabel>Paid At:</PaidAtLabel>
+                <PaidAtDate>
+                  {moment(note.paidAt).format("YYYY-MM-DD HH:mm")}
+                </PaidAtDate>
+              </PaidAtContainer>
+            )}
         </NoteContainer>
       )}
     </StyledNote>
@@ -137,11 +142,26 @@ export default Note;
 
 // Styled Components
 
+const BackButton = styled.button`
+  background-color: #007bff;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  margin-top: 1rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #0056b3;
+  }
+`;
+
 const StyledNote = styled.div`
   margin: 3rem;
   display: flex;
   justify-content: center;
-
   @media (max-width: 768px) {
     margin: 1.5rem;
   }
@@ -151,10 +171,9 @@ const NoteContainer = styled.div`
   max-width: 520px;
   width: 90%;
   background: linear-gradient(135deg, #ffffff 0%, #f7f8fa 100%);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-
   @media (max-width: 768px) {
     padding: 1.5rem;
   }
@@ -163,17 +182,10 @@ const NoteContainer = styled.div`
 const Header = styled.div`
   text-align: left;
   margin-bottom: 2rem;
-
   h2 {
     font-size: 1.8rem;
     font-weight: 600;
     color: #4a4a4a;
-  }
-
-  @media (max-width: 768px) {
-    h2 {
-      font-size: 1.5rem;
-    }
   }
 `;
 
@@ -181,39 +193,20 @@ const Status = styled.p`
   font-size: 1.2rem;
   font-weight: bold;
   margin: 1.5rem 0;
-
-  @media (max-width: 768px) {
-    font-size: 1rem;
-    margin: 1rem 0;
-  }
 `;
 
 const Section = styled.div`
   margin-bottom: 2rem;
-
   h3 {
     margin-bottom: 1rem;
     font-size: 1.4rem;
     font-weight: 600;
     color: #333;
   }
-
   p {
     margin: 0.5rem 0;
     font-size: 1rem;
     color: #666;
-  }
-
-  @media (max-width: 768px) {
-    margin-bottom: 1.5rem;
-
-    h3 {
-      font-size: 1.2rem;
-    }
-
-    p {
-      font-size: 0.9rem;
-    }
   }
 `;
 
@@ -224,11 +217,6 @@ const Item = styled.div`
   background: #f3f3f3;
   border-radius: 8px;
   margin-bottom: 1.5rem;
-
-  @media (max-width: 768px) {
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-  }
 `;
 
 const ServicePrice = styled.span`
@@ -295,18 +283,8 @@ const TotalPrice = styled.div`
   color: #000;
   text-align: right;
   margin-top: 2rem;
-
   span {
     font-size: 2rem;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 1.6rem;
-    margin-top: 1.5rem;
-
-    span {
-      font-size: 1.6rem;
-    }
   }
 `;
 
@@ -329,40 +307,4 @@ const PaidAtDate = styled.span`
   color: black;
   font-size: 1rem;
   font-style: italic;
-`;
-
-const Actions = styled.div`
-  display: flex;
-  gap: 10px;
-`;
-
-const DispatchBtn = styled.button`
-  background-color: rgb(38, 198, 249);
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: rgb(0, 180, 249);
-  }
-`;
-
-const DeliveryBtn = styled.button`
-  background-color: rgb(102, 108, 255);
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 3px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: rgb(82, 85, 167);
-  }
-`;
-
-const LoadingMessage = styled.p`
-  font-size: 1.2rem;
-  color: #555;
 `;

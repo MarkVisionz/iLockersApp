@@ -53,18 +53,18 @@ const LocalSummary = () => {
       icon: <FaClipboard />,
       digits: notesData.current,
       isMoney: false,
-      title: "Notes",
-      color: "rgb(38, 198, 249)",
-      bgColor: "rgb(38, 198, 249, 0.12)",
+      title: "Notas",
+      color: "#00d532", // Azul de la paleta
+      bgColor: "rgba(0, 255, 115, 0.12)", // Azul oscuro con opacidad
       percentage: notesPercentage,
     },
     {
       icon: <FaChartBar />,
       digits: incomeData.current,
       isMoney: true,
-      title: "Earnings",
-      color: "rgb(253, 181, 40)",
-      bgColor: "rgb(253, 181, 40, 0.12)",
+      title: "Ganancias",
+      color: "rgb(253, 181, 40)", 
+      bgColor: "rgb(253, 181, 40, 0.12)", 
       percentage: incomePercentage,
     },
   ];
@@ -74,8 +74,8 @@ const LocalSummary = () => {
       <MainStats>
         <Overview>
           <Title>
-            <h2>Overview</h2>
-            <p>How your Laundry is performing compared to the previous month</p>
+            <h2>Resumen</h2>
+            <p>Cómo está funcionando tu lavandería en comparación con el mes anterior</p>
           </Title>
           <WidgetWrapper>
             {data.map((data, index) => (
@@ -116,17 +116,22 @@ const MainStats = styled.div`
 `;
 
 const Title = styled.div`
+  h2 {
+    color: #ffffff; // Color de subtítulos
+    margin-bottom: 0.5rem; // Espaciado
+  }
   p {
     font-size: 14px;
-    color: rgba(234, 234, 255, 0.68);
+    color: #ffffff; // Texto secundario
   }
 `;
 
 const Overview = styled.div`
-  background: rgb(48, 51, 78);
-  color: rgba(234, 234, 255, 0.87);
-  padding: 1.5rem;
-  border-radius: 10px;
+  background: linear-gradient(45deg, #4b70e2, #3a5bb8);
+  color: #ffffff; // Color de subtítulos
+  padding: 2rem; // Padding aumentado para más espacio
+  border-radius: 15px; // Bordes redondeados
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); // Sombra sutil
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -134,7 +139,7 @@ const Overview = styled.div`
 
   @media (max-width: 768px) {
     margin-bottom: 1rem;
-    padding: 1rem;
+    padding: 1.5rem; // Ajustar el padding en dispositivos pequeños
   }
 `;
 

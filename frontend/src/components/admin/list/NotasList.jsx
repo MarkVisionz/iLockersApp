@@ -1,31 +1,23 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useDispatch } from "react-redux";
-import styled from "styled-components";
 import { notesCreate } from "../../../features/notesSlice";
 import ServiceButton from "../ServiceButton";
 import ServiceWithSize from "../ServiceWithSize";
+import ConfirmationModal from "../../ConfirmationModal";
+import { ErrorMessage } from "../../LoadingAndError";
+import { validate } from "./validateNote";
+import moment from "moment";
+import styled from "styled-components";
 
-// Funciones helper
-const generateFolio = () => {
-  // Genera un folio único
-  return `FOLIO-${Math.floor(Math.random() * 1000000)}`;
-};
-
-const getCurrentDate = () => {
-  // Obtiene la fecha actual en formato YYYY-MM-DD
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
+const generateFolio = () => `FOLIO-${Math.floor(Math.random() * 1000000)}`;
 
 const LaundryNote = () => {
   const dispatch = useDispatch();
   const [name, setClientName] = useState("");
   const [folio, setFolio] = useState(() => generateFolio());
-  const [date, setDate] = useState(() => getCurrentDate());
-  const [services, setServices] = useState({
+  const [date, setDate] = useState(() => moment().format("YYYY-MM-DD HH:mm")); // Guarda la fecha en formato local
+
+  const initialServicesState = {
     ropaPorKilo: 0,
     secado: 0,
     lavadoExpress: 0,
@@ -38,7 +30,9 @@ const LaundryNote = () => {
     cobija: {},
     extras: {},
     almohada: {},
-  });
+  };
+
+  const [services, setServices] = useState(initialServicesState);
   const [observations, setObservations] = useState("");
   const [abono, setAbono] = useState(0);
   const [suavitelDesired, setSuavitelDesired] = useState(false);
@@ -53,38 +47,27 @@ const LaundryNote = () => {
     extras: "suavitel",
   });
 
-  const validate = () => {
-    const errors = {};
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [countryCode, setCountryCode] = useState("+52");
+  const countryCodes = [
+    { name: "México", code: "+52" },
+    { name: "Estados Unidos/Canada", code: "+1" },
+    { name: "España", code: "+34" },
+  ];
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
-    if (!name.trim()) errors.name = "El nombre del cliente es obligatorio";
-    if (abono < 0) errors.abono = "El abono no puede ser negativo";
+  const prefixNumber = `${countryCode}${phoneNumber}`;
 
-    let hasService = false;
-
-    for (const service in services) {
-      if (typeof services[service] === "object") {
-        for (const size in services[service]) {
-          if (services[service][size] < 0) {
-            errors[service] = "La cantidad no puede ser negativa";
-          } else if (services[service][size] > 0) {
-            hasService = true;
-          }
-        }
-      } else {
-        if (services[service] < 0) {
-          errors[service] = "El valor no puede ser negativo";
-        } else if (services[service] > 0) {
-          hasService = true;
-        }
-      }
+  const handleOpenModal = () => {
+    const validationErrors = validate(name, abono, services);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      setShowModal(false);
+      return;
     }
-
-    if (!hasService) {
-      errors.noService = "Debe seleccionar al menos un servicio.";
-    }
-
-    setErrors(errors);
-    return Object.keys(errors).length === 0;
+    setShowModal(true);
   };
 
   const prices = {
@@ -105,7 +88,7 @@ const LaundryNote = () => {
     },
     extras: {
       suavitel: 15,
-      cloro:10,
+      cloro: 10,
       vanish: 15,
     },
     almohada: {
@@ -119,7 +102,7 @@ const LaundryNote = () => {
     cortinasManteles: 16,
   };
 
-  const calculateTotal = () => {
+  const calculateSubtotal = (services, prices) => {
     let subtotal = 0;
     for (const service in services) {
       if (typeof services[service] === "object") {
@@ -132,21 +115,22 @@ const LaundryNote = () => {
         subtotal += services[service] * prices[service];
       }
     }
+    return subtotal;
+  };
 
+  const calculateTotal = (subtotal, abono, suavitelDesired) => {
     if (suavitelDesired) {
       const kgRopa = services.ropaPorKilo;
       const suavitelShots = Math.ceil(kgRopa / 6);
-      const suavitelCost = suavitelShots * prices.vanishCloroSuavitel;
-      subtotal += suavitelCost;
+      subtotal += suavitelShots * prices.vanishCloroSuavitel;
     }
-
     return subtotal - abono;
   };
 
-  const calculatedTotal = useMemo(
-    () => calculateTotal(),
-    [services, abono, suavitelDesired]
-  );
+  const calculatedTotal = useMemo(() => {
+    const subtotal = calculateSubtotal(services, prices);
+    return calculateTotal(subtotal, abono, suavitelDesired);
+  }, [services, abono, suavitelDesired]);
 
   const transformServices = () => {
     const transformedServices = {};
@@ -173,9 +157,15 @@ const LaundryNote = () => {
     return transformedServices;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const handleSubmit = async () => {
+    const validationErrors = validate(name, abono, services);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setLoading(true);
+    setSubmitError(null);
 
     try {
       const transformedServices = transformServices();
@@ -183,61 +173,101 @@ const LaundryNote = () => {
         notesCreate({
           name,
           folio,
-          date,
+          date: moment().format("YYYY-MM-DD HH:mm"), // Guarda la fecha en formato local
           services: transformedServices,
           observations,
           abono,
           suavitelDesired,
           total: calculatedTotal,
           note_status: isPaid ? "pagado" : "pendiente",
-          paidAt: isPaid ? paidAt : null,
+          paidAt: isPaid ? moment().format("YYYY-MM-DD HH:mm") : null, // Guarda la fecha de pago en formato local
+          phoneNumber: prefixNumber,
         })
       );
-      
-      setClientName("");
-      setFolio(generateFolio());
-      setDate(getCurrentDate());
-      setServices({
-        ropaPorKilo: 0,
-        secado: 0,
-        lavadoExpress: 0,
-        toallasSabanas: 0,
-        cortinasManteles: 0,
-        cubrecolchon: 0,
-        hamaca: 0,
-        tennis: 0,
-        edredon: {},
-        cobija: {},
-        extras: {},
-        almohada: {},
-      });
-      setObservations("");
-      setAbono(0);
-      setSuavitelDesired(false);
-      setIsPaid(false);
-      setPaidAt("");
-      setTotal(0);
-      setErrors({});
+      resetForm();
     } catch (error) {
       console.error("Error creating note:", error);
+      setSubmitError("Error al crear la nota. Inténtalo de nuevo.");
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setClientName("");
+    setFolio(generateFolio());
+    setDate(moment().format("YYYY-MM-DD HH:mm")); // Reinicia la fecha en formato local
+    setServices(initialServicesState);
+    setObservations("");
+    setAbono(0);
+    setSuavitelDesired(false);
+    setIsPaid(false);
+    setPaidAt("");
+    setTotal(0);
+    setErrors({});
+    setShowModal(false);
   };
 
   useEffect(() => {
     if (isPaid) {
-      setPaidAt(getCurrentDate());
+      setPaidAt(moment().format("YYYY-MM-DD HH:mm")); // Actualiza la fecha de pago en formato local
     } else {
       setPaidAt("");
     }
   }, [isPaid]);
 
-
-  const capitalizeFirstLetter = (str) => {
-    return str.replace(
+  const capitalizeFirstLetter = (str) =>
+    str.replace(
       /\w\S*/g,
       (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
     );
-  };
+
+  const renderServiceButton = (service) => (
+    <ServiceButton
+      key={service}
+      service={capitalizeFirstLetter(service.replace(/([A-Z])/g, " $1"))}
+      quantity={services[service]}
+      onIncrease={() =>
+        setServices((prevServices) => ({
+          ...prevServices,
+          [service]: prevServices[service] + 1,
+        }))
+      }
+      onDecrease={() =>
+        setServices((prevServices) => ({
+          ...prevServices,
+          [service]: Math.max(prevServices[service] - 1, 0),
+        }))
+      }
+    />
+  );
+
+  const renderServiceWithSize = (service) => (
+    <ServiceWithSize
+      key={service}
+      service={service}
+      sizes={Object.keys(prices[service])}
+      selectedSize={selectedSize[service]}
+      quantities={services[service]}
+      onSelectSize={(size) =>
+        setSelectedSize({
+          ...selectedSize,
+          [service]: size,
+        })
+      }
+      onQuantityChange={(size, value) =>
+        setServices((prevServices) => ({
+          ...prevServices,
+          [service]: {
+            ...prevServices[service],
+            [size]: value,
+          },
+        }))
+      }
+    />
+  );
+
+  const formattedDate = moment(date).format("YYYY-MM-DD / HH:mm");
 
   return (
     <Container>
@@ -246,7 +276,7 @@ const LaundryNote = () => {
         <FolioDateContainer>
           <div className="folio">{folio}</div>
           <div>
-            <strong>Fecha:</strong> {date}
+            <strong>Fecha:</strong> {formattedDate}
           </div>
         </FolioDateContainer>
       </NoteHeader>
@@ -261,65 +291,28 @@ const LaundryNote = () => {
           onChange={(e) => setClientName(e.target.value)}
           autoComplete="off"
         />
-        {errors.name && <ErrorMessage>{errors.name}</ErrorMessage>}
+        {errors.name && <ErrorMessage message={errors.name}></ErrorMessage>}
       </Section>
 
       <ServiceSection>
-        {Object.keys(services).map((service) =>
-          service !== "edredon" &&
-          service !== "cobija" &&
-          service !== "extras" &&
-          service !== "almohada" ? (
-            <ServiceButton
-              key={service}
-              service={capitalizeFirstLetter(
-                service.replace(/([A-Z])/g, " $1")
-              )}
-              quantity={services[service]}
-              onIncrease={() =>
-                setServices((prevServices) => ({
-                  ...prevServices,
-                  [service]: prevServices[service] + 1,
-                }))
-              }
-              onDecrease={() =>
-                setServices((prevServices) => ({
-                  ...prevServices,
-                  [service]: Math.max(prevServices[service] - 1, 0),
-                }))
-              }
-            />
-          ) : (
-            <ServiceWithSize
-              key={service}
-              service={service}
-              sizes={Object.keys(prices[service])}
-              selectedSize={selectedSize[service]}
-              quantities={services[service]}
-              onSelectSize={(size) =>
-                setSelectedSize({
-                  ...selectedSize,
-                  [service]: size,
-                })
-              }
-              onQuantityChange={(size, value) =>
-                setServices({
-                  ...services,
-                  [service]: {
-                    ...services[service],
-                    [size]: value,
-                  },
-                })
-              }
-            />
-          )
-        )}
+        {Object.keys(services).map((service) => {
+          const isSizeService = [
+            "edredon",
+            "cobija",
+            "extras",
+            "almohada",
+          ].includes(service);
+
+          return isSizeService
+            ? renderServiceWithSize(service)
+            : renderServiceButton(service);
+        })}
       </ServiceSection>
 
-      {errors.noService && <ErrorMessage>{errors.noService}</ErrorMessage>}
-      {errors.total && <ErrorMessage>{errors.total}</ErrorMessage>}
+      {errors.noService && (
+        <ErrorMessage message={errors.noService}></ErrorMessage>
+      )}
 
-  
       <Section>
         <Label htmlFor="observations">Observaciones:</Label>
         <Textarea
@@ -341,7 +334,7 @@ const LaundryNote = () => {
           onChange={(e) => setAbono(Number(e.target.value))}
           min="0"
         />
-        {errors.abono && <ErrorMessage>{errors.abono}</ErrorMessage>}
+        {errors.abono && <ErrorMessage message={errors.abono}></ErrorMessage>}
       </Section>
 
       <Section>
@@ -372,12 +365,30 @@ const LaundryNote = () => {
 
       <Total>Total: ${calculatedTotal.toFixed(2)}</Total>
 
-      <Button type="submit" onClick={handleSubmit}>
+      {errors.total && <ErrorMessage message={errors.total}></ErrorMessage>}
+
+      <Button type="button" onClick={handleOpenModal} disabled={loading}>
         Guardar Nota
       </Button>
+
+      <ConfirmationModal
+        showModal={showModal}
+        handleClose={() => setShowModal(false)}
+        handleSubmit={handleSubmit}
+        name={name}
+        calculatedTotal={calculatedTotal}
+        countryCodes={countryCodes}
+        countryCode={countryCode}
+        setCountryCode={setCountryCode}
+        phoneNumber={phoneNumber}
+        setPhoneNumber={setPhoneNumber}
+        loading={loading}
+        submitError={submitError}
+      ></ConfirmationModal>
     </Container>
   );
 };
+
 
 const Container = styled.div`
   display: flex;
@@ -388,7 +399,7 @@ const Container = styled.div`
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   max-width: 600px;
   margin: 20px auto;
-  font-family: 'Arial', sans-serif;
+  font-family: "Arial", sans-serif;
   color: #333;
 
   @media (max-width: 768px) {
@@ -524,13 +535,6 @@ const Button = styled.button`
   }
 `;
 
-const ErrorMessage = styled.div`
-  color: red;
-  font-size: 14px;
-  margin-top: 5px;
-  margin-bottom: 5px;
-`;
-
 const AbonoInput = styled(Input)`
   max-width: 200px;
 
@@ -538,8 +542,5 @@ const AbonoInput = styled(Input)`
     max-width: 100%;
   }
 `;
-
-
-
 
 export default LaundryNote;
