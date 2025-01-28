@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import styled from "styled-components";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import styled from "styled-components";
 import { setHeaders, url } from "../../features/api";
+import { LoadingSpinner } from "../LoadingAndError"; // Asegúrate de tener un spinner de carga
 
 const Order = () => {
   const params = useParams();
-
+  const navigate = useNavigate();
   const [order, setOrder] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -18,67 +19,68 @@ const Order = () => {
           `${url}/orders/findOne/${params.id}`,
           setHeaders()
         );
-
         setOrder(res.data);
-        setLoading(false);
       } catch (err) {
-        console.log(err);
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchOrder();
   }, [params.id]);
 
+  const deliveryStatus = order.delivery_status || ""; // Asegúrate de que delivery_status tenga un valor por defecto
+
   return (
     <StyledOrder>
       {loading ? (
-        <p>Loading...</p>
+        <LoadingSpinner message="Loading order details..." />
       ) : (
-        <>
-          <OrdersContainer>
+        <OrdersContainer>
+          <Header>
             <h2>Order Details</h2>
-            <p>
-              Delivery status:{" "}
-              {order.delivery_status === "pending" ? (
-                <Pending>Pending</Pending>
-              ) : order.delivery_status === "dispatched" ? (
-                <Dispatched>Dispatched</Dispatched>
-              ) : order.delivery_status === "delivered" ? (
-                <Delivered>Delivered</Delivered>
-              ) : (
-                "error"
-              )}
-            </p>
+            <BackButton onClick={() => navigate("/admin/orders")}>
+              Back to Dashboard
+            </BackButton>
+          </Header>
 
+          <DeliveryStatus status={deliveryStatus}>
+            {deliveryStatus.charAt(0).toUpperCase() + deliveryStatus.slice(1)}
+          </DeliveryStatus>
+
+          <Section>
             <h3>Ordered Products</h3>
             <Items>
               {order.products?.map((product, index) => (
                 <Item key={index}>
+                  <ProductImage src={product.image} alt={product.description} />
                   <ProductDetails>
+                    <ProductName>{product.description}</ProductName>
                     <ProductInfo>
-                      <ProductImage src={product.image} alt={product.description} />
-                      <ProductName>{product.description}</ProductName>
                       <ProductQuantity>x{product.quantity}</ProductQuantity>
                       <ProductPrice>
-                        {"$" + (product.amount_total / 100).toLocaleString()}
+                        ${(product.amount_total / 100).toLocaleString()}
                       </ProductPrice>
                     </ProductInfo>
                   </ProductDetails>
                 </Item>
               ))}
             </Items>
-            <div>
-              <h3>Total Price</h3>
-              <p>{"$" + (order.total / 100).toLocaleString()}</p>
-            </div>
-            <div>
-              <h3>Shipping Details</h3>
-              <p>Customer Name: {order.shipping?.name}</p>
-              <p>City: {order.shipping?.address.city}</p>
-              <p>Email: {order.shipping?.email}</p>
-            </div>
-          </OrdersContainer>
-        </>
+          </Section>
+
+          <Section>
+            <h3>Total Price</h3>
+            <TotalPrice>${(order.total / 100).toLocaleString()}</TotalPrice>
+          </Section>
+
+          <Section>
+            <h3>Shipping Details</h3>
+            <DetailItem>Customer Name: {order.shipping?.name}</DetailItem>
+            <DetailItem>City: {order.shipping?.address.city}</DetailItem>
+            <DetailItem>Email: {order.shipping?.email}</DetailItem>
+          </Section>
+        </OrdersContainer>
       )}
     </StyledOrder>
   );
@@ -86,23 +88,88 @@ const Order = () => {
 
 export default Order;
 
+// Styled Components
+
 const StyledOrder = styled.div`
-  margin: 3rem;
+  margin: 2rem;
   display: flex;
   justify-content: center;
-
-  h3 {
-    margin: 1.5rem 0 0.5rem 0;
-  }
 `;
 
 const OrdersContainer = styled.div`
   max-width: 500px;
   width: 100%;
-  height: auto;
-  box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
-  border-radius: 5px;
-  padding: 2rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f7f8fa 100%);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+
+  h2 {
+    font-size: 1.6rem;
+    color: #4a4a4a;
+  }
+`;
+
+const DeliveryStatus = styled.span`
+  color: ${({ status }) => {
+    switch (status) {
+      case "pending":
+        return "rgb(253, 181, 40)";
+      case "dispatched":
+        return "rgb(38, 198, 249)";
+      case "delivered":
+        return "rgb(102, 108, 255)";
+      default:
+        return "black";
+    }
+  }};
+  background: ${({ status }) => {
+    switch (status) {
+      case "pending":
+        return "rgba(253, 181, 40, 0.12)";
+      case "dispatched":
+        return "rgba(38, 198, 249, 0.12)";
+      case "delivered":
+        return "rgba(102, 108, 255, 0.12)";
+      default:
+        return "none";
+    }
+  }};
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 1.1rem;
+`;
+
+const BackButton = styled.button`
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+
+  &:hover {
+    background-color: #0056b3;
+  }
+`;
+
+const Section = styled.div`
+  margin-top: 1.5rem;
+
+  h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.4rem;
+    color: #333;
+  }
 `;
 
 const Items = styled.div`
@@ -114,7 +181,7 @@ const Item = styled.div`
   align-items: center;
   background-color: #f8f9fa;
   border-radius: 8px;
-  padding: 0.1rem;
+  padding: 0.5rem;
   margin-bottom: 1rem;
 `;
 
@@ -133,43 +200,29 @@ const ProductDetails = styled.div`
 
 const ProductName = styled.span`
   font-weight: bold;
-  margin-bottom: 0.5rem; /* Agrega un margen inferior para separar el nombre del producto del resto de la información */
+  margin-bottom: 0.5rem;
 `;
 
 const ProductInfo = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-evenly; /* Esto asegura que el precio esté alineado al final */
+  justify-content: space-between;
 `;
 
 const ProductQuantity = styled.span`
-  margin-right: 1rem; /* Ajusta el margen derecho para un mejor espaciado */
+  margin-right: 1rem;
 `;
 
 const ProductPrice = styled.span`
-  font-weight: bold; /* Puedes agregar este estilo para resaltar el precio */
+  font-weight: bold;
 `;
 
-const Pending = styled.span`
-  color: rgb(253, 181, 40);
-  background: rgb(253, 181, 40, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 14px;
+const TotalPrice = styled.p`
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #4a4a4a;
 `;
 
-const Dispatched = styled.span`
-  color: rgb(38, 198, 249);
-  background-color: rgb(38, 198, 249, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 14px;
-`;
-
-const Delivered = styled.span`
-  color: rgb(102, 108, 255);
-  background-color: rgba(102, 108, 255, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 14px;
+const DetailItem = styled.p`
+  margin: 0.2rem 0;
+  color: #555;
 `;

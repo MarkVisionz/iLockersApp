@@ -5,6 +5,7 @@ import axios from "axios";
 import { url } from "../../features/api";
 import { useDispatch } from "react-redux";
 import { addToCart } from "../../features/cartSlice";
+import { LoadingSpinner } from "../LoadingAndError"
 
 const Product = () => {
   const params = useParams();
@@ -14,18 +15,16 @@ const Product = () => {
   const [product, setProduct] = useState({});
   const [loading, setLoading] = useState(false);
 
-  console.log("product", product);
-
   useEffect(() => {
     const fetchProduct = async () => {
       try {
         setLoading(true);
         const res = await axios.get(`${url}/products/find/${params.id}`);
-
         setProduct(res.data);
-        setLoading(false);
       } catch (err) {
-        console.log(err);
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -41,25 +40,21 @@ const Product = () => {
     <StyledProduct>
       <ProductContainer>
         {loading ? (
-          <p>Loading...</p>
+          <LoadingSpinner>Loading...</LoadingSpinner>
         ) : (
           <>
             <ImageContainer>
-              <img src={product.image?.url} alt="product" />
+              <img src={product.image?.url} alt={product.name} />
             </ImageContainer>
             <ProductDetails>
               <h3>{product.name}</h3>
               <p>
-                <span>Weight:</span>
-                {product.weight}
+                <span>Weight:</span> {product.weight}
               </p>
               <Price>${product.price?.toLocaleString()}</Price>
-              <button
-                className="product-add-to-cart"
-                onClick={() => handleAddToCart(product)}
-              >
+              <AddToCartButton onClick={() => handleAddToCart(product)}>
                 Add to Cart
-              </button>
+              </AddToCartButton>
             </ProductDetails>
           </>
         )}
@@ -79,16 +74,18 @@ const StyledProduct = styled.div`
 const ProductContainer = styled.div`
   max-width: 500px;
   width: 100%;
-  height: auto;
   display: flex;
   box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
   border-radius: 5px;
   padding: 2rem;
+  background-color: #fff; /* Fondo blanco para mayor contraste */
 `;
+
 const ImageContainer = styled.div`
   flex: 1;
   img {
     width: 100%;
+    border-radius: 5px; /* Bordes redondeados para la imagen */
   }
 `;
 
@@ -96,7 +93,8 @@ const ProductDetails = styled.div`
   flex: 2;
   margin-left: 2rem;
   h3 {
-    font-size: 35px;
+    font-size: 2rem; /* Uso de rem para mejor accesibilidad */
+    margin-bottom: 0.5rem; /* Espaciado inferior */
   }
   p span {
     font-weight: bold;
@@ -106,5 +104,20 @@ const ProductDetails = styled.div`
 const Price = styled.div`
   margin: 1rem 0;
   font-weight: bold;
-  font-size: 25px;
+  font-size: 1.5rem; /* Uso de rem para mejor accesibilidad */
+`;
+
+const AddToCartButton = styled.button`
+  padding: 0.5rem 1rem;
+  font-size: 1rem; /* Uso de rem para mejor accesibilidad */
+  background-color: #007bff; /* Color de fondo */
+  color: white; /* Color de texto */
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #0056b3; /* Color de fondo en hover */
+  }
 `;

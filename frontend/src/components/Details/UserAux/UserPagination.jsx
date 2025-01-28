@@ -1,7 +1,7 @@
 import React from "react";
 import styled from "styled-components";
 
-const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) => {
+const UserPagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) => {
   const totalPages = Math.ceil(totalNotes / itemsPerPage);
 
   const handlePageClick = (page) => {
@@ -13,18 +13,12 @@ const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) =
   return (
     <PaginationWrapper>
       {/* Botón para ir a la primera página */}
-      <PageButton
-        onClick={() => handlePageClick(1)}
-        disabled={currentPage === 1}
-      >
+      <PageButton onClick={() => handlePageClick(1)} disabled={currentPage === 1}>
         «
       </PageButton>
-      
+
       {/* Botón para página anterior */}
-      <PageButton
-        onClick={() => handlePageClick(currentPage - 1)}
-        disabled={currentPage === 1}
-      >
+      <PageButton onClick={() => handlePageClick(currentPage - 1)} disabled={currentPage === 1}>
         ‹
       </PageButton>
 
@@ -40,25 +34,19 @@ const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) =
       ))}
 
       {/* Botón para página siguiente */}
-      <PageButton
-        onClick={() => handlePageClick(currentPage + 1)}
-        disabled={currentPage === totalPages}
-      >
+      <PageButton onClick={() => handlePageClick(currentPage + 1)} disabled={currentPage === totalPages}>
         ›
       </PageButton>
-      
+
       {/* Botón para ir a la última página */}
-      <PageButton
-        onClick={() => handlePageClick(totalPages)}
-        disabled={currentPage === totalPages}
-      >
+      <PageButton onClick={() => handlePageClick(totalPages)} disabled={currentPage === totalPages}>
         »
       </PageButton>
     </PaginationWrapper>
   );
 };
 
-export default Pagination;
+export default UserPagination;
 
 // Styled Components
 const PaginationWrapper = styled.div`
@@ -71,7 +59,7 @@ const PaginationWrapper = styled.div`
   background-color: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-  
+
   @media (max-width: 768px) {
     flex-wrap: wrap;
     padding: 0.5rem;
@@ -122,8 +110,7 @@ const PageNumber = styled.button`
   transition: all 0.2s ease;
 
   &:hover {
-    background-color: ${(props) =>
-      props.isActive ? "#0056b3" : "#e6f0ff"};
+    background-color: ${(props) => (props.isActive ? "#0056b3" : "#e6f0ff")};
     transform: translateY(-2px);
     box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.1);
   }

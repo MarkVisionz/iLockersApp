@@ -99,12 +99,13 @@ const StyledSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 2rem;
-  padding: 1rem;
+  /* padding: 1rem; */
   width: 100%;
   @media (max-width: 768px) {
     flex-direction: column;
     gap: 1rem;
   }
+  
 `;
 
 const MainStats = styled.div`

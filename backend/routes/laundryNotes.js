@@ -3,26 +3,6 @@ const express = require("express");
 const router = express.Router();
 const moment = require("moment");
 
-const twilio = require("twilio");
-
-// Cargar las credenciales de Twilio desde variables de entorno
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const client = require("twilio")(accountSid, authToken);
-
-// Función para enviar mensaje de WhatsApp
-const sendWhatsAppMessage = async (phoneNumber, messageBody) => {
-  try {
-    const message = await client.messages.create({
-      body: messageBody,
-      from: process.env.TWILIO_WHATSAPP_NUMBER, // Número de Twilio con WhatsApp habilitado
-      to: `whatsapp:${phoneNumber}`, // Número del cliente en formato internacional
-    });
-    console.log("Mensaje enviado:", message.sid);
-  } catch (error) {
-    console.error("Error enviando mensaje de WhatsApp:", error);
-  }
-};
 
 // CREATE A NOTE
 router.post("/", async (req, res) => {
@@ -58,31 +38,7 @@ router.post("/", async (req, res) => {
 
     const savedLaundryNote = await laundryNote.save();
 
-    // Transformar el objeto services en un array de sus entradas (clave-valor)
-    const servicesList = Object.entries(services)
-      .map(
-        ([serviceName, serviceDetails]) =>
-          `${serviceName}: ${serviceDetails.quantity}`
-      )
-      .join(", ");
-
-    const messageBody = `
-Hola ${name}, gracias por usar nuestro servicio de lavandería.
-- Folio: ${folio}
-- Fecha: ${date}
-- Servicios: ${servicesList}
-- Total: $${total}
-- Abono: $${abono}
-${
-  suavitelDesired
-    ? "✔ Se aplicará suavitel a tu ropa"
-    : "✘ No se aplicará suavitel"
-}
-
-¡Gracias por tu preferencia!
-`;
-
-    await sendWhatsAppMessage(phoneNumber, messageBody);
+    
 
     res.status(200).send(savedLaundryNote);
   } catch (error) {

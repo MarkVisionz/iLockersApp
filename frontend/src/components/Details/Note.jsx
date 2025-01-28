@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { setHeaders, url } from "../../features/api";
-import { useNavigate } from "react-router-dom";
 import { LoadingSpinner } from "../LoadingAndError";
 import moment from "moment";
 
@@ -11,7 +10,6 @@ const Note = () => {
   const params = useParams();
   const [note, setNote] = useState({ services: {} });
   const [loading, setLoading] = useState(true);
-
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,11 +20,10 @@ const Note = () => {
           `${url}/notes/findOne/${params.id}`,
           setHeaders()
         );
-        const noteData = noteRes.data;
-        setNote(noteData);
-        setLoading(false);
+        setNote(noteRes.data);
       } catch (err) {
-        console.log("Error fetching note:", err);
+        console.error("Error fetching note:", err);
+      } finally {
         setLoading(false);
       }
     };
@@ -35,21 +32,25 @@ const Note = () => {
   }, [params.id]);
 
   const formatServiceName = (name) => {
-    return name
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2")
-      .toLowerCase()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
+    // Separar palabras por mayúsculas, guiones y espacios
+    const formattedName = name
+      .replace(/([a-z])([A-Z])/g, "$1 $2") // Separar camelCase
+      .replace(/_/g, " ") // Reemplazar guiones bajos por espacios
+      .replace(/-/g, " ") // Reemplazar guiones por espacios
+      .replace(/\s+/g, " ") // Reemplazar múltiples espacios por uno solo
+      .trim(); // Eliminar espacios al inicio y al final
+
+    // Capitalizar la primera letra de cada palabra
+    return formattedName.replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
   const renderServices = (services, parentName = "") => {
-    const items = [];
-    Object.entries(services).forEach(([serviceName, details]) => {
+    return Object.entries(services).flatMap(([serviceName, details]) => {
       const fullServiceName = parentName + serviceName;
       if (details.quantity > 0) {
         const totalPrice = details.unitPrice * details.quantity;
-        items.push(
-          <Item key={fullServiceName}>
+        return (
+          <ServiceItem key={fullServiceName}>
             <ServiceDetails>
               <ServiceInfo>
                 <ServiceName>{formatServiceName(fullServiceName)}</ServiceName>
@@ -57,47 +58,41 @@ const Note = () => {
                 <ServicePrice>${totalPrice}</ServicePrice>
               </ServiceInfo>
             </ServiceDetails>
-          </Item>
+          </ServiceItem>
         );
       } else if (typeof details === "object" && details !== null) {
-        items.push(...renderServices(details, fullServiceName));
+        return renderServices(details, fullServiceName + " "); // Agregar un espacio para evitar concatenaciones incorrectas
       }
+      return null;
     });
-    return items;
   };
 
   return (
     <StyledNote>
       {loading ? (
-        <LoadingSpinner message={`Loading...`}></LoadingSpinner>
+        <LoadingSpinner message={`Loading...`} />
       ) : (
         <NoteContainer>
           <Header>
             <h2>Note Details</h2>
+            <BackButton onClick={() => navigate("/admin/notes-summary")}>
+              Back to Dashboard
+            </BackButton>
           </Header>
 
-          <Status>
-            Note Status:{" "}
-            {note.note_status === "pendiente" ? (
-              <Pending>Pending</Pending>
-            ) : note.note_status === "pagado" ? (
-              <Paid>Paid</Paid>
-            ) : note.note_status === "entregado" ? (
-              <Delivered>Delivered</Delivered>
-            ) : (
-              "Error"
-            )}
-          </Status>
+          <Status>Note Status: {renderStatusLabel(note.note_status)}</Status>
 
           <Section>
             <h3>Customer Details</h3>
-            <p>Customer Name: {note.name}</p>
-            <p>Phone Number: {note.phoneNumber}</p>
-            <p>Folio: {note.folio}</p>
-            <p>Date: {moment(note.date).format("YYYY-MM-DD HH:mm")}</p>
-            <p>
-              <Suav>Suavitel: {note.suavitelDesired ? "Yes" : "No"}</Suav>
-            </p>
+            <DetailItem>Customer Name: {note.name}</DetailItem>
+            <DetailItem>Phone: {note.phoneNumber}</DetailItem>
+            <DetailItem>Folio: {note.folio}</DetailItem>
+            <DetailItem>
+              Date: {moment(note.date).format("YYYY-MM-DD HH:mm")}
+            </DetailItem>
+            <DetailItem>
+              Suavitel: {note.suavitelDesired ? "Yes" : "No"}
+            </DetailItem>
           </Section>
 
           <Section>
@@ -110,46 +105,143 @@ const Note = () => {
           </Section>
 
           <TotalPrice>
-            Total Price: <span>${note.total}</span>
+            Total: <span>${note.total}</span>
           </TotalPrice>
 
           <Section>
             <h3>Observations</h3>
-            <p>{note.observations}</p>
-
-            <BackButton onClick={() => navigate("/admin/notes-summary")}>
-              Back to Dashboard
-            </BackButton>
+            <DetailItem>{note.observations}</DetailItem>
           </Section>
 
-          {(note.note_status === "pagado" ||
-            note.note_status === "entregado") &&
-            note.paidAt && (
-              <PaidAtContainer>
-                <PaidAtLabel>Paid At:</PaidAtLabel>
-                <PaidAtDate>
-                  {moment(note.paidAt).format("YYYY-MM-DD HH:mm")}
-                </PaidAtDate>
-              </PaidAtContainer>
-            )}
+          {renderPaidAtInfo(note)}
         </NoteContainer>
       )}
     </StyledNote>
   );
 };
 
-export default Note;
+const renderStatusLabel = (status) => {
+  const statusStyles = {
+    pendiente: {
+      color: "rgb(253, 181, 40)",
+      background: "rgba(253, 181, 40, 0.12)",
+    },
+    pagado: {
+      color: "rgb(38, 198, 249)",
+      background: "rgba(38, 198, 249, 0.12)",
+    },
+    entregado: {
+      color: "rgb(102, 108, 255)",
+      background: "rgba(102, 108, 255, 0.12)",
+    },
+  };
+
+  const { color, background } = statusStyles[status] || {
+    color: "black",
+    background: "none",
+  };
+
+  return (
+    <StatusLabel style={{ color, background }}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </StatusLabel>
+  );
+};
+
+const renderPaidAtInfo = (note) => {
+  if (
+    (note.note_status === "pagado" || note.note_status === "entregado") &&
+    note.paidAt
+  ) {
+    return (
+      <PaidAtContainer>
+        <PaidAtLabel>Paid At:</PaidAtLabel>
+        <PaidAtDate>
+          {moment(note.paidAt).format("YYYY-MM-DD HH:mm")}
+        </PaidAtDate>
+      </PaidAtContainer>
+    );
+  }
+  return null;
+};
 
 // Styled Components
+
+const StyledNote = styled.div`
+  margin: 2rem;
+  display: flex;
+  justify-content: center;
+  @media (max-width: 768px) {
+    margin: 1rem;
+  }
+`;
+
+const NoteContainer = styled.div`
+  max-width: 520px;
+  width: 90%;
+  background: linear-gradient(135deg, #ffffff 0%, #f7f8fa 100%);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: #4a4a4a;
+  }
+`;
+
+const Status = styled.p`
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin: 1rem 0;
+`;
+
+const Section = styled.div`
+  margin-bottom: 1.5rem;
+  h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #333;
+  }
+`;
+
+const DetailItem = styled.p`
+  margin: 0.3rem 0;
+  font-size: 1rem;
+  color: #666;
+`;
+
+const TotalPrice = styled.div`
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #000;
+  text-align: right;
+  margin-top: 1.5rem;
+  span {
+    font-size: 1.5rem;
+  }
+`;
 
 const BackButton = styled.button`
   background-color: #007bff;
   color: white;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border: none;
-  margin-top: 1rem;
-  border-radius: 5px;
-  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
   transition: background-color 0.3s ease;
 
@@ -158,70 +250,13 @@ const BackButton = styled.button`
   }
 `;
 
-const StyledNote = styled.div`
-  margin: 3rem;
-  display: flex;
-  justify-content: center;
-  @media (max-width: 768px) {
-    margin: 1.5rem;
-  }
-`;
-
-const NoteContainer = styled.div`
-  max-width: 520px;
-  width: 90%;
-  background: linear-gradient(135deg, #ffffff 0%, #f7f8fa 100%);
-  border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  @media (max-width: 768px) {
-    padding: 1.5rem;
-  }
-`;
-
-const Header = styled.div`
-  text-align: left;
-  margin-bottom: 2rem;
-  h2 {
-    font-size: 1.8rem;
-    font-weight: 600;
-    color: #4a4a4a;
-  }
-`;
-
-const Status = styled.p`
-  font-size: 1.2rem;
-  font-weight: bold;
-  margin: 1.5rem 0;
-`;
-
-const Section = styled.div`
-  margin-bottom: 2rem;
-  h3 {
-    margin-bottom: 1rem;
-    font-size: 1.4rem;
-    font-weight: 600;
-    color: #333;
-  }
-  p {
-    margin: 0.5rem 0;
-    font-size: 1rem;
-    color: #666;
-  }
-`;
-
-const Item = styled.div`
+const ServiceItem = styled.div`
   display: flex;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
+  padding: 0.8rem 1rem;
   background: #f3f3f3;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-`;
-
-const ServicePrice = styled.span`
-  color: black;
-  font-weight: 700;
+  border-radius: 6px;
+  margin-bottom: 1rem;
 `;
 
 const ServiceDetails = styled.div`
@@ -230,67 +265,35 @@ const ServiceDetails = styled.div`
   width: 100%;
 `;
 
-const ServiceName = styled.span`
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-`;
-
 const ServiceInfo = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
 `;
 
+const ServiceName = styled.span`
+  font-weight: bold;
+  margin-bottom: 0.3rem;
+`;
+
 const ServiceQuantity = styled.span`
-  margin-right: 1rem;
+  margin-right: 0.5rem;
 `;
 
-const Pending = styled.span`
-  color: rgb(253, 181, 40);
-  background: rgba(253, 181, 40, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 16px;
-`;
-
-const Suav = styled.span`
-  color: rgb(253, 181, 40);
-  background: rgba(253, 181, 40, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 16px;
-`;
-
-const Paid = styled.span`
-  color: rgb(38, 198, 249);
-  background-color: rgba(38, 198, 249, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 16px;
-`;
-
-const Delivered = styled.span`
-  color: rgb(102, 108, 255);
-  background-color: rgba(102, 108, 255, 0.12);
-  padding: 3px 5px;
-  border-radius: 3px;
-  font-size: 16px;
-`;
-
-const TotalPrice = styled.div`
-  font-size: 2rem;
+const ServicePrice = styled.span`
+  color: black;
   font-weight: 700;
-  color: #000;
-  text-align: right;
-  margin-top: 2rem;
-  span {
-    font-size: 2rem;
-  }
+`;
+
+const StatusLabel = styled.span`
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 14px;
 `;
 
 const PaidAtContainer = styled.div`
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.8rem;
   background-color: #f3f3f3;
   border-radius: 5px;
   display: flex;
@@ -300,11 +303,13 @@ const PaidAtContainer = styled.div`
 const PaidAtLabel = styled.span`
   font-weight: bold;
   color: black;
-  margin-right: 0.5rem;
+  margin-right: 0.3rem;
 `;
 
 const PaidAtDate = styled.span`
   color: black;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-style: italic;
 `;
+
+export default Note;

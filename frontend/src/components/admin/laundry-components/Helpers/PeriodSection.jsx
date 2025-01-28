@@ -28,8 +28,14 @@ const PeriodContainer = styled.div`
   padding: 1.5rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
   flex: 1;
   color: #fff;
+
+  &:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+  }
 `;
 
 const Subtitle = styled.h4`

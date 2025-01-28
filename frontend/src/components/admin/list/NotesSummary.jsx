@@ -16,7 +16,7 @@ const NotesSummary = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortField, setSortField] = useState("date");
+  const [sortField, setSortField] = useState("");
   const [sortOrder, setSortOrder] = useState("desc");
   const [filterOption, setFilterOption] = useState("");
   const [specificDate, setSpecificDate] = useState("");
@@ -49,7 +49,9 @@ const NotesSummary = () => {
         } else if (filterOption === "createdOnDate") {
           return specificDate && noteDate.isSame(selectedDate, "day");
         } else if (filterOption === "paidOnDate") {
-          return specificDate && notePaidAt && notePaidAt.isSame(selectedDate, "day");
+          return (
+            specificDate && notePaidAt && notePaidAt.isSame(selectedDate, "day")
+          );
         } else if (filterOption === "createdAndPaidOnDate") {
           return (
             noteDate.isSame(selectedDate, "day") ||
@@ -68,7 +70,7 @@ const NotesSummary = () => {
     const notesToSort = [...filteredNotes];
     return notesToSort.sort((a, b) => {
       let aField, bField;
-  
+
       if (sortField === "date") {
         aField = moment(a.date);
         bField = moment(b.date);
@@ -79,13 +81,22 @@ const NotesSummary = () => {
         aField = a[sortField];
         bField = b[sortField];
       }
-  
-      return sortOrder === "desc" ? (aField < bField ? 1 : -1) : (aField > bField ? 1 : -1);
+
+      return sortOrder === "desc"
+        ? aField < bField
+          ? 1
+          : -1
+        : aField > bField
+        ? 1
+        : -1;
     });
   }, [filteredNotes, sortField, sortOrder]);
 
   const paginatedNotes = useMemo(() => {
-    return sortedNotes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    return sortedNotes.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
   }, [sortedNotes, currentPage, itemsPerPage]);
 
   const toggleSortOrder = () => {
@@ -93,7 +104,13 @@ const NotesSummary = () => {
   };
 
   const handleNoteDispatch = (id) => {
-    dispatch(notesEdit({ _id: id, note_status: "pagado", paidAt: moment().toISOString() }));
+    dispatch(
+      notesEdit({
+        _id: id,
+        note_status: "pagado",
+        paidAt: moment().toISOString(),
+      })
+    );
   };
 
   const handleNoteDeliver = (id) => {
@@ -147,5 +164,4 @@ export default NotesSummary;
 const Container = styled.div`
   width: 100%;
   margin-top: 2rem;
-  padding: 0 1rem;
 `;

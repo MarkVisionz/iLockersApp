@@ -8,11 +8,13 @@ import { ErrorMessage } from "../../LoadingAndError";
 import { validate } from "./validateNote";
 import moment from "moment";
 import styled from "styled-components";
+import { useNavigate } from "react-router-dom";
 
 // Función para generar un folio único
 const generateFolio = () => `FOLIO-${Math.floor(Math.random() * 1000000)}`;
 
 const LaundryNote = () => {
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const [name, setClientName] = useState("");
   const [folio, setFolio] = useState(() => generateFolio());
@@ -21,6 +23,7 @@ const LaundryNote = () => {
   // Estado inicial de los servicios
   const initialServicesState = {
     ropaPorKilo: 0,
+    promoMartes: 0,
     secado: 0,
     lavadoExpress: 0,
     toallasSabanas: 0,
@@ -30,8 +33,8 @@ const LaundryNote = () => {
     tennis: 0,
     edredon: {},
     cobija: {},
-    extras: {},
     almohada: {},
+    extras: {},
   };
 
   const [services, setServices] = useState(initialServicesState);
@@ -50,11 +53,11 @@ const LaundryNote = () => {
   });
 
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("+52");
+  const [countryCode, setCountryCode] = useState("52");
   const countryCodes = [
-    { name: "México", code: "+52" },
-    { name: "Estados Unidos/Canada", code: "+1" },
-    { name: "España", code: "+34" },
+    { name: "México", code: "52" },
+    { name: "Estados Unidos/Canada", code: "1" },
+    { name: "España", code: "34" },
   ];
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -74,6 +77,7 @@ const LaundryNote = () => {
 
   const prices = {
     ropaPorKilo: 14,
+    promoMartes: 13,
     secado: 10,
     lavadoExpress: 18,
     toallasSabanas: 16,
@@ -110,15 +114,23 @@ const LaundryNote = () => {
       if (typeof services[service] === "object") {
         for (const size in services[service]) {
           if (prices[service][size]) {
+            console.log(
+              `Calculando ${service} (${size}): Cantidad=${services[service][size]} Precio=${prices[service][size]}`
+            );
             subtotal += services[service][size] * prices[service][size];
           }
         }
       } else {
+        console.log(
+          `Calculando ${service}: Cantidad=${services[service]} Precio=${prices[service]}`
+        );
         subtotal += services[service] * prices[service];
       }
     }
+    console.log(`Subtotal calculado: ${subtotal}`);
     return subtotal;
   };
+  
 
   const calculateTotal = (subtotal, abono, suavitelDesired) => {
     if (suavitelDesired) {
@@ -139,6 +151,7 @@ const LaundryNote = () => {
 
     for (const service in services) {
       if (typeof services[service] === "object") {
+        // Para servicios que tienen tamaños (como edredon, cobija, etc.)
         transformedServices[service] = {};
         for (const size in services[service]) {
           if (services[service][size] > 0) {
@@ -148,14 +161,19 @@ const LaundryNote = () => {
             };
           }
         }
+        // Solo agregar el servicio si tiene detalles
+        if (Object.keys(transformedServices[service]).length === 0) {
+          delete transformedServices[service]; // Eliminar si no hay tamaños
+        }
       } else if (services[service] > 0) {
+        // Para servicios sin tamaños (como ropaPorKilo, secado, etc.)
         transformedServices[service] = {
           quantity: services[service],
           unitPrice: prices[service],
         };
       }
     }
-
+    console.log("Servicios transformados:", transformedServices);
     return transformedServices;
   };
 
@@ -224,6 +242,16 @@ const LaundryNote = () => {
       (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
     );
 
+    const today = new Date().getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  const isPromoDay = today === 2 || today === 4; // Martes o Jueves
+
+  // Modificar dinámicamente servicios visibles
+  const filteredServices = { ...services };
+
+  if (isPromoDay) {
+    delete filteredServices.ropaPorKilo; // Eliminar ropaPorKilo los días de promoción
+  }
+
   const renderServiceButton = (service) => (
     <ServiceButton
       key={service}
@@ -262,7 +290,7 @@ const LaundryNote = () => {
           ...prevServices,
           [service]: {
             ...prevServices[service],
-            [size]: value,
+            [size]: value > 0 ? value : 0, // Asegúrate de que el valor no sea menor que 0
           },
         }))
       }
@@ -272,14 +300,13 @@ const LaundryNote = () => {
   const formattedDate = moment(date).format("YYYY-MM-DD / HH:mm");
 
   const handleBackButtonClick = () => {
-    window.history.back();
+    navigate("/admin/notes-summary");
   };
 
   return (
     <Container>
       <BackButton onClick={handleBackButtonClick}>Regresar al Menú</BackButton>
       <NoteHeader>
-
         <h2>Nota de Lavandería</h2>
         <FolioDateContainer>
           <div className="folio">{folio}</div>
@@ -303,19 +330,23 @@ const LaundryNote = () => {
       </Section>
 
       <ServiceSection>
-        {Object.keys(services).map((service) => {
-          const isSizeService = [
-            "edredon",
-            "cobija",
-            "extras",
-            "almohada",
-          ].includes(service);
+      {Object.keys(filteredServices).map((service) => {
+        // Reemplazar ropaPorKilo por promoMartes los días de promoción
+        const actualService =
+          isPromoDay && service === "promoMartes" ? "promoMartes" : service;
 
-          return isSizeService
-            ? renderServiceWithSize(service)
-            : renderServiceButton(service);
-        })}
-      </ServiceSection>
+        const isSizeService = [
+          "edredon",
+          "cobija",
+          "extras",
+          "almohada",
+        ].includes(actualService);
+
+        return isSizeService
+          ? renderServiceWithSize(actualService)
+          : renderServiceButton(actualService);
+      })}
+    </ServiceSection>
 
       {errors.noService && (
         <ErrorMessage message={errors.noService}></ErrorMessage>
@@ -392,6 +423,12 @@ const LaundryNote = () => {
         setPhoneNumber={setPhoneNumber}
         loading={loading}
         submitError={submitError}
+        folio={folio}
+        services={services}
+        date={date}
+        isPaid={isPaid}
+        observations={observations}
+        transformServices={transformServices} // Pasar la función aquí
       ></ConfirmationModal>
     </Container>
   );
@@ -420,7 +457,7 @@ const Container = styled.div`
   background-color: #ffffff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  max-width: 700px;
+  max-width: 1000px;
   margin: 20px auto;
   font-family: "Roboto", sans-serif;
   color: #333;
@@ -456,7 +493,7 @@ const FolioDateContainer = styled.div`
 
   .folio {
     font-weight: bold;
-    font-size:1.2em;
+    font-size: 1.2em;
     color: #28a745;
   }
 
@@ -476,7 +513,7 @@ const Section = styled.div`
 `;
 
 const Label = styled.label`
-  font-size:1.2em;
+  font-size: 1.2em;
   margin-bottom: 5px;
   font-weight: bold;
   color: #444;
@@ -510,20 +547,21 @@ const Textarea = styled.textarea`
 
 const ServiceSection = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 3fr));
   gap: 12px;
   margin-bottom: 20px;
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
+    gap: 8px;
   }
 `;
+
 
 const CheckboxLabel = styled.label`
   display: flex;
   align-items: center;
   margin-bottom: 10px;
-  font-size:1.2em;
+  font-size: 1.2em;
   color: #555;
 
   input {
