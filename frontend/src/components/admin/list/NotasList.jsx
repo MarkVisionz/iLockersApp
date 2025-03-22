@@ -1,27 +1,40 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, {
+  useReducer,
+  useEffect,
+  useMemo,
+  useCallback,
+  useState,
+} from "react";
 import { useDispatch } from "react-redux";
 import { notesCreate } from "../../../features/notesSlice";
 import ServiceButton from "../ServiceButton";
 import ServiceWithSize from "../ServiceWithSize";
-import ConfirmationModal from "../../ConfirmationModal";
+import ConfirmationModal from "../../ConfirmationModal"; // Importa el modal
 import { ErrorMessage } from "../../LoadingAndError";
 import { validate } from "./validateNote";
 import moment from "moment";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 
-// Función para generar un folio único
-const generateFolio = () => `FOLIO-${Math.floor(Math.random() * 1000000)}`;
+// Reducer para manejar el estado del formulario
+const formReducer = (state, action) => {
+  switch (action.type) {
+    case "SET_FIELD":
+      return { ...state, [action.field]: action.value };
+    case "SET_SERVICES":
+      return { ...state, services: { ...state.services, ...action.services } };
+    case "RESET":
+      return initialState;
+    default:
+      return state;
+  }
+};
 
-const LaundryNote = () => {
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const [name, setClientName] = useState("");
-  const [folio, setFolio] = useState(() => generateFolio());
-  const [date, setDate] = useState(() => moment().format("YYYY-MM-DD HH:mm")); // Guarda la fecha en formato local
-
-  // Estado inicial de los servicios
-  const initialServicesState = {
+const initialState = {
+  name: "",
+  folio: `FOLIO-${Math.floor(Math.random() * 1000000)}`,
+  date: moment().format("YYYY-MM-DD HH:mm"),
+  services: {
     ropaPorKilo: 0,
     promoMartes: 0,
     secado: 0,
@@ -35,152 +48,131 @@ const LaundryNote = () => {
     cobija: {},
     almohada: {},
     extras: {},
-  };
-
-  const [services, setServices] = useState(initialServicesState);
-  const [observations, setObservations] = useState("");
-  const [abono, setAbono] = useState(0);
-  const [suavitelDesired, setSuavitelDesired] = useState(false);
-  const [total, setTotal] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [isPaid, setIsPaid] = useState(false);
-  const [paidAt, setPaidAt] = useState("");
-  const [selectedSize, setSelectedSize] = useState({
+  },
+  observations: "",
+  abono: 0,
+  suavitelDesired: false,
+  isPaid: false,
+  cleaningStatus: "sucia",
+  deliveredAt: "",
+  paidAt: "",
+  selectedSize: {
     edredon: "individual",
     cobija: "individual",
     almohada: "chica",
     extras: "suavitel",
-  });
+  },
+  phoneNumber: "",
+  countryCode: "52",
+  errors: {},
+};
 
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("52");
-  const countryCodes = [
-    { name: "México", code: "52" },
-    { name: "Estados Unidos/Canada", code: "1" },
-    { name: "España", code: "34" },
-  ];
-  const [showModal, setShowModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
+const LaundryNote = () => {
+  const [state, dispatchState] = useReducer(formReducer, initialState);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [showModal, setShowModal] = useState(false); // Estado para controlar el modal
+  const [loading, setLoading] = useState(false); // Estado para manejar la carga
+  const [submitError, setSubmitError] = useState(null); // Estado para manejar errores de envío
 
-  const prefixNumber = `${countryCode}${phoneNumber}`;
+  const {
+    name,
+    folio,
+    date,
+    services,
+    observations,
+    abono,
+    suavitelDesired,
+    isPaid,
+    cleaningStatus,
+    deliveredAt,
+    paidAt,
+    selectedSize,
+    phoneNumber,
+    countryCode,
+    errors,
+  } = state;
 
-  const handleOpenModal = () => {
-    const validationErrors = validate(name, abono, services);
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setShowModal(false);
-      return;
-    }
-    setShowModal(true);
-  };
+  const today = new Date().getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  const isPromoDay = today === 2 || today === 4; // Martes o Jueves
 
-  const prices = {
-    ropaPorKilo: 14,
-    promoMartes: 13,
-    secado: 10,
-    lavadoExpress: 18,
-    toallasSabanas: 16,
-    vanishCloroSuavitel: 15,
-    edredon: {
-      individual: 70,
-      matrimonial: 80,
-      queenKing: 100,
-    },
-    cobija: {
-      individual: 40,
-      matrimonial: 50,
-      queenKing: 60,
-    },
-    extras: {
-      suavitel: 15,
-      cloro: 10,
-      vanish: 15,
-    },
-    almohada: {
-      chica: 30,
-      mediana: 60,
-      grande: 90,
-    },
-    cubrecolchon: 60,
-    hamaca: 70,
-    tennis: 120,
-    cortinasManteles: 16,
-  };
+  const filteredServices = { ...services };
 
-  const calculateSubtotal = (services, prices) => {
-    let subtotal = 0;
-    for (const service in services) {
-      if (typeof services[service] === "object") {
-        for (const size in services[service]) {
-          if (prices[service][size]) {
-            console.log(
-              `Calculando ${service} (${size}): Cantidad=${services[service][size]} Precio=${prices[service][size]}`
-            );
-            subtotal += services[service][size] * prices[service][size];
-          }
-        }
-      } else {
-        console.log(
-          `Calculando ${service}: Cantidad=${services[service]} Precio=${prices[service]}`
+  if (isPromoDay) {
+    delete filteredServices.ropaPorKilo;
+  } else {
+    delete filteredServices.promoMartes;
+  }
+
+  const prices = useMemo(
+    () => ({
+      ropaPorKilo: 14,
+      promoMartes: 13,
+      secado: 10,
+      lavadoExpress: 18,
+      toallasSabanas: 16,
+      vanishCloroSuavitel: 15,
+      edredon: {
+        individual: 70,
+        matrimonial: 80,
+        queenKing: 100,
+      },
+      cobija: {
+        individual: 40,
+        matrimonial: 50,
+        queenKing: 60,
+      },
+      extras: {
+        suavitel: 15,
+        cloro: 10,
+        vanish: 15,
+      },
+      almohada: {
+        chica: 30,
+        mediana: 60,
+        grande: 90,
+      },
+      cubrecolchon: 60,
+      hamaca: 70,
+      tennis: 120,
+      cortinasManteles: 16,
+    }),
+    []
+  );
+
+  const calculateSubtotal = useCallback((services, prices) => {
+    return Object.entries(services).reduce((acc, [service, value]) => {
+      if (typeof value === "object") {
+        return (
+          acc +
+          Object.entries(value).reduce((subAcc, [size, quantity]) => {
+            return subAcc + quantity * (prices[service][size] || 0);
+          }, 0)
         );
-        subtotal += services[service] * prices[service];
       }
-    }
-    console.log(`Subtotal calculado: ${subtotal}`);
-    return subtotal;
-  };
-  
-
-  const calculateTotal = (subtotal, abono, suavitelDesired) => {
-    if (suavitelDesired) {
-      const kgRopa = services.ropaPorKilo;
-      const suavitelShots = Math.ceil(kgRopa / 6);
-      subtotal += suavitelShots * prices.vanishCloroSuavitel;
-    }
-    return subtotal - abono;
-  };
+      return acc + value * (prices[service] || 0);
+    }, 0);
+  }, []);
 
   const calculatedTotal = useMemo(() => {
     const subtotal = calculateSubtotal(services, prices);
-    return calculateTotal(subtotal, abono, suavitelDesired);
-  }, [services, abono, suavitelDesired]);
-
-  const transformServices = () => {
-    const transformedServices = {};
-
-    for (const service in services) {
-      if (typeof services[service] === "object") {
-        // Para servicios que tienen tamaños (como edredon, cobija, etc.)
-        transformedServices[service] = {};
-        for (const size in services[service]) {
-          if (services[service][size] > 0) {
-            transformedServices[service][size] = {
-              quantity: services[service][size],
-              unitPrice: prices[service][size],
-            };
-          }
-        }
-        // Solo agregar el servicio si tiene detalles
-        if (Object.keys(transformedServices[service]).length === 0) {
-          delete transformedServices[service]; // Eliminar si no hay tamaños
-        }
-      } else if (services[service] > 0) {
-        // Para servicios sin tamaños (como ropaPorKilo, secado, etc.)
-        transformedServices[service] = {
-          quantity: services[service],
-          unitPrice: prices[service],
-        };
-      }
-    }
-    console.log("Servicios transformados:", transformedServices);
-    return transformedServices;
-  };
+    return (
+      subtotal -
+      abono +
+      (suavitelDesired
+        ? Math.ceil(services.ropaPorKilo / 6) * prices.vanishCloroSuavitel
+        : 0)
+    );
+  }, [services, abono, suavitelDesired, prices, calculateSubtotal]);
 
   const handleSubmit = async () => {
     const validationErrors = validate(name, abono, services);
     if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+      dispatchState({
+        type: "SET_FIELD",
+        field: "errors",
+        value: validationErrors,
+      });
       return;
     }
 
@@ -188,23 +180,26 @@ const LaundryNote = () => {
     setSubmitError(null);
 
     try {
-      const transformedServices = transformServices();
+      const transformedServices = transformServices(services, prices);
       await dispatch(
         notesCreate({
           name,
           folio,
-          date: moment().format("YYYY-MM-DD HH:mm"), // Guarda la fecha en formato local
+          date: moment().format("YYYY-MM-DD HH:mm"),
           services: transformedServices,
           observations,
           abono,
           suavitelDesired,
           total: calculatedTotal,
           note_status: isPaid ? "pagado" : "pendiente",
-          paidAt: isPaid ? moment().format("YYYY-MM-DD HH:mm") : null, // Guarda la fecha de pago en formato local
-          phoneNumber: prefixNumber,
+          cleaningStatus,
+          paidAt: isPaid ? moment().format("YYYY-MM-DD HH:mm") : null,
+          deliveredAt,
+          phoneNumber: `${countryCode}${phoneNumber}`,
         })
       );
-      resetForm();
+      dispatchState({ type: "RESET" });
+      handleCloseModal();
     } catch (error) {
       console.error("Error creating note:", error);
       setSubmitError("Error al crear la nota. Inténtalo de nuevo.");
@@ -213,105 +208,55 @@ const LaundryNote = () => {
     }
   };
 
-  const resetForm = () => {
-    setClientName("");
-    setFolio(generateFolio());
-    setDate(moment().format("YYYY-MM-DD HH:mm")); // Reinicia la fecha en formato local
-    setServices(initialServicesState);
-    setObservations("");
-    setAbono(0);
-    setSuavitelDesired(false);
-    setIsPaid(false);
-    setPaidAt("");
-    setTotal(0);
-    setErrors({});
+  const transformServices = (services, prices) => {
+    return Object.entries(services).reduce((acc, [service, value]) => {
+      if (typeof value === "object") {
+        const sizes = Object.entries(value).filter(
+          ([size, quantity]) => quantity > 0
+        );
+        if (sizes.length > 0) {
+          acc[service] = sizes.reduce(
+            (sizeAcc, [size, quantity]) => ({
+              ...sizeAcc,
+              [size]: { quantity, unitPrice: prices[service][size] },
+            }),
+            {}
+          );
+        }
+      } else if (value > 0) {
+        acc[service] = { quantity: value, unitPrice: prices[service] };
+      }
+      return acc;
+    }, {});
+  };
+
+  const handleOpenModal = () => {
+    const validationErrors = validate(name, abono, services);
+    if (Object.keys(validationErrors).length > 0) {
+      dispatchState({
+        type: "SET_FIELD",
+        field: "errors",
+        value: validationErrors,
+      });
+      return;
+    }
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
     setShowModal(false);
   };
-
-  useEffect(() => {
-    if (isPaid) {
-      setPaidAt(moment().format("YYYY-MM-DD HH:mm")); // Actualiza la fecha de pago en formato local
-    } else {
-      setPaidAt("");
-    }
-  }, [isPaid]);
-
-  const capitalizeFirstLetter = (str) =>
-    str.replace(
-      /\w\S*/g,
-      (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
-    );
-
-    const today = new Date().getDay(); // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
-  const isPromoDay = today === 2 || today === 4; // Martes o Jueves
-
-  // Modificar dinámicamente servicios visibles
-  const filteredServices = { ...services };
-
-  if (isPromoDay) {
-    delete filteredServices.ropaPorKilo; // Eliminar ropaPorKilo los días de promoción
-  }
-
-  const renderServiceButton = (service) => (
-    <ServiceButton
-      key={service}
-      service={capitalizeFirstLetter(service.replace(/([A-Z])/g, " $1"))}
-      quantity={services[service]}
-      onIncrease={() =>
-        setServices((prevServices) => ({
-          ...prevServices,
-          [service]: prevServices[service] + 1,
-        }))
-      }
-      onDecrease={() =>
-        setServices((prevServices) => ({
-          ...prevServices,
-          [service]: Math.max(prevServices[service] - 1, 0),
-        }))
-      }
-    />
-  );
-
-  const renderServiceWithSize = (service) => (
-    <ServiceWithSize
-      key={service}
-      service={service}
-      sizes={Object.keys(prices[service])}
-      selectedSize={selectedSize[service]}
-      quantities={services[service]}
-      onSelectSize={(size) =>
-        setSelectedSize({
-          ...selectedSize,
-          [service]: size,
-        })
-      }
-      onQuantityChange={(size, value) =>
-        setServices((prevServices) => ({
-          ...prevServices,
-          [service]: {
-            ...prevServices[service],
-            [size]: value > 0 ? value : 0, // Asegúrate de que el valor no sea menor que 0
-          },
-        }))
-      }
-    />
-  );
-
-  const formattedDate = moment(date).format("YYYY-MM-DD / HH:mm");
-
-  const handleBackButtonClick = () => {
-    navigate("/admin/notes-summary");
-  };
-
   return (
     <Container>
-      <BackButton onClick={handleBackButtonClick}>Regresar al Menú</BackButton>
+      <BackButton onClick={() => navigate("/admin/notes-summary")}>
+        Regresar al Menú
+      </BackButton>
       <NoteHeader>
         <h2>Nota de Lavandería</h2>
         <FolioDateContainer>
           <div className="folio">{folio}</div>
           <div>
-            <strong>Fecha:</strong> {formattedDate}
+            <strong>Fecha:</strong> {moment(date).format("YYYY-MM-DD / HH:mm")}
           </div>
         </FolioDateContainer>
       </NoteHeader>
@@ -323,34 +268,69 @@ const LaundryNote = () => {
           id="name"
           name="name"
           value={name}
-          onChange={(e) => setClientName(e.target.value)}
+          onChange={(e) =>
+            dispatchState({
+              type: "SET_FIELD",
+              field: "name",
+              value: e.target.value,
+            })
+          }
           autoComplete="off"
         />
-        {errors.name && <ErrorMessage message={errors.name}></ErrorMessage>}
+        {errors.name && <ErrorMessage message={errors.name} />}
       </Section>
 
       <ServiceSection>
-      {Object.keys(filteredServices).map((service) => {
-        // Reemplazar ropaPorKilo por promoMartes los días de promoción
-        const actualService =
-          isPromoDay && service === "promoMartes" ? "promoMartes" : service;
+        {Object.keys(filteredServices).map((service) =>
+          typeof services[service] === "object" ? (
+            <ServiceWithSize
+              key={service}
+              service={service}
+              sizes={Object.keys(prices[service])}
+              selectedSize={selectedSize[service]}
+              quantities={services[service]}
+              onSelectSize={(size) =>
+                dispatchState({
+                  type: "SET_FIELD",
+                  field: "selectedSize",
+                  value: { ...selectedSize, [service]: size },
+                })
+              }
+              onQuantityChange={(size, value) =>
+                dispatchState({
+                  type: "SET_SERVICES",
+                  services: {
+                    [service]: {
+                      ...services[service],
+                      [size]: value > 0 ? value : 0,
+                    },
+                  },
+                })
+              }
+            />
+          ) : (
+            <ServiceButton
+              key={service}
+              service={service}
+              quantity={services[service]}
+              onIncrease={() =>
+                dispatchState({
+                  type: "SET_SERVICES",
+                  services: { [service]: services[service] + 1 },
+                })
+              }
+              onDecrease={() =>
+                dispatchState({
+                  type: "SET_SERVICES",
+                  services: { [service]: Math.max(services[service] - 1, 0) },
+                })
+              }
+            />
+          )
+        )}
+      </ServiceSection>
 
-        const isSizeService = [
-          "edredon",
-          "cobija",
-          "extras",
-          "almohada",
-        ].includes(actualService);
-
-        return isSizeService
-          ? renderServiceWithSize(actualService)
-          : renderServiceButton(actualService);
-      })}
-    </ServiceSection>
-
-      {errors.noService && (
-        <ErrorMessage message={errors.noService}></ErrorMessage>
-      )}
+      {errors.noService && <ErrorMessage message={errors.noService} />}
 
       <Section>
         <Label htmlFor="observations">Observaciones:</Label>
@@ -358,22 +338,33 @@ const LaundryNote = () => {
           id="observations"
           name="observations"
           value={observations}
-          onChange={(e) => setObservations(e.target.value)}
-        ></Textarea>
+          onChange={(e) =>
+            dispatchState({
+              type: "SET_FIELD",
+              field: "observations",
+              value: e.target.value,
+            })
+          }
+        />
       </Section>
 
       <Section>
         <Label htmlFor="abono">Abono:</Label>
         <AbonoInput
-          className="abono"
           type="number"
           id="abono"
           name="abono"
           value={abono}
-          onChange={(e) => setAbono(Number(e.target.value))}
+          onChange={(e) =>
+            dispatchState({
+              type: "SET_FIELD",
+              field: "abono",
+              value: Number(e.target.value),
+            })
+          }
           min="0"
         />
-        {errors.abono && <ErrorMessage message={errors.abono}></ErrorMessage>}
+        {errors.abono && <ErrorMessage message={errors.abono} />}
       </Section>
 
       <Section>
@@ -383,7 +374,13 @@ const LaundryNote = () => {
             id="suavitelDesired"
             name="suavitelDesired"
             checked={suavitelDesired}
-            onChange={() => setSuavitelDesired(!suavitelDesired)}
+            onChange={() =>
+              dispatchState({
+                type: "SET_FIELD",
+                field: "suavitelDesired",
+                value: !suavitelDesired,
+              })
+            }
           />
           ¿Desea Suavitel?
         </CheckboxLabel>
@@ -396,7 +393,13 @@ const LaundryNote = () => {
             id="isPaid"
             name="isPaid"
             checked={isPaid}
-            onChange={() => setIsPaid(!isPaid)}
+            onChange={() =>
+              dispatchState({
+                type: "SET_FIELD",
+                field: "isPaid",
+                value: !isPaid,
+              })
+            }
           />
           ¿Está pagado?
         </CheckboxLabel>
@@ -404,23 +407,39 @@ const LaundryNote = () => {
 
       <Total>Total: ${calculatedTotal.toFixed(2)}</Total>
 
-      {errors.total && <ErrorMessage message={errors.total}></ErrorMessage>}
+      {errors.total && <ErrorMessage message={errors.total} />}
 
-      <Button type="button" onClick={handleOpenModal} disabled={loading}>
+      <Button type="button" onClick={handleOpenModal}>
         Guardar Nota
       </Button>
 
       <ConfirmationModal
         showModal={showModal}
-        handleClose={() => setShowModal(false)}
+        handleClose={handleCloseModal}
         handleSubmit={handleSubmit}
         name={name}
         calculatedTotal={calculatedTotal}
-        countryCodes={countryCodes}
+        countryCodes={[
+          { name: "México", code: "52" },
+          { name: "Estados Unidos/Canada", code: "1" },
+          { name: "España", code: "34" },
+        ]}
         countryCode={countryCode}
-        setCountryCode={setCountryCode}
+        setCountryCode={(code) =>
+          dispatchState({
+            type: "SET_FIELD",
+            field: "countryCode",
+            value: code,
+          })
+        }
         phoneNumber={phoneNumber}
-        setPhoneNumber={setPhoneNumber}
+        setPhoneNumber={(number) =>
+          dispatchState({
+            type: "SET_FIELD",
+            field: "phoneNumber",
+            value: number,
+          })
+        }
         loading={loading}
         submitError={submitError}
         folio={folio}
@@ -428,11 +447,13 @@ const LaundryNote = () => {
         date={date}
         isPaid={isPaid}
         observations={observations}
-        transformServices={transformServices} // Pasar la función aquí
-      ></ConfirmationModal>
+        transformServices={() => transformServices(services, prices)} // Pasar la función transformServices
+      />
     </Container>
   );
 };
+
+// Estilos y exportación...
 
 const BackButton = styled.button`
   padding: 12px 20px;
@@ -555,7 +576,6 @@ const ServiceSection = styled.div`
     gap: 8px;
   }
 `;
-
 
 const CheckboxLabel = styled.label`
   display: flex;

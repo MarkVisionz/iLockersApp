@@ -10,10 +10,11 @@ const noteSchema = new mongoose.Schema(
     abono: { type: Number, default: 0 },
     suavitelDesired: { type: Boolean, default: false },
     total: { type: Number, required: true },
-    note_status: { type: String, default: "pendiente" },
+    note_status: { type: String, default: "pendiente" }, // Estado inicial del pago
+    cleaning_status: { type: String, default: "sucia" }, // Estado inicial del proceso de la ropa
     paidAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
-    phoneNumber: { type: String }
+    phoneNumber: { type: String },
   },
   { timestamps: true }
 );

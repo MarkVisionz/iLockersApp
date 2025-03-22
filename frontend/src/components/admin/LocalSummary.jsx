@@ -99,18 +99,17 @@ const StyledSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 2rem;
-  /* padding: 1rem; */
+  padding: 1rem;
   width: 100%;
   @media (max-width: 768px) {
     flex-direction: column;
     gap: 1rem;
   }
-  
 `;
 
 const MainStats = styled.div`
   flex: 2;
-  width: 100%;
+  width: 100%; 
   @media (max-width: 768px) {
     flex: 1;
   }
@@ -130,7 +129,7 @@ const Title = styled.div`
 const Overview = styled.div`
   background: linear-gradient(45deg, #4b70e2, #3a5bb8);
   color: #ffffff; // Color de subtítulos
-  padding: 2rem; // Padding aumentado para más espacio
+  padding: 1.5rem; // Padding aumentado para más espacio
   border-radius: 15px; // Bordes redondeados
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); // Sombra sutil
   display: flex;
@@ -140,7 +139,7 @@ const Overview = styled.div`
 
   @media (max-width: 768px) {
     margin-bottom: 1rem;
-    padding: 1.5rem; // Ajustar el padding en dispositivos pequeños
+    padding: 1rem; 
   }
 `;
 

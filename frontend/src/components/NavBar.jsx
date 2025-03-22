@@ -46,7 +46,10 @@ const NavBar = () => {
           {!auth.isAdmin ? (
             <StyledLink to="/user/profile">Profile</StyledLink>
           ) : (
-            <StyledLink to="/admin/summary">Admin</StyledLink>
+            <>
+              <StyledLink to="/admin/summary">Admin</StyledLink>
+              <StyledLink to="/laundry-screen">Laundry Control</StyledLink>
+            </>
           )}
           <LogoutButton onClick={handleLogout}>Logout</LogoutButton>
         </NavLinks>

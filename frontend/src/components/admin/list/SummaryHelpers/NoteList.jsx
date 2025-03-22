@@ -23,6 +23,7 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
                   e.stopPropagation();
                   onDispatch(note._id);
                 }}
+                disabled={note.paidAt} // Desactiva el botón si ya se registró el pago
               >
                 Pagar
               </DispatchBtn>
@@ -31,6 +32,7 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
                   e.stopPropagation();
                   onDeliver(note._id);
                 }}
+                disabled={note.deliveredAt} // Desactiva el botón si ya se registró la entrega
               >
                 Entregar
               </DeliveryBtn>
@@ -135,7 +137,7 @@ const Actions = styled.div`
 `;
 
 const DispatchBtn = styled.button`
-  background-color: rgb(38, 198, 249);
+  background-color: rgb(0, 123, 255);
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -152,11 +154,16 @@ const DispatchBtn = styled.button`
   &:focus {
     outline: none;
   }
+
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
 `;
 
 const DeliveryBtn = styled.button`
-  background-color: #6f42c1;
   color: white;
+  background-color: #28a745;
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 4px;
@@ -165,14 +172,20 @@ const DeliveryBtn = styled.button`
   transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
-    background-color: rgb(82, 85, 167);
+    background-color: #218838;  /* Un verde más oscuro para el hover */
     transform: scale(1.05);
   }
 
   &:focus {
     outline: none;
   }
+
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
 `;
+
 
 const Pending = styled.span`
   color: rgb(253, 181, 40);

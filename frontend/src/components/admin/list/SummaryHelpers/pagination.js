@@ -3,12 +3,22 @@ import styled from "styled-components";
 
 const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) => {
   const totalPages = Math.ceil(totalNotes / itemsPerPage);
+  const maxVisiblePages = 4;
 
   const handlePageClick = (page) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
   };
+
+  const startPage = Math.max(
+    1,
+    Math.min(
+      currentPage - Math.floor(maxVisiblePages / 2),
+      totalPages - maxVisiblePages + 1
+    )
+  );
+  const endPage = Math.min(startPage + maxVisiblePages - 1, totalPages);
 
   return (
     <PaginationWrapper>
@@ -19,7 +29,7 @@ const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) =
       >
         «
       </PageButton>
-      
+
       {/* Botón para página anterior */}
       <PageButton
         onClick={() => handlePageClick(currentPage - 1)}
@@ -28,14 +38,17 @@ const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) =
         ‹
       </PageButton>
 
-      {/* Números de página */}
-      {Array.from({ length: totalPages }, (_, index) => (
+      {/* Números de página visibles */}
+      {Array.from(
+        { length: endPage - startPage + 1 },
+        (_, index) => startPage + index
+      ).map((page) => (
         <PageNumber
-          key={index + 1}
-          isActive={currentPage === index + 1}
-          onClick={() => handlePageClick(index + 1)}
+          key={page}
+          isActive={currentPage === page}
+          onClick={() => handlePageClick(page)}
         >
-          {index + 1}
+          {page}
         </PageNumber>
       ))}
 
@@ -46,7 +59,7 @@ const Pagination = ({ currentPage, setCurrentPage, totalNotes, itemsPerPage }) =
       >
         ›
       </PageButton>
-      
+
       {/* Botón para ir a la última página */}
       <PageButton
         onClick={() => handlePageClick(totalPages)}
@@ -63,6 +76,7 @@ export default Pagination;
 // Styled Components
 const PaginationWrapper = styled.div`
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: 1rem;

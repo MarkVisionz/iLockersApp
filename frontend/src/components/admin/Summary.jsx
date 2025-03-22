@@ -131,6 +131,7 @@ const Summary = () => {
         <AllTimeData />
       </SideStats>
     </StyledSummary>
+    
   );
 };
 
@@ -199,6 +200,6 @@ const SideStats = styled.div`
   width: 100%;
   @media (max-width: 768px) {
     flex: 1;
-    margin-top:1rem;
+    margin-top: 1rem;
   }
 `;

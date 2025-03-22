@@ -84,9 +84,9 @@ const Note = () => {
 
           <Section>
             <h3>Customer Details</h3>
+            <DetailItem>Folio: {note.folio}</DetailItem>
             <DetailItem>Customer Name: {note.name}</DetailItem>
             <DetailItem>Phone: {note.phoneNumber}</DetailItem>
-            <DetailItem>Folio: {note.folio}</DetailItem>
             <DetailItem>
               Date: {moment(note.date).format("YYYY-MM-DD HH:mm")}
             </DetailItem>
@@ -113,7 +113,7 @@ const Note = () => {
             <DetailItem>{note.observations}</DetailItem>
           </Section>
 
-          {renderPaidAtInfo(note)}
+          {renderPaidAndDeliveredInfo(note)}
         </NoteContainer>
       )}
     </StyledNote>
@@ -124,15 +124,15 @@ const renderStatusLabel = (status) => {
   const statusStyles = {
     pendiente: {
       color: "rgb(253, 181, 40)",
-      background: "rgba(253, 181, 40, 0.12)",
+  background: "rgba(253, 181, 40, 0.12)",
     },
     pagado: {
-      color: "rgb(38, 198, 249)",
-      background: "rgba(38, 198, 249, 0.12)",
+      color: "rgb(0, 123, 255)",
+      background: "rgba(0, 123, 255, 0.12)",
     },
     entregado: {
-      color: "rgb(102, 108, 255)",
-      background: "rgba(102, 108, 255, 0.12)",
+      color: "rgb(40, 167, 69)",
+      background: "rgba(40, 167, 69, 0.12)",
     },
   };
 
@@ -148,22 +148,27 @@ const renderStatusLabel = (status) => {
   );
 };
 
-const renderPaidAtInfo = (note) => {
-  if (
-    (note.note_status === "pagado" || note.note_status === "entregado") &&
-    note.paidAt
-  ) {
-    return (
-      <PaidAtContainer>
-        <PaidAtLabel>Paid At:</PaidAtLabel>
-        <PaidAtDate>
-          {moment(note.paidAt).format("YYYY-MM-DD HH:mm")}
-        </PaidAtDate>
-      </PaidAtContainer>
-    );
-  }
-  return null;
+const renderPaidAndDeliveredInfo = (note) => {
+  return (
+    <>
+      {note.paidAt && (
+        <PaidAtContainer>
+          <PaidAtLabel>Pagado:</PaidAtLabel>
+          <PaidAtDate>{moment(note.paidAt).format("YYYY-MM-DD HH:mm")}</PaidAtDate>
+        </PaidAtContainer>
+      )}
+      {note.deliveredAt && (
+        <DeliveredAtContainer>
+          <DeliveredAtLabel>Entregado:</DeliveredAtLabel>
+          <DeliveredAtDate>
+            {moment(note.deliveredAt).format("YYYY-MM-DD HH:mm")}
+          </DeliveredAtDate>
+        </DeliveredAtContainer>
+      )}
+    </>
+  );
 };
+
 
 // Styled Components
 
@@ -299,11 +304,31 @@ const PaidAtContainer = styled.div`
   display: flex;
   align-items: center;
 `;
+const DeliveredAtContainer = styled.div`
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  background-color: #f3f3f3;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+`;
+
+const DeliveredAtLabel = styled.span`
+  font-weight: bold;
+  color: black;
+  margin-right: 0.3rem;
+`;
 
 const PaidAtLabel = styled.span`
   font-weight: bold;
   color: black;
   margin-right: 0.3rem;
+`;
+
+const DeliveredAtDate = styled.span`
+  color: black;
+  font-size: 0.9rem;
+  font-style: italic;
 `;
 
 const PaidAtDate = styled.span`

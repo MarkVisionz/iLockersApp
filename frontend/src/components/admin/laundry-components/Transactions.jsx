@@ -240,17 +240,16 @@ export default Transactions;
 
 // Styled Components
 const StyledTransactions = styled.div`
-  padding: 2rem;
+  padding: 1rem;
   border-radius: 5px;
   background-color: #f9f9f9;
   color: #333;
   transition: background-color 0.3s ease, color 0.3s ease;
-  position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
 const Title = styled.h3`
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   color: #333;
   text-align: center;
 `;

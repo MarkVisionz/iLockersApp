@@ -31,6 +31,7 @@ import Note from "./components/Details/Note";
 import UserProfile from "./components/Details/UserProfile";
 import LaundryNote from "./components/admin/list/NotasList";
 import LocalSummary from "./components/admin/LocalSummary";
+import LaundryStatusScreen from "./components/admin/LaundryStatusScreen";
 
 function App() {
   const dispatch = useDispatch();
@@ -48,7 +49,8 @@ function App() {
           <Routes>
             <Route path="/" exact element={<Home />} />
             <Route path="/laundry-note" element={<LaundryNote />} />
-            
+            <Route path="/laundry-screen" element={<LaundryStatusScreen/>} />
+
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
             <Route path="register" element={<Register />} />

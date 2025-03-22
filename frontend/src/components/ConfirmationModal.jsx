@@ -1,6 +1,6 @@
 import React from "react";
 import styled from "styled-components";
-import { LoadingSpinner, ErrorMessage } from "../components/LoadingAndError"; // Asegúrate de importar ambos componentes
+import { LoadingSpinner, ErrorMessage } from "../components/LoadingAndError";
 
 const ConfirmationModal = ({
   showModal,
@@ -20,25 +20,25 @@ const ConfirmationModal = ({
   date,
   isPaid,
   observations,
-  transformServices, // Recibir la función aquí
+  transformServices,
 }) => {
   // Función para formatear el nombre del servicio
   const formatServiceName = (serviceName) => {
     return serviceName
-      .replace(/([a-z])([A-Z])/g, "$1 $2") // Espacio entre minúsculas y mayúsculas
-      .replace(/([A-Z]{2,})([a-z])/g, "$1 $2") // Espacio entre mayúsculas
-      .replace(/([a-z])([0-9])/g, "$1 $2") // Espacio entre letras y números
-      .replace(/([0-9])([a-z])/g, "$1 $2") // Espacio entre números y letras
-      .replace(/\s+/g, " ") // Reemplazar múltiples espacios por uno solo
-      .trim() // Eliminar espacios al inicio y al final
-      .replace(/^\w/, (c) => c.toUpperCase()); // Capitalizar la primera letra
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]{2,})([a-z])/g, "$1 $2")
+      .replace(/([a-z])([0-9])/g, "$1 $2")
+      .replace(/([0-9])([a-z])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\w/, (c) => c.toUpperCase());
   };
 
-  const openWhatsApp = (transformedServices) => {
+  // Función para generar el mensaje de WhatsApp
+  const generateWhatsAppMessage = (transformedServices) => {
     const servicesDetails = Object.entries(transformedServices)
       .flatMap(([service, details]) => {
         if (details.quantity > 0) {
-          // Caso para servicios simples
           return [
             `\uD83E\uDED1 ${formatServiceName(service)} - Cantidad: ${
               details.quantity
@@ -47,7 +47,6 @@ const ConfirmationModal = ({
             }`,
           ];
         } else if (typeof details === "object") {
-          // Caso para servicios con subcategorías
           return Object.entries(details)
             .filter(([_, subDetails]) => subDetails.quantity > 0)
             .map(
@@ -63,73 +62,76 @@ const ConfirmationModal = ({
         }
         return [];
       })
-      .join("\n"); // Unir los servicios en una sola cadena
+      .join("\n");
 
-    // Agregar el mensaje con la imagen de previsualización
-    const message =
+    return (
       `😀 Hola, ${name}!\nAquí están los detalles de tu nota:\n\n` +
-      `\uD83D\uDCDC Folio: ${folio}\n` + // Agregar folio
-      `\uD83D\uDED2 Servicios:\n${servicesDetails}\n` + // Agregar servicios filtrados
-      `\uD83D\uDCC5 Fecha: ${date}\n` + // Agregar fecha
+      `\uD83D\uDCDC Folio: ${folio}\n` +
+      `\uD83D\uDED2 Servicios:\n${servicesDetails}\n` +
+      `\uD83D\uDCC5 Fecha: ${date}\n` +
       `\uD83D\uDCB0 Total: $${calculatedTotal.toFixed(2)}\n` +
-      `\u2705 Pagado: ${isPaid ? "Sí" : "No"}\n` + // Agregar estado de pago
-      `\uD83D\uDDC2 Observaciones: ${observations}\n` + // Agregar observaciones
+      `\u2705 Pagado: ${isPaid ? "Sí" : "No"}\n` +
+      `\uD83D\uDDC2 Observaciones: ${observations}\n` +
       `\uD83D\uDCDE Número Registrado: +${countryCode}${phoneNumber}\n\n` +
-      `Gracias por elegirnos!\n\n` // Número del cliente;
+      `Gracias por elegirnos!\n\n`
+    );
+  };
 
+  const openWhatsApp = (transformedServices) => {
+    const message = generateWhatsAppMessage(transformedServices);
     const encodedMessage = encodeURIComponent(message);
-    console.log(encodeURIComponent(message));
     const url = `https://wa.me/${countryCode}${phoneNumber}?text=${encodedMessage}`;
     window.open(url, "_blank");
   };
 
   const handleConfirm = async () => {
-    const transformedServices = transformServices(); // Transformar los servicios
-    await handleSubmit(); // Llama a la función de manejar el envío
-    openWhatsApp(transformedServices); // Abre WhatsApp con el mensaje
+    const transformedServices = transformServices();
+    await handleSubmit();
+    openWhatsApp(transformedServices);
   };
 
-  return (
-    showModal && (
-      <ModalOverlay>
-        <ModalContent>
-          <Title>Hola!, ¿A qué número mandamos tu orden?</Title>
-          <InfoText>Nombre del Cliente: {name}</InfoText>
-          <InfoText>Total: ${calculatedTotal.toFixed(2)}</InfoText>
+  if (!showModal) return null;
 
-          {loading ? (
-            <LoadingSpinner message="Guardando..." />
-          ) : (
-            <>
-              <SelectCountry
-                value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-              >
-                {countryCodes.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.name} ({country.code})
-                  </option>
-                ))}
-              </SelectCountry>
-              <StyledInput
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="1234567890"
-              />
-              {submitError && <ErrorMessage message={submitError} />}
-              <ButtonContainer>
-                <StyledButton onClick={handleConfirm}>Confirmar</StyledButton>
-                <CancelButton onClick={handleClose}>Cancelar</CancelButton>
-              </ButtonContainer>
-            </>
-          )}
-        </ModalContent>
-      </ModalOverlay>
-    )
+  return (
+    <ModalOverlay>
+      <ModalContent>
+        <Title>Hola!, ¿A qué número mandamos tu orden?</Title>
+        <InfoText>Nombre del Cliente: {name}</InfoText>
+        <InfoText>Total: ${calculatedTotal.toFixed(2)}</InfoText>
+
+        {loading ? (
+          <LoadingSpinner message="Guardando..." />
+        ) : (
+          <>
+            <SelectCountry
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+            >
+              {countryCodes.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name} ({country.code})
+                </option>
+              ))}
+            </SelectCountry>
+            <StyledInput
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="1234567890"
+            />
+            {submitError && <ErrorMessage message={submitError} />}
+            <ButtonContainer>
+              <StyledButton onClick={handleConfirm}>Confirmar</StyledButton>
+              <CancelButton onClick={handleClose}>Cancelar</CancelButton>
+            </ButtonContainer>
+          </>
+        )}
+      </ModalContent>
+    </ModalOverlay>
   );
 };
 
+// Estilos
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;

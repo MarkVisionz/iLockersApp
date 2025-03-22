@@ -122,7 +122,7 @@ const NotesSummary = () => {
   };
 
   return (
-    <Container>
+    <>
       <Filters
         sortField={sortField}
         setSortField={setSortField}
@@ -152,16 +152,10 @@ const NotesSummary = () => {
         />
       )}
 
-      <ColorPalette></ColorPalette>
-    </Container>
+      {/* <ColorPalette></ColorPalette> */}
+    </>
   );
 };
 
 export default NotesSummary;
 
-// Styled Components
-
-const Container = styled.div`
-  width: 100%;
-  margin-top: 2rem;
-`;

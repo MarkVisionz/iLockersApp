@@ -14,14 +14,14 @@ import { useState, useEffect } from "react";
 const Dashboard = () => {
   const auth = useSelector((state) => state.auth);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 769);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
   // Manejar cambios en el tamaño de la ventana
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 769) {
+      if (window.innerWidth < 1024) {
         setIsMobile(true);
-        setIsSidebarOpen(false); // Cerrar sidebar en móvil
+        setIsSidebarOpen(false); // Cerrar sidebar en dispositivos móviles
       } else {
         setIsMobile(false);
         setIsSidebarOpen(true); // Abrir sidebar en escritorio
@@ -103,10 +103,10 @@ const StyledDashboard = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #f0f2f5; /* Color de fondo más suave */
+  background-color: #f0f2f5;
   transition: all 0.3s ease;
 
-  @media (min-width: 769px) {
+  @media (min-width: 1024px) {
     flex-direction: row;
   }
 `;
@@ -117,35 +117,35 @@ const MobileNavbar = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  background-color: none; /* Fondo semi-transparente */
+  background-color: none;
   position: fixed;
   top: 1;
   width: 100%;
-  z-index: 20; /* Asegura que la navbar esté encima */
+  z-index: 20;
 `;
 
 /* Botón de Toggle del Sidebar */
 const SidebarToggle = styled.button`
   background: none;
   border: none;
-  color: #007bff; /* Color del icono */
+  color: #007bff;
   font-size: 24px;
   cursor: pointer;
   transition: color 0.3s;
 
   &:hover {
-    color: #0056b3; /* Color al pasar el mouse */
+    color: #0056b3;
   }
 
-  @media (min-width: 769px) {
-    display: none; /* Ocultar en pantallas grandes */
+  @media (min-width: 1024px) {
+    display: none;
   }
 `;
 
 /* Backdrop */
 const Backdrop = styled.div`
   position: fixed;
-  top: 60px; /* Altura de la MobileNavbar */
+  top: 60px;
   left: 0;
   width: 100%;
   height: calc(100% - 60px);
@@ -155,7 +155,7 @@ const Backdrop = styled.div`
 
 /* Sidebar */
 const SideNav = styled.div`
-  background-color: #ffffff; /* Fondo blanco para contraste */
+  background-color: #ffffff;
   width: 100%;
   padding: ${({ isOpen, isMobile }) =>
     isMobile ? (isOpen ? "1rem" : "0") : "2rem"};
@@ -172,11 +172,11 @@ const SideNav = styled.div`
   h3 {
     margin-bottom: 1rem;
     text-transform: uppercase;
-    font-size: 18px; /* Tamaño de fuente */
-    color: #333; /* Color de texto más oscuro */
+    font-size: 18px;
+    color: #333;
     text-align: center;
 
-    @media (min-width: 769px) {
+    @media (min-width: 1024px) {
       text-align: left;
       margin-bottom: 2rem;
     }
@@ -185,14 +185,14 @@ const SideNav = styled.div`
   a {
     text-decoration: none;
     margin-bottom: 1.5rem;
-    font-size: 16px; /* Tamaño de fuente */
+    font-size: 16px;
     display: flex;
     align-items: center;
-    font-weight: 600; /* Grosor de fuente */
+    font-weight: 600;
     padding: 0.5rem 1rem;
     border-radius: 5px;
     transition: background-color 0.3s, color 0.3s;
-    color: black; /* Color de los enlaces */
+    color: black;
 
     &:hover {
       background-color: #007bff;
@@ -201,17 +201,17 @@ const SideNav = styled.div`
 
     svg {
       margin-right: 0.5rem;
-      font-size: 20px; /* Tamaño de icono */
+      font-size: 20px;
     }
 
-    @media (min-width: 769px) {
+    @media (min-width: 1024px) {
       margin-bottom: 1.5rem;
       width: 100%;
     }
   }
 
-  @media (min-width: 769px) {
-    width: 220px;
+  @media (min-width: 1024px) {
+    width: 200px;
     padding: 2rem;
     box-shadow: none;
     align-items: flex-start;
@@ -222,14 +222,14 @@ const SideNav = styled.div`
 const StyledNavLink = styled(NavLink)`
   text-decoration: none;
   margin-bottom: 1rem;
-  font-size: 16px; /* Tamaño de fuente */
+  font-size: 16px;
   display: flex;
   align-items: center;
-  font-weight: 600; /* Grosor de fuente */
+  font-weight: 600;
   padding: 0.5rem 1rem;
   border-radius: 5px;
   transition: background-color 0.3s, color 0.3s;
-  color: black; /* Color de los enlaces */
+  color: black;
 
   &.active {
     background-color: #007bff;
@@ -243,10 +243,10 @@ const StyledNavLink = styled(NavLink)`
 
   svg {
     margin-right: 0.5rem;
-    font-size: 20px; /* Tamaño de icono */
+    font-size: 20px;
   }
 
-  @media (min-width: 769px) {
+  @media (min-width: 1024px) {
     margin-bottom: 1.5rem;
     width: 100%;
   }
@@ -260,7 +260,7 @@ const Content = styled.div`
     isMobile && isSidebarOpen ? "60px" : "0"};
   transition: all 0.3s ease;
 
-  @media (min-width: 769px) {
+  @media (min-width: 1024px) {
     padding: 2rem 3rem;
     margin-top: 0;
   }
@@ -269,7 +269,7 @@ const Content = styled.div`
 /* Mensaje de Acceso Denegado */
 const AccessDenied = styled.p`
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 18px;
   color: red;
-  margin-top: 2rem;
 `;
+

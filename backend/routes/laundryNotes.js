@@ -3,7 +3,6 @@ const express = require("express");
 const router = express.Router();
 const moment = require("moment");
 
-
 // CREATE A NOTE
 router.post("/", async (req, res) => {
   const {
@@ -16,7 +15,9 @@ router.post("/", async (req, res) => {
     suavitelDesired,
     total,
     note_status,
+    cleaning_status,
     paidAt,
+    deliveredAt,
     phoneNumber,
   } = req.body;
 
@@ -31,14 +32,14 @@ router.post("/", async (req, res) => {
       abono,
       suavitelDesired,
       total,
-      note_status,
+      note_status: note_status || "pendiente", // Valor por defecto
+      cleaning_status: cleaning_status || "sucia", // Valor por defecto
       paidAt,
+      deliveredAt,
       phoneNumber,
     });
 
     const savedLaundryNote = await laundryNote.save();
-
-    
 
     res.status(200).send(savedLaundryNote);
   } catch (error) {
@@ -71,27 +72,30 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// EDIT NOTE - Modificación aquí
+// EDIT NOTE
 router.put("/:id", async (req, res) => {
   try {
     const note = await LaundryNote.findById(req.params.id);
 
     if (!note) return res.status(404).send("Note not found...");
 
-    const { note_status } = req.body;
+    const { note_status, cleaning_status } = req.body;
 
-    // Si el estado cambia a "pagado" y aún no se ha registrado `paidAt`
-    if (note_status === "pagado" && !note.paidAt) {
-      note.paidAt = new Date(); // Registra la fecha de pago
+    // Actualizar estado del pago (note_status)
+    if (note_status) {
+      if (note_status === "pagado" && !note.paidAt) {
+        note.paidAt = new Date(); // Registra la fecha de pago
+      }
+      if (note_status === "entregado" && !note.deliveredAt) {
+        note.deliveredAt = new Date(); // Registra la fecha de entrega
+      }
+      note.note_status = note_status;
     }
 
-    // Si el estado cambia a "entregado", solo actualiza `deliveredAt`
-    if (note_status === "entregado") {
-      note.deliveredAt = new Date(); // Registra la fecha de entrega
+    // Actualizar estado del proceso de la ropa (cleaning_status)
+    if (cleaning_status) {
+      note.cleaning_status = cleaning_status;
     }
-
-    // Actualiza el estado de la nota
-    note.note_status = note_status;
 
     // Guarda los cambios
     const updatedNote = await note.save();
