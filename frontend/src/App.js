@@ -43,13 +43,14 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <ToastContainer />
+        <ToastContainer limit={3} />
+        
         <NavBar />
         <div className="content-container">
           <Routes>
             <Route path="/" exact element={<Home />} />
             <Route path="/laundry-note" element={<LaundryNote />} />
-            <Route path="/laundry-screen" element={<LaundryStatusScreen/>} />
+            <Route path="/laundry-screen" element={<LaundryStatusScreen />} />
 
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
@@ -67,7 +68,7 @@ function App() {
               <Route path="summary" element={<Summary />} />
               <Route path="users" element={<Users />} />
               <Route path="orders" element={<Orders />} />
-              <Route path="notes-summary" element={<LocalSummary/>} />
+              <Route path="notes-summary" element={<LocalSummary />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

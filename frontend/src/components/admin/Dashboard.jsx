@@ -74,9 +74,9 @@ const Dashboard = () => {
           <StyledNavLink to="/admin/products" onClick={handleLinkClick}>
             <FaStore /> Products
           </StyledNavLink>
-          <StyledNavLink to="/admin/orders" onClick={handleLinkClick}>
+          {/* <StyledNavLink to="/admin/orders" onClick={handleLinkClick}>
             <FaClipboard /> Orders
-          </StyledNavLink>
+          </StyledNavLink> */}
           <StyledNavLink to="/admin/users" onClick={handleLinkClick}>
             <FaUsers /> Users
           </StyledNavLink>

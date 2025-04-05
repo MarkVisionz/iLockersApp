@@ -12,43 +12,62 @@ const AllTimeData = () => {
     dispatch(ordersFetch());
   }, [dispatch]);
 
-  const { list: users, loading: usersLoading, error: usersError } = useSelector((state) => state.users);
-  const { list: orders, loading: ordersLoading, error: ordersError } = useSelector((state) => state.orders);
-  const { items: products } = useSelector((state) => state.products);
+  const {
+    list: users = [],
+    status: usersStatus,
+    error: usersError,
+  } = useSelector((state) => state.users);
 
-  // Calculate the total earnings from orders
+  const {
+    list: orders = [],
+    status: ordersStatus,
+    error: ordersError,
+  } = useSelector((state) => state.orders);
+
+  const {
+    items: products = [],
+  } = useSelector((state) => state.products);
+
+  // Calcular ganancias totales
   const calculateEarnings = () => {
-    let totalEarnings = 0;
-    orders.forEach((order) => {
-      totalEarnings += order.total;
+    const totalEarnings = orders?.reduce((sum, order) => {
+      return sum + (order?.total || 0);
+    }, 0);
+
+    // Stripe devuelve en centavos (MXN) → dividir entre 100
+    return (totalEarnings / 100).toLocaleString("es-MX", {
+      style: "currency",
+      currency: "MXN",
     });
-    return (totalEarnings / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
   };
+
+  const isLoading = usersStatus === "pending" || ordersStatus === "pending";
+  const isError = usersError || ordersError;
 
   return (
     <Container>
-      <Title>All Time Data</Title>
+      <Title>Datos Acumulados</Title>
       <Content>
-        {usersLoading || ordersLoading ? (
-          <Loading>Loading...</Loading>
-        ) : usersError || ordersError ? (
+        {isLoading ? (
+          <Loading>Cargando...</Loading>
+        ) : isError ? (
           <Error>Error: {usersError || ordersError}</Error>
         ) : (
           <>
             <Info>
-              <InfoTitle>Users</InfoTitle>
-              <InfoData>{users.length}</InfoData>
+              <InfoTitle>Usuarios</InfoTitle>
+              <InfoData>{users?.length ?? 0}</InfoData>
             </Info>
             <Info>
-              <InfoTitle>Products</InfoTitle>
-              <InfoData>{products.length}</InfoData>
+              <InfoTitle>Productos</InfoTitle>
+              <InfoData>{products?.length ?? 0}</InfoData>
             </Info>
             <Info>
-              <InfoTitle>Orders</InfoTitle>
-              <InfoData>{orders.length}</InfoData>
+              <InfoTitle>Órdenes</InfoTitle>
+              <InfoData>{orders?.length ?? 0}</InfoData>
             </Info>
             <Info>
-              <InfoTitle>Earnings</InfoTitle>
+              <InfoTitle>Ganancias</InfoTitle>
               <InfoData>{calculateEarnings()}</InfoData>
             </Info>
           </>
@@ -59,6 +78,8 @@ const AllTimeData = () => {
 };
 
 export default AllTimeData;
+
+// Estilos
 
 const Container = styled.div`
   background-color: rgb(48, 51, 78);

@@ -16,7 +16,6 @@ export const productsFetch = createAsyncThunk(
   async () => {
     try {
       const response = await axios.get(`${url}/products`);
-
       return response.data;
     } catch (error) {
       console.log(error);
@@ -33,11 +32,27 @@ export const productsCreate = createAsyncThunk(
         values,
         setHeaders()
       );
-
       return response.data;
     } catch (error) {
       console.log(error);
       toast.error(error.response?.data);
+    }
+  }
+);
+
+export const bulkCreateProducts = createAsyncThunk(
+  "products/bulkCreateProducts",
+  async (products, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        `${url}/products/bulk`,
+        { products },
+        setHeaders()
+      );
+      return response.data;
+    } catch (error) {
+      console.error(error);
+      return rejectWithValue(error.response?.data);
     }
   }
 );
@@ -63,42 +78,50 @@ export const productsEdit = createAsyncThunk(
 
 export const productDelete = createAsyncThunk(
   "products/productDelete",
-  async (id) => {
+  async ({ id, silent = false }) => {
     try {
       const response = await axios.delete(
         `${url}/products/${id}`,
         setHeaders()
       );
 
+      // Solo mostrar toast si no es eliminación silenciosa
+      if (!silent) {
+        toast.error("Producto eliminado");
+      }
+
       return response.data;
     } catch (error) {
       console.log(error);
-      toast.error(error.response?.data);
+      if (!silent) {
+        toast.error(error.response?.data || "Error al eliminar producto");
+      }
+      throw error;
     }
   }
 );
+
 
 const productSlice = createSlice({
   name: "products",
   initialState,
   reducers: {},
-
   extraReducers: (builder) => {
     builder
       /////////// PRODUCTS FETCH
-      .addCase(productsFetch.pending, (state, action) => {
+      .addCase(productsFetch.pending, (state) => {
         state.status = "pending";
       })
       .addCase(productsFetch.fulfilled, (state, action) => {
         state.status = "success";
         state.items = action.payload;
       })
-      .addCase(productsFetch.rejected, (state, action) => {
+      .addCase(productsFetch.rejected, (state) => {
         state.status = "rejected";
       })
 
       /////////// PRODUCTS CREATE
-      .addCase(productsCreate.pending, (state, action) => {
+      .addCase(productsCreate.pending, (state) => {
         state.createStatus = "pending";
       })
       .addCase(productsCreate.fulfilled, (state, action) => {
@@ -106,45 +129,49 @@ const productSlice = createSlice({
         state.createStatus = "success";
         toast.success("Product Created!");
       })
-      .addCase(productsCreate.rejected, (state, action) => {
+      .addCase(productsCreate.rejected, (state) => {
         state.createStatus = "rejected";
       })
 
-      /////////// PRODUCTS DELETE
+      /////////// BULK CREATE
+      .addCase(bulkCreateProducts.fulfilled, (state, action) => {
+        state.items = [...state.items, ...action.payload];
+        toast.success("Productos cargados exitosamente");
+      })
+      .addCase(bulkCreateProducts.rejected, (state, action) => {
+        toast.error(action.payload || "Error al cargar productos en masa");
+      })
 
-      .addCase(productDelete.pending, (state, action) => {
+      /////////// PRODUCTS DELETE
+      .addCase(productDelete.pending, (state) => {
         state.deleteStatus = "pending";
       })
       .addCase(productDelete.fulfilled, (state, action) => {
-        const newList = state.items.filter(
+        state.items = state.items.filter(
           (item) => item._id !== action.payload._id
         );
-        state.items = newList;
         state.deleteStatus = "success";
-        toast.error("Product Deleted");
+        if (!action.meta.arg?.silent) {
+          toast.error("Product Deleted");
+        }        
       })
-      .addCase(productDelete.rejected, (state, action) => {
+      .addCase(productDelete.rejected, (state) => {
         state.deleteStatus = "rejected";
       })
 
       /////////// PRODUCTS EDIT
-
-      .addCase(productsEdit.pending, (state, action) => {
+      .addCase(productsEdit.pending, (state) => {
         state.editStatus = "pending";
       })
       .addCase(productsEdit.fulfilled, (state, action) => {
         const updatedProducts = state.items.map((product) =>
           product._id === action.payload._id ? action.payload : product
         );
-        console.log(updatedProducts);
-        console.log(action.payload);
-        console.log("stateI",state.items);
-  
         state.items = updatedProducts;
         state.editStatus = "success";
         toast.info("Product Edited");
       })
-      .addCase(productsEdit.rejected, (state, action) => {
+      .addCase(productsEdit.rejected, (state) => {
         state.editStatus = "rejected";
       });
   },

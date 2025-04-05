@@ -153,5 +153,59 @@ router.post("/add-product-image-to-line-items", async (req, res) => {
   }
 });
 
+// BULK UPLOAD WITH DEFAULT IMAGE IF NOT PROVIDED
+router.post("/bulk", isAdmin, async (req, res) => {
+  try {
+    const { products } = req.body;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).send("No products provided.");
+    }
+
+    const uploadedProducts = [];
+    const defaultImage = {
+      url: "https://res.cloudinary.com/mkocloud/image/upload/v1743619497/lavadora_kkmvss.png",
+      public_id: "default-product",
+    };
+
+    for (const product of products) {
+      const { name, weight, price, image } = product;
+
+      if (!name || !weight || !price) continue;
+
+      let imageToUse = defaultImage;
+
+      // Si se provee una imagen válida, subirla
+      if (image?.url && image.url.startsWith("data:image")) {
+        try {
+          const uploadRes = await cloudinary.uploader.upload(image.url, {
+            upload_preset: "onlineLaundry",
+          });
+          imageToUse = uploadRes;
+        } catch (uploadErr) {
+          console.warn("Error al subir imagen, se usará la imagen por defecto.");
+        }
+      }
+
+      const newProduct = new Product({
+        name,
+        weight,
+        price,
+        image: imageToUse,
+      });
+
+      const savedProduct = await newProduct.save();
+      uploadedProducts.push(savedProduct);
+    }
+
+    res.status(201).send(uploadedProducts);
+  } catch (error) {
+    console.error("Error en /products/bulk:", error);
+    res.status(500).send("Error al subir productos en masa.");
+  }
+});
+
+
+
 
 module.exports = router;

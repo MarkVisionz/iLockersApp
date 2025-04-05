@@ -1,8 +1,87 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import moment from "moment";
+import axios from "axios";
+import { url, setHeaders } from "../../../../features/api";
+import PasswordConfirmationModal from "../../../PasswordConfirmationModal";
+import { io } from "socket.io-client";
+import { useDispatch } from "react-redux";
+import {
+  notesCreate,
+  notesEdit,
+  notesDelete,
+} from "../../../../features/notesSlice";
 
-const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
+const socket = io(url);
+
+const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    socket.on("noteCreated", (newNote) => {
+      dispatch(notesCreate.fulfilled(newNote));
+    });
+
+    socket.on("noteUpdated", (updatedNote) => {
+      dispatch(notesEdit.fulfilled(updatedNote));
+    });
+
+    socket.on("noteDeleted", (deletedNote) => {
+      dispatch(notesDelete.fulfilled(deletedNote));
+    });
+
+    return () => {
+      socket.off("noteCreated");
+      socket.off("noteUpdated");
+      socket.off("noteDeleted");
+    };
+  }, [dispatch]);
+
+  const handleWhatsAppMessage = (note, tipo) => {
+    if (!note.phoneNumber) {
+      console.warn("Este cliente no tiene número registrado.");
+      return;
+    }
+
+    let message = "";
+
+    if (tipo === "pagar") {
+      message = `👕 Hola ${note.name}, tu ropa ya está lista. Puedes pasar a recogerla cuando gustes. ¡Gracias por tu preferencia!`;
+    } else if (tipo === "entregar") {
+      message = `👋 Hola ${note.name}, gracias por recoger tu ropa. ¡Esperamos verte pronto!`;
+    }
+
+    const url = `https://wa.me/${note.phoneNumber.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
+  };
+
+  const confirmPasswordAndDelete = async (password) => {
+    try {
+      const response = await axios.post(
+        `${url}/notes/validate-password`,
+        { password },
+        setHeaders()
+      );
+
+      if (response.data.valid) {
+        onDelete(noteToDelete);
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowModal(false);
+          setShowSuccess(false);
+        }, 2000);
+      } else {
+        alert("Contraseña incorrecta. No se eliminará la nota.");
+      }
+    } catch (err) {
+      console.error("Error validando la contraseña:", err);
+      alert("Ocurrió un error al validar la contraseña.");
+    }
+  };
+
   return (
     <NoteContainer>
       {notes.length ? (
@@ -21,27 +100,48 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver }) => {
               <DispatchBtn
                 onClick={(e) => {
                   e.stopPropagation();
+                  handleWhatsAppMessage(note, "pagar");
                   onDispatch(note._id);
                 }}
-                disabled={note.paidAt} // Desactiva el botón si ya se registró el pago
+                disabled={note.paidAt}
               >
                 Pagar
               </DispatchBtn>
               <DeliveryBtn
                 onClick={(e) => {
                   e.stopPropagation();
+                  handleWhatsAppMessage(note, "entregar");
                   onDeliver(note._id);
                 }}
-                disabled={note.deliveredAt} // Desactiva el botón si ya se registró la entrega
+                disabled={note.deliveredAt}
               >
                 Entregar
               </DeliveryBtn>
+              <DeleteBtn
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNoteToDelete(note._id);
+                  setShowModal(true);
+                }}
+              >
+                Eliminar
+              </DeleteBtn>
             </Actions>
           </NoteBox>
         ))
       ) : (
         <NoNotes>No se encontraron notas.</NoNotes>
       )}
+
+      <PasswordConfirmationModal
+        showModal={showModal}
+        handleClose={() => {
+          setShowModal(false);
+          setShowSuccess(false);
+        }}
+        handleConfirm={confirmPasswordAndDelete}
+        success={showSuccess}
+      />
     </NoteContainer>
   );
 };
@@ -133,6 +233,8 @@ const Actions = styled.div`
     margin-left: 0;
     margin-top: 1rem;
     flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 `;
 
@@ -141,7 +243,7 @@ const DispatchBtn = styled.button`
   color: white;
   border: none;
   padding: 0.5rem 1rem;
- border-radius: 4px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
   transition: background-color 0.3s ease, transform 0.2s ease;
@@ -172,7 +274,7 @@ const DeliveryBtn = styled.button`
   transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
-    background-color: #218838;  /* Un verde más oscuro para el hover */
+    background-color: #218838;
     transform: scale(1.05);
   }
 
@@ -186,6 +288,25 @@ const DeliveryBtn = styled.button`
   }
 `;
 
+const DeleteBtn = styled.button`
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    background-color: #c82333;
+    transform: scale(1.05);
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
 
 const Pending = styled.span`
   color: rgb(253, 181, 40);

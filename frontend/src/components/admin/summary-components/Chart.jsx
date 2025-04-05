@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+// components/summary-components/Chart.jsx
+import { useEffect, useMemo } from "react";
 import styled from "styled-components";
-import axios from "axios";
 import {
   LineChart,
   Line,
@@ -11,68 +11,55 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { setHeaders, url } from "../../../features/api";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchWeekSales, updateStatsFromSocket } from "../../../features/ordersSlice";
+import socket from "../../../features/socket";
+import { LoadingSpinner } from "../../LoadingAndError";
 
 const Chart = () => {
-  const [sales, setSales] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const dispatch = useDispatch();
+  const { stats } = useSelector((state) => state.orders);
+  const loading = stats.loading;
+  const weekSales = stats.weekly;
 
-  function compare(a, b) {
-    if (a._id < b._id) {
-      return 1;
-    }
-    if (a._id > b._id) {
-      return -1;
-    }
-    return;
-  }
+  // Formatear y ordenar los datos semanalmente
+  const sales = useMemo(() => {
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return [...(weekSales || [])]
+      .sort((a, b) => a._id - b._id)
+      .map((item) => ({
+        day: DAYS[item._id - 1],
+        amount: item.total / 100,
+      }));
+  }, [weekSales]);
 
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const res = await axios.get(`${url}/orders/week-sales`, setHeaders());
+    dispatch(fetchWeekSales());
 
-        res.data.sort(compare);
-        const newData = res.data.map((item) => {
-          const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-          return {
-            day: DAYS[item._id - 1],
-            amount: item.total / 100,
-          };
-        });
-        console.log(newData);
-
-        setSales(newData);
-      } catch (err) {
-        console.log(err);
+    const handleStatsUpdate = (payload) => {
+      if (payload?.type === "weekly") {
+        dispatch(updateStatsFromSocket(payload));
       }
-      setLoading(false);
-    }
+    };
 
-    fetchData();
-  }, []);
+    socket.on("statsUpdated", handleStatsUpdate);
 
+    return () => {
+      socket.off("statsUpdated", handleStatsUpdate);
+    };
+  }, [dispatch]);
 
   return (
     <>
       {loading ? (
-        <Loader>Loading Chart...</Loader>
+        <LoadingSpinner message="Cargando gráfica..." />
       ) : (
         <StyledChart>
-          <h3>Last 7 Days Earnings(MXN $)</h3>
+          <h3>Ganancias últimos 7 días (MXN)</h3>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              width={500}
-              height={300}
               data={sales}
-              margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 5,
-              }}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="day" />
@@ -102,11 +89,8 @@ const StyledChart = styled.div`
   padding: 1rem;
   border: 2px solid rgba(48, 51, 78, 0.2);
   border-radius: 5px;
+
   h3 {
     margin-bottom: 1rem;
-  };
-`;
-
-const Loader = styled.p`
-  margin-top: 2rem;
+  }
 `;

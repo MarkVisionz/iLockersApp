@@ -11,39 +11,30 @@ const initialState = {
   deleteStatus: null,
 };
 
-
-
-export const notesFetch = createAsyncThunk(
-  "notes/notesFetch",
-  async () => {
-    try {
-      const response = await axios.get(`${url}/notes`);
-      return response.data;
-    } catch (error) {
-      console.log(error);
-      throw error;
-    }
+// ✅ Async Thunks
+export const notesFetch = createAsyncThunk("notes/notesFetch", async () => {
+  try {
+    const response = await axios.get(`${url}/notes`);
+    return response.data;
+  } catch (error) {
+    console.log(error);
+    throw error;
   }
-);
+});
 
 export const notesCreate = createAsyncThunk(
   "notes/notesCreate",
   async (values) => {
     try {
-      const response = await axios.post(
-        `${url}/notes`,
-        values,
-        setHeaders()
-      );
+      const response = await axios.post(`${url}/notes`, values, setHeaders());
       return response.data;
     } catch (error) {
-      console.log("Error details:", error.response);  // Loguea más información
+      console.log("Error details:", error.response);
       toast.error(error.response?.data.message || "An error occurred");
       throw error;
     }
   }
 );
-
 
 export const notesEdit = createAsyncThunk(
   "notes/notesEdit",
@@ -69,10 +60,7 @@ export const notesDelete = createAsyncThunk(
   "notes/notesDelete",
   async (id) => {
     try {
-      const response = await axios.delete(
-        `${url}/notes/${id}`,
-        setHeaders()
-      );
+      const response = await axios.delete(`${url}/notes/${id}`, setHeaders());
       return response.data;
     } catch (error) {
       console.log(error);
@@ -82,13 +70,29 @@ export const notesDelete = createAsyncThunk(
   }
 );
 
+// ✅ Slice
 const notesSlice = createSlice({
   name: "notes",
   initialState,
-  reducers: {},
+  reducers: {
+    noteAdded: (state, action) => {
+      state.items.push(action.payload);
+    },
+    noteUpdated: (state, action) => {
+      const updatedNotes = state.items.map((note) =>
+        note._id === action.payload._id ? action.payload : note
+      );
+      state.items = updatedNotes;
+    },
+    noteDeleted: (state, action) => {
+      state.items = state.items.filter(
+        (note) => note._id !== action.payload._id
+      );
+    },
+  },
   extraReducers: (builder) => {
     builder
-      // NOTES FETCH
+      // ✅ notesFetch
       .addCase(notesFetch.pending, (state) => {
         state.status = "pending";
       })
@@ -100,13 +104,12 @@ const notesSlice = createSlice({
         state.status = "rejected";
       })
 
-      // NOTES CREATE
+      // ✅ notesCreate
       .addCase(notesCreate.pending, (state) => {
         state.createStatus = "pending";
       })
       .addCase(notesCreate.fulfilled, (state, action) => {
         state.items.push(action.payload);
-        console.log(action.payload);
         state.createStatus = "success";
         toast.success("Note Created!");
       })
@@ -114,23 +117,7 @@ const notesSlice = createSlice({
         state.createStatus = "rejected";
       })
 
-      // NOTES DELETE
-      .addCase(notesDelete.pending, (state) => {
-        state.deleteStatus = "pending";
-      })
-      .addCase(notesDelete.fulfilled, (state, action) => {
-        const newList = state.items.filter(
-          (item) => item._id !== action.payload._id
-        );
-        state.items = newList;
-        state.deleteStatus = "success";
-        toast.error("Note Deleted");
-      })
-      .addCase(notesDelete.rejected, (state) => {
-        state.deleteStatus = "rejected";
-      })
-
-      // NOTES EDIT
+      // ✅ notesEdit
       .addCase(notesEdit.pending, (state) => {
         state.editStatus = "pending";
       })
@@ -146,7 +133,25 @@ const notesSlice = createSlice({
         state.editStatus = "rejected";
       })
 
+      // ✅ notesDelete
+      .addCase(notesDelete.pending, (state) => {
+        state.deleteStatus = "pending";
+      })
+      .addCase(notesDelete.fulfilled, (state, action) => {
+        state.items = state.items.filter(
+          (note) => note._id !== action.payload._id
+        );
+        state.deleteStatus = "success";
+        toast.error("Note Deleted");
+      })
+      .addCase(notesDelete.rejected, (state) => {
+        state.deleteStatus = "rejected";
+      });
   },
 });
 
+// ✅ Export actions
+export const { noteAdded, noteUpdated, noteDeleted } = notesSlice.actions;
+
+// ✅ Export reducer
 export default notesSlice.reducer;

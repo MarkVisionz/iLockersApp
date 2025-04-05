@@ -21,9 +21,9 @@ const cartSlice = createSlice({
       if (itemIndex >= 0) {
         // Item already exists in the cart so we need to increment its quantity
         state.cartItems[itemIndex].cartQuantity += 1;
-        toast.info(`Increased ${action.payload.name} quantity`, {
-          position: "top-right",
-        });
+        // toast.info(`Increased ${action.payload.name} quantity`, {
+        //   position: "top-right",
+        // });
       } else {
         // The item is not in the cart yet so we can simply push it into the array
         const tempProduct = { ...action.payload, cartQuantity: 1 };
@@ -43,9 +43,9 @@ const cartSlice = createSlice({
       if (state.cartItems[itemIndex].cartQuantity > 1) {
         state.cartItems[itemIndex].cartQuantity -= 1;
 
-        toast.info(`${action.payload.name}'s quantity has been decreased.`, {
-          position: "top-right",
-        });
+        // toast.info(`${action.payload.name}'s quantity has been decreased.`, {
+        //   position: "top-right",
+        // });
       } else if (state.cartItems[itemIndex].cartQuantity === 1) {
         const nextCartItems = state.cartItems.filter(
           (cartItem) => cartItem._id !== action.payload._id

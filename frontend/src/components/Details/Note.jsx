@@ -105,7 +105,8 @@ const Note = () => {
           </Section>
 
           <TotalPrice>
-            Total: <span>${note.total}</span>
+            <h3>Total:</h3>
+             <span>${note.total}</span>
           </TotalPrice>
 
           <Section>
@@ -229,13 +230,13 @@ const DetailItem = styled.p`
 `;
 
 const TotalPrice = styled.div`
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.8rem;
   color: #000;
-  text-align: right;
   margin-top: 1.5rem;
-  span {
-    font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 1.2rem;
+  h3 {
+    font-size: 1.6rem;
   }
 `;
 

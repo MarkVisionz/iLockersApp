@@ -1,4 +1,4 @@
-// components/PeriodSection.js
+// Helpers/PeriodSection.js
 import React from "react";
 import styled from "styled-components";
 

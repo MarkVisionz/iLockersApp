@@ -2,14 +2,24 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import styled from "styled-components";
+import moment from "moment";
 import { setHeaders, url } from "../../features/api";
-import { LoadingSpinner } from "../LoadingAndError"; // Asegúrate de tener un spinner de carga
+import { LoadingSpinner } from "../LoadingAndError";
+import { useDispatch, useSelector } from "react-redux";
+import { ordersEdit } from "../../features/ordersSlice";
 
 const Order = () => {
   const params = useParams();
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const user = useSelector((state) => state.auth); // corregido: acceder directamente desde state.auth
+
   const [order, setOrder] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const deliveryStatus = order.delivery_status || "pending";
+  const shipping = order.shipping || {};
+  const customerName = order.customer_name || "Sin nombre";
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -30,7 +40,55 @@ const Order = () => {
     fetchOrder();
   }, [params.id]);
 
-  const deliveryStatus = order.delivery_status || ""; // Asegúrate de que delivery_status tenga un valor por defecto
+  const generateWhatsAppMessage = () => {
+    const name = order.customer_name || "cliente";
+    const date = moment(order.createdAt).format("YYYY-MM-DD HH:mm");
+    const total = (order.total / 100).toFixed(2);
+
+    const productsList =
+      order.products
+        ?.map((p) => {
+          return `🫚 ${p.description} x${p.quantity} = $${(
+            p.amount_total / 100
+          ).toFixed(2)}`;
+        })
+        .join("\n") || "No hay productos registrados.";
+
+    return (
+      `👋 Hola, ${name}!\n` +
+      `Aquí está el resumen de tu orden:\n\n` +
+      `🤾 Orden ID: ${order._id}\n` +
+      `📅 Fecha: ${date}\n` +
+      `🧼 Servicios:\n${productsList}\n\n` +
+      `💰 Total: $${total}\n` +
+      `📍 Dirección: ${shipping?.line1 || "No disponible"}, ${
+        shipping?.city || ""
+      }\n` +
+      `✅ ¡Gracias por confiar en nosotros!`
+    );
+  };
+
+  const sendWhatsAppReceipt = () => {
+    if (!order.phone) {
+      alert("Este pedido no tiene un número de teléfono registrado.");
+      return;
+    }
+
+    const message = generateWhatsAppMessage();
+    const url = `https://wa.me/${order.phone.replace(
+      /\D/g,
+      ""
+    )}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleBackClick = () => {
+    if (user?.isAdmin) {
+      navigate("/admin/summary");
+    } else {
+      navigate("/");
+    }
+  };
 
   return (
     <StyledOrder>
@@ -40,9 +98,7 @@ const Order = () => {
         <OrdersContainer>
           <Header>
             <h2>Order Details</h2>
-            <BackButton onClick={() => navigate("/admin/orders")}>
-              Back to Dashboard
-            </BackButton>
+            <BackButton onClick={handleBackClick}>Back to Dashboard</BackButton>
           </Header>
 
           <DeliveryStatus status={deliveryStatus}>
@@ -50,17 +106,40 @@ const Order = () => {
           </DeliveryStatus>
 
           <Section>
+            <h3>Shipping Details</h3>
+            <DetailItem>Customer Name: {customerName}</DetailItem>
+            <DetailItem>City: {shipping.city || "N/A"}</DetailItem>
+            <DetailItem>Address: {shipping.line1 || "N/A"}</DetailItem>
+            <DetailItem>
+              Postal Code: {shipping.postal_code || "N/A"}
+            </DetailItem>
+            <DetailItem>Phone: {order.phone || "No registrado"}</DetailItem>
+          </Section>
+
+          <Section>
             <h3>Ordered Products</h3>
             <Items>
               {order.products?.map((product, index) => (
                 <Item key={index}>
-                  <ProductImage src={product.image} alt={product.description} />
+                  <ProductImage
+                    src={product.image || "https://via.placeholder.com/60"}
+                    alt={product.description || "Producto"}
+                  />
                   <ProductDetails>
-                    <ProductName>{product.description}</ProductName>
+                    <ProductName>
+                      {product.description || "Sin descripción"}
+                    </ProductName>
                     <ProductInfo>
-                      <ProductQuantity>x{product.quantity}</ProductQuantity>
+                      <ProductQuantity>
+                        x{product.quantity || 1}{" "}
+                        <UnitPrice>
+                          (${(product.unit_amount / 100).toLocaleString()} c/u)
+                        </UnitPrice>
+                      </ProductQuantity>
                       <ProductPrice>
-                        ${(product.amount_total / 100).toLocaleString()}
+                        {product.amount_total
+                          ? `$${(product.amount_total / 100).toLocaleString()}`
+                          : "N/A"}
                       </ProductPrice>
                     </ProductInfo>
                   </ProductDetails>
@@ -69,17 +148,22 @@ const Order = () => {
             </Items>
           </Section>
 
-          <Section>
-            <h3>Total Price</h3>
-            <TotalPrice>${(order.total / 100).toLocaleString()}</TotalPrice>
-          </Section>
+          <SectionWhats>
+            <TotalPrice>
+              <h3>Total Price</h3>
+              {order.total
+                ? `$${(order.total / 100).toLocaleString()}`
+                : "No total disponible"}
+            </TotalPrice>
 
-          <Section>
-            <h3>Shipping Details</h3>
-            <DetailItem>Customer Name: {order.shipping?.name}</DetailItem>
-            <DetailItem>City: {order.shipping?.address.city}</DetailItem>
-            <DetailItem>Email: {order.shipping?.email}</DetailItem>
-          </Section>
+            {user?.isAdmin && (
+              <ButtonGroup>
+                <WhatsAppButton onClick={sendWhatsAppReceipt}>
+                  Enviar por WhatsApp
+                </WhatsAppButton>
+              </ButtonGroup>
+            )}
+          </SectionWhats>
         </OrdersContainer>
       )}
     </StyledOrder>
@@ -126,6 +210,8 @@ const DeliveryStatus = styled.span`
         return "rgb(38, 198, 249)";
       case "delivered":
         return "rgb(102, 108, 255)";
+      case "cancelled":
+        return "rgb(220, 53, 69)";
       default:
         return "black";
     }
@@ -138,6 +224,8 @@ const DeliveryStatus = styled.span`
         return "rgba(38, 198, 249, 0.12)";
       case "delivered":
         return "rgba(102, 108, 255, 0.12)";
+      case "cancelled":
+        return "rgba(220, 53, 69, 0.12)"; 
       default:
         return "none";
     }
@@ -169,6 +257,18 @@ const Section = styled.div`
     margin-bottom: 0.5rem;
     font-size: 1.4rem;
     color: #333;
+  }
+`;
+
+const SectionWhats = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+
+  h3 {
+    font-size: 1.6rem;
+    color: #000;
   }
 `;
 
@@ -217,12 +317,43 @@ const ProductPrice = styled.span`
 `;
 
 const TotalPrice = styled.p`
-  font-size: 1.2rem;
+  font-size: 1.8rem;
   font-weight: bold;
-  color: #4a4a4a;
+  color: #000;
+  margin-bottom: 1.2rem;
 `;
 
 const DetailItem = styled.p`
   margin: 0.2rem 0;
   color: #555;
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+`;
+
+const WhatsAppButton = styled.button`
+  background-color: #25d366; /* Verde WhatsApp */
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #1ebe5d;
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
+
+const UnitPrice = styled.span`
+  color: #888;
+  font-size: 0.9rem;
 `;

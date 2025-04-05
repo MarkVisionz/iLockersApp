@@ -1,28 +1,49 @@
-// components/Transactions.jsx
 import styled from "styled-components";
-import { useState, useMemo, useCallback } from "react";
-import { useFetchNotes } from "./Helpers/FetchNotes";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { notesCreate, notesEdit, notesDelete } from "../../../features/notesSlice";
 import { getPeriodDates } from "./Helpers/dateUtils";
 import PeriodSection from "./Helpers/PeriodSection";
 import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
 import { LoadingSpinner } from "../../LoadingAndError";
-import moment from "moment"; // Asegúrate de importar moment
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import moment from "moment";
+import { toast } from "react-toastify";
+import socket from "../../../features/socket";
+import "react-toastify/dist/ReactToastify.css";
 
 const Transactions = () => {
   const navigate = useNavigate();
-  const { notes, isLoading, error } = useFetchNotes();
+  const dispatch = useDispatch();
+  const notes = useSelector((state) => state.notes.items);
+  const isLoading = useSelector((state) => state.notes.status) === "pending";
+  const error = useSelector((state) => state.notes.status) === "rejected" ? "Error al cargar las notas" : null;
 
-  // Estados para Exportación
   const [reportStartDate, setReportStartDate] = useState("");
   const [reportEndDate, setReportEndDate] = useState("");
   const [exportSelectedPeriod, setExportSelectedPeriod] = useState("daily");
   const [showExportSection, setShowExportSection] = useState(false);
-
-  // Estado para el periodo de las secciones
   const [periodSelected, setPeriodSelected] = useState("daily");
+
+  useEffect(() => {
+    socket.on("noteCreated", (newNote) => {
+      dispatch(notesCreate.fulfilled(newNote));
+    });
+
+    socket.on("noteUpdated", (updatedNote) => {
+      dispatch(notesEdit.fulfilled(updatedNote));
+    });
+
+    socket.on("noteDeleted", (deletedNote) => {
+      dispatch(notesDelete.fulfilled(deletedNote));
+    });
+
+    return () => {
+      socket.off("noteCreated");
+      socket.off("noteUpdated");
+      socket.off("noteDeleted");
+    };
+  }, [dispatch]);
 
   const { startDate: exportStartDate, endDate: exportEndDate } = useMemo(
     () => getPeriodDates(exportSelectedPeriod, reportStartDate, reportEndDate),
@@ -30,48 +51,72 @@ const Transactions = () => {
   );
 
   const filterNotesByPeriod = (startDate, endDate) => {
-    return notes.reduce((acc, note) => {
-      const noteDate = moment(note.createdAt);
-      const paymentDate = note.paidAt ? moment(note.paidAt) : null;
-  
-      if (noteDate.isBetween(startDate, endDate, undefined, "[]")) {
-        acc.createdNotes.push(note);
-      }
-  
-      if (note.note_status === "pagado" && paymentDate && paymentDate.isBetween(startDate, endDate, undefined, "[]")) {
-        acc.paidNotes.push(note);
-      }
-  
-      return acc;
-    }, { createdNotes: [], paidNotes: [] });
+    return notes.reduce(
+      (acc, note) => {
+        const noteDate = moment(note.createdAt);
+        const paymentDate = note.paidAt ? moment(note.paidAt) : null;
+
+        if (noteDate.isBetween(startDate, endDate, undefined, "[]")) {
+          acc.createdNotes.push(note);
+        }
+
+        if (
+          note.note_status === "pagado" &&
+          paymentDate &&
+          paymentDate.isBetween(startDate, endDate, undefined, "[]")
+        ) {
+          acc.paidNotes.push(note);
+        }
+
+        return acc;
+      },
+      { createdNotes: [], paidNotes: [] }
+    );
   };
 
-  // Filtrado para cada periodo
-  const dailyStartDate = useMemo(() => moment().startOf('day'), []);
-  const dailyEndDate = useMemo(() => moment().endOf('day'), []);
-  const weeklyStartDate = useMemo(() => moment().startOf('isoWeek'), []);
-  const weeklyEndDate = useMemo(() => moment().endOf('isoWeek'), []);
-  const monthlyStartDate = useMemo(() => moment().startOf('month'), []);
-  const monthlyEndDate = useMemo(() => moment().endOf('month'), []);
+  const dailyStartDate = useMemo(() => moment().startOf("day"), []);
+  const dailyEndDate = useMemo(() => moment().endOf("day"), []);
+  const weeklyStartDate = useMemo(() => moment().startOf("isoWeek"), []);
+  const weeklyEndDate = useMemo(() => moment().endOf("isoWeek"), []);
+  const monthlyStartDate = useMemo(() => moment().startOf("month"), []);
+  const monthlyEndDate = useMemo(() => moment().endOf("month"), []);
 
   const dailyFilteredNotes = filterNotesByPeriod(dailyStartDate, dailyEndDate);
-  const weeklyFilteredNotes = filterNotesByPeriod(weeklyStartDate, weeklyEndDate);
-  const monthlyFilteredNotes = filterNotesByPeriod(monthlyStartDate, monthlyEndDate);
+  const weeklyFilteredNotes = filterNotesByPeriod(
+    weeklyStartDate,
+    weeklyEndDate
+  );
+  const monthlyFilteredNotes = filterNotesByPeriod(
+    monthlyStartDate,
+    monthlyEndDate
+  );
 
   const calculateTotals = (filteredNotes) => {
-    return filteredNotes.reduce((acc, note) => {
-      acc.totalSales += note.total;
-      acc.cashInHand += note.note_status === "pagado" ? note.total : 0;
-      return acc;
-    }, { totalSales: 0, cashInHand: 0 });
+    return filteredNotes.reduce(
+      (acc, note) => {
+        acc.totalSales += note.total;
+        acc.cashInHand += note.paidAt ? note.total : 0;
+        return acc;
+      },
+      { totalSales: 0, cashInHand: 0 }
+    );
   };
 
+  const latestTransactions = useMemo(() => {
+    return [...notes]
+      .sort((a, b) => moment(b.createdAt) - moment(a.createdAt))
+      .slice(0, 5);
+  }, [notes]);
+
   const prepareExportData = () => {
-    const { createdNotes, paidNotes } = filterNotesByPeriod(exportStartDate, exportEndDate);
+    const { createdNotes, paidNotes } = filterNotesByPeriod(
+      exportStartDate,
+      exportEndDate
+    );
     const uniqueNotes = new Set();
     const combinedNotes = [];
 
-    [...createdNotes, ...paidNotes].forEach(note => {
+    [...createdNotes, ...paidNotes].forEach((note) => {
       if (!uniqueNotes.has(note.folio)) {
         uniqueNotes.add(note.folio);
         combinedNotes.push(note);
@@ -83,12 +128,14 @@ const Transactions = () => {
       "Nombre del Cliente": note.name,
       Cantidad: note.total,
       "Fecha de Creación": moment(note.createdAt).format("DD/MM/YYYY"),
-      "Fecha de Pago": note.paidAt ? moment(note.paidAt).format("DD/MM/YYYY") : "No Pagado",
+      "Fecha de Pago": note.paidAt
+        ? moment(note.paidAt).format("DD/MM/YYYY")
+        : "No Pagado",
       Estado: note.note_status,
     }));
   };
 
-  const exportToExcel = ( data, fileName) => {
+  const exportToExcel = (data, fileName) => {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = {
       Sheets: { [fileName]: worksheet },
@@ -104,7 +151,6 @@ const Transactions = () => {
 
   const handleExportPeriodChange = useCallback((e) => {
     setExportSelectedPeriod(e.target.value);
-    // Resetear fechas al cambiar el periodo
     if (e.target.value !== "custom") {
       setReportStartDate("");
       setReportEndDate("");
@@ -112,38 +158,44 @@ const Transactions = () => {
   }, []);
 
   const handleExport = () => {
-    // Validación de fechas para el periodo personalizado
     if (exportSelectedPeriod === "custom") {
       if (!reportStartDate || !reportEndDate) {
-        toast.error("Por favor, selecciona ambas fechas para el reporte personalizado.");
+        toast.error(
+          "Por favor, selecciona ambas fechas para el reporte personalizado."
+        );
         return;
       }
 
       const startDateMoment = moment(reportStartDate);
       const endDateMoment = moment(reportEndDate);
 
-      if (!startDateMoment.isValid() || !endDateMoment.isValid() || startDateMoment.isAfter(endDateMoment)) {
-        toast.error("Las fechas seleccionadas no son válidas. Asegúrate de que la fecha de inicio sea anterior a la fecha de fin.");
+      if (
+        !startDateMoment.isValid() ||
+        !endDateMoment.isValid() ||
+        startDateMoment.isAfter(endDateMoment)
+      ) {
+        toast.error(
+          "Las fechas seleccionadas no son válidas. Asegúrate de que la fecha de inicio sea anterior a la fecha de fin."
+        );
         return;
       }
     }
 
     const exportData = prepareExportData();
-    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format("YYYYMMDD_HHmmss")}`;
+    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format(
+      "YYYYMMDD_HHmmss"
+    )}`;
     exportToExcel(exportData, fileName);
   };
 
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
-
-  if (error) {
+  if (isLoading) return <LoadingSpinner />;
+  if (error)
     return (
       <StyledTransactions>
         <ErrorMessage>{error}</ErrorMessage>
       </StyledTransactions>
     );
-  }
+
 
   return (
     <StyledTransactions>
@@ -199,10 +251,7 @@ const Transactions = () => {
           )}
 
           <ExportButtons>
-            <ExportButton
-              onClick={handleExport}
-              aria-label="Exportar reporte"
-            >
+            <ExportButton onClick={handleExport} aria-label="Exportar reporte">
               Exportar Reporte
             </ExportButton>
           </ExportButtons>
@@ -213,30 +262,61 @@ const Transactions = () => {
         <PeriodSection
           title="Diario"
           createdNotes={dailyFilteredNotes.createdNotes}
-          totalSales={calculateTotals(dailyFilteredNotes.createdNotes).totalSales}
+          totalSales={
+            calculateTotals(dailyFilteredNotes.createdNotes).totalSales
+          }
           cashInHand={calculateTotals(dailyFilteredNotes.paidNotes).cashInHand}
           color="#28a745"
         />
         <PeriodSection
           title="Semanal"
           createdNotes={weeklyFilteredNotes.createdNotes}
-          totalSales={calculateTotals(weeklyFilteredNotes.createdNotes).totalSales}
+          totalSales={
+            calculateTotals(weeklyFilteredNotes.createdNotes).totalSales
+          }
           cashInHand={calculateTotals(weeklyFilteredNotes.paidNotes).cashInHand}
           color="#4b70e2"
         />
         <PeriodSection
           title="Mensual"
           createdNotes={monthlyFilteredNotes.createdNotes}
-          totalSales={calculateTotals(monthlyFilteredNotes.createdNotes).totalSales}
-          cashInHand={calculateTotals(monthlyFilteredNotes.paidNotes).cashInHand}
+          totalSales={
+            calculateTotals(monthlyFilteredNotes.createdNotes).totalSales
+          }
+          cashInHand={
+            calculateTotals(monthlyFilteredNotes.paidNotes).cashInHand
+          }
           color="#6f42c1"
         />
       </PeriodsContainer>
+
+      <TitleLast>Últimas Transacciones</TitleLast>
+      {latestTransactions.length > 0 ? (
+        <TransactionList>
+          {latestTransactions.map((note, index) => (
+            <TransactionItem key={index}>
+              <CustomerName>{note.name}</CustomerName>
+              <Amount>
+                {note.total.toLocaleString("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                })}
+              </Amount>
+
+              <Time>{moment(note.createdAt).fromNow()}</Time>
+            </TransactionItem>
+          ))}
+        </TransactionList>
+      ) : (
+        <EmptyState>No se encontraron transacciones.</EmptyState>
+      )}
     </StyledTransactions>
   );
 };
 
 export default Transactions;
+
+// Styled Components y helpers siguen igual...
 
 // Styled Components
 const StyledTransactions = styled.div`
@@ -249,6 +329,13 @@ const StyledTransactions = styled.div`
 `;
 
 const Title = styled.h3`
+  margin-bottom: 1rem;
+  color: #333;
+  text-align: center;
+`;
+
+const TitleLast = styled.h3`
+  margin-top: 2rem;
   margin-bottom: 1rem;
   color: #333;
   text-align: center;
@@ -268,7 +355,7 @@ const ButtonContainer = styled.div`
 `;
 
 const ToggleExportButton = styled.button`
-  padding:  0.8rem;
+  padding: 0.8rem;
   background: linear-gradient(45deg, #4b70e2, #3a5bb8);
   color: #fff;
   border: none;
@@ -427,4 +514,52 @@ const ErrorMessage = styled.div`
   text-align: center;
   margin: 1rem 0;
   font-weight: bold;
+`;
+
+const TransactionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const TransactionItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #eef2ff;
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+  transition: box-shadow 0.5s ease, transform 0.4s ease;
+
+  &:hover {
+    box-shadow: 0 6px 12px rgba(75, 112, 226, 0.2);
+    transform: translateY(-1px);
+  }
+`;
+
+const CustomerName = styled.span`
+  flex: 2;
+  font-weight: 600;
+  font-size: 1rem;
+`;
+
+const Amount = styled.span`
+  flex: 1;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #28a745;
+`;
+
+const Time = styled.span`
+  flex: 1;
+  text-align: right;
+  font-size: 0.85rem;
+  color: #666;
+`;
+
+const EmptyState = styled.p`
+  text-align: center;
+  color: #aaa;
+  margin-top: 1rem;
 `;

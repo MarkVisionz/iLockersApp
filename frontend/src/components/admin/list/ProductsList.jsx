@@ -7,27 +7,32 @@ import ProductCard from "./ListHelpers/ProductHelpers/ProductCard";
 import Pagination from "./SummaryHelpers/pagination";
 import styled from "styled-components";
 import SimpleConfirmationModal from "../../SimpleModal";
+import { toast } from "react-toastify";
 
 const ProductsList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { items } = useSelector((state) => state.products);
-  
-  const [sortConfig, setSortConfig] = useState({ field: "", direction: "ascending" });
+
+  const [sortConfig, setSortConfig] = useState({
+    field: "",
+    direction: "ascending",
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
   const [showModal, setShowModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
-  const [itemType, setItemType] = useState('producto'); // 'producto' o 'usuario'
+  const [itemType, setItemType] = useState("producto");
 
   const filteredItems = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
-    return items.filter(item => 
-      item.name.toLowerCase().includes(lowerCaseQuery) ||
-      item.price.toString().includes(lowerCaseQuery) ||
-      item._id.includes(lowerCaseQuery)
+    return items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(lowerCaseQuery) ||
+        item.price.toString().includes(lowerCaseQuery) ||
+        item._id.includes(lowerCaseQuery)
     );
   }, [items, searchQuery]);
 
@@ -38,10 +43,10 @@ const ProductsList = () => {
       const { field, direction } = sortConfig;
       const order = direction === "ascending" ? 1 : -1;
 
-      if (typeof a[field] === 'string' && typeof b[field] === 'string') {
+      if (typeof a[field] === "string" && typeof b[field] === "string") {
         return a[field].localeCompare(b[field]) * order;
       } else {
-        return (a[field] - b[field]) * order; // Asumiendo que son números
+        return (a[field] - b[field]) * order;
       }
     });
   }, [filteredItems, sortConfig]);
@@ -53,59 +58,83 @@ const ProductsList = () => {
 
   const handleDelete = (id, type) => {
     setItemToDelete(id);
-    setItemType(type); // Establecer el tipo de elemento
-    setShowModal(true); // Mostrar el modal de confirmación
+    setItemType(type);
+    setShowModal(true);
   };
 
-  const confirmDelete = () => {
-    if (itemToDelete) {
-      dispatch(productDelete(itemToDelete)).catch((error) => {
-        console.error("Error deleting item:", error);
-        // Aquí podrías mostrar un mensaje de error en la interfaz
-      });
+  const confirmDelete = async () => {
+    if (itemToDelete === "all") {
+      // Borrar todos en paralelo sin toast individuales
+      await Promise.all(
+        filteredItems.map((item) =>
+          dispatch(productDelete({ id: item._id, silent: true }))
+        )
+      );
+      toast.success("Todos los productos han sido eliminados.");
+    } else if (itemToDelete) {
+      dispatch(productDelete({ id: itemToDelete }));
     }
-    setShowModal(false); // Cerrar el modal
+    setShowModal(false);
+  };
+  
+
+  const handleDeleteAll = () => {
+    if (filteredItems.length === 0) {
+      toast.info("No hay productos para eliminar.");
+      return;
+    }
+    setItemToDelete("all");
+    setItemType("producto");
+    setShowModal(true);
   };
 
   return (
     <Container>
-      <ProductFilters 
-        searchQuery={searchQuery} 
-        setSearchQuery={setSearchQuery} 
-        sortConfig={sortConfig} 
+      <ProductFilters
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        sortConfig={sortConfig}
         setSortConfig={setSortConfig}
         navigate={navigate}
       />
+     {filteredItems.length > 0 && (
+  <DeleteAllButton onClick={handleDeleteAll}>
+    Borrar todos los productos
+  </DeleteAllButton>
+)}
+
       <ProductContainer>
         {paginatedItems.length ? (
           paginatedItems.map((item) => (
-            <ProductCard 
-              key={item._id} 
-              item={item} 
-              handleDelete={() => handleDelete(item._id, 'producto')} // Pasar el tipo 'producto'
-              navigate={navigate} 
+            <ProductCard
+              key={item._id}
+              item={item}
+              handleDelete={() => handleDelete(item._id, "producto")}
+              navigate={navigate}
             />
           ))
         ) : (
           <NoProducts>No products available.</NoProducts>
         )}
       </ProductContainer>
-      <Pagination 
-        currentPage={currentPage} 
-        setCurrentPage={setCurrentPage} 
-        totalNotes={filteredItems.length} 
-        itemsPerPage={itemsPerPage} 
+      <Pagination
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        totalNotes={filteredItems.length}
+        itemsPerPage={itemsPerPage}
       />
       <SimpleConfirmationModal
         showModal={showModal}
         handleClose={() => setShowModal(false)}
         handleConfirm={confirmDelete}
         userName={
-          itemToDelete
+          itemToDelete === "all"
+            ? "todos los productos"
+            : itemToDelete
             ? filteredItems.find((item) => item._id === itemToDelete)?.name
             : ""
         }
-        itemType={itemType} // Pasar el tipo de elemento al modal
+        itemType={itemType}
       />
     </Container>
   );
@@ -128,4 +157,19 @@ const NoProducts = styled.p`
   text-align: center;
   font-style: italic;
   color: #888;
+`;
+
+const DeleteAllButton = styled.button`
+  margin: 1rem auto;
+  background-color: #dc3545;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+
+  &:hover {
+    background-color: #b02a37;
+  }
 `;

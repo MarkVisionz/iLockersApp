@@ -1,36 +1,45 @@
+// backend/routes/orders.js
 const { Order } = require("../models/order");
 const { auth, isUser, isAdmin } = require("../middleware/auth");
 const moment = require("moment");
 
 const router = require("express").Router();
 
-//UPDATE
+// UPDATE ORDER
 router.put("/:id", isAdmin, async (req, res) => {
   try {
     const updatedOrder = await Order.findByIdAndUpdate(
       req.params.id,
-      {
-        $set: req.body,
-      },
+      { $set: req.body },
       { new: true }
     );
+
+    if (req.io) {
+      req.io.emit("orderUpdated", updatedOrder);
+    }
+
     res.status(200).send(updatedOrder);
   } catch (err) {
     res.status(500).send(err);
   }
 });
 
-//DELETE
+// DELETE ORDER
 router.delete("/:id", isAdmin, async (req, res) => {
   try {
-    await Order.findByIdAndDelete(req.params.id);
+    const deletedOrder = await Order.findByIdAndDelete(req.params.id);
+
+    if (req.io) {
+      req.io.emit("orderDeleted", deletedOrder);
+    }
+
     res.status(200).send("Order has been deleted...");
   } catch (err) {
     res.status(500).send(err);
   }
 });
 
-//GET USER ORDERS
+// GET USER ORDERS
 router.get("/find/:userId", auth, async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.params.userId });
@@ -40,9 +49,7 @@ router.get("/find/:userId", auth, async (req, res) => {
   }
 });
 
-
 // GET ALL ORDERS
-
 router.get("/", async (req, res) => {
   const query = req.query.new;
   try {
@@ -61,11 +68,12 @@ router.get("/findOne/:id", auth, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
-    if (!order) {
-      return res.status(404).send("Order not found");
-    }
+    if (!order) return res.status(404).send("Order not found");
 
-    if (req.user.isAdmin || order.userId.toString() === req.user._id.toString()) {
+    if (
+      req.user.isAdmin ||
+      order.userId?.toString() === req.user._id.toString()
+    ) {
       res.status(200).send(order);
     } else {
       res.status(403).send("Access denied. Not authorized...");
@@ -75,114 +83,102 @@ router.get("/findOne/:id", auth, async (req, res) => {
   }
 });
 
+// Agrega estos endpoints modificados para emitir eventos de stats
 
-// Get Orders Stats
+// ORDER STATS (Monthly) con Socket.IO
+router.get("/stats", async (req, res) => {
+  const previousMonth = moment()
+    .subtract(1, "months")
+    .startOf("month")
+    .toDate();
 
-router.get(
-  "/stats",
-  /*isAdmin,*/ async (req, res) => {
-    const previousMonth = moment()
-      .month(moment().month() - 1)
-      .set("date", 1)
-      .format("YYYY-MM-DD HH:mm:ss");
-
-    try {
-      const orders = await Order.aggregate([
-        {
-          $match: { createdAt: { $gte: new Date(previousMonth) } },
-        },
-        {
-          $project: {
-            month: { $month: "$createdAt" },
-          },
-        },
-        {
-          $group: {
-            _id: "$month",
-            total: { $sum: 1 },
-          },
-        },
-      ]);
-
-      res.status(200).send(orders);
-    } catch (err) {
-      console.log(err);
-      res.status(500).send(err);
+  try {
+    const orders = await Order.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: previousMonth },
+          delivery_status: { $ne: "cancelled" }
+        }
+      },
+      { $project: { month: { $month: "$createdAt" } } },
+      { $group: { _id: "$month", total: { $sum: 1 } } },
+    ]);
+    
+    // Emitir evento de actualización de stats
+    if (req.io) {
+      req.io.emit("statsUpdated", { 
+        type: "orders", 
+        data: orders 
+      });
     }
+    
+    res.status(200).send(orders);
+  } catch (err) {
+    res.status(500).send(err);
   }
-);
+});
 
-// Get Income Stats
+// INCOME STATS (Monthly Revenue) con Socket.IO
+router.get("/income/stats", async (req, res) => {
+  const previousMonth = moment()
+    .subtract(1, "months")
+    .startOf("month")
+    .toDate();
 
-router.get(
-  "/income/stats",
-  /*isAdmin,*/ async (req, res) => {
-    const previousMonth = moment()
-      .month(moment().month() - 1)
-      .set("date", 1)
-      .format("YYYY-MM-DD HH:mm:ss");
-
-    try {
-      const income = await Order.aggregate([
-        {
-          $match: { createdAt: { $gte: new Date(previousMonth) } },
-        },
-        {
-          $project: {
-            month: { $month: "$createdAt" },
-            sales: "$total",
-          },
-        },
-        {
-          $group: {
-            _id: "$month",
-            total: { $sum: "$sales" },
-          },
-        },
-      ]);
-
-      res.status(200).send(income);
-    } catch (err) {
-      console.log(err);
-      res.status(500).send(err);
+  try {
+    const income = await Order.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: previousMonth },
+          delivery_status: { $ne: "cancelled" }
+        } 
+      },
+      { $project: { month: { $month: "$createdAt" }, sales: "$total" } },
+      { $group: { _id: "$month", total: { $sum: "$sales" } } },
+    ]);
+    
+    // Emitir evento de actualización de stats
+    if (req.io) {
+      req.io.emit("statsUpdated", { 
+        type: "income", 
+        data: income 
+      });
     }
+    
+    res.status(200).send(income);
+  } catch (err) {
+    res.status(500).send(err);
   }
-);
+});
 
-// Get 1 Week Sales
+// WEEKLY SALES con Socket.IO
+router.get("/week-sales", async (req, res) => {
+  const last7Days = moment().subtract(7, "days").toDate();
 
-router.get(
-  "/week-sales",
-  /*isAdmin,*/ async (req, res) => {
-    const last7Days = moment()
-      .day(moment().month() - 7)
-      .format("YYYY-MM-DD HH:mm:ss");
-
-    try {
-      const income = await Order.aggregate([
-        {
-          $match: { createdAt: { $gte: new Date(last7Days) } },
-        },
-        {
-          $project: {
-            day: { $dayOfWeek: "$createdAt" },
-            sales: "$total",
-          },
-        },
-        {
-          $group: {
-            _id: "$day",
-            total: { $sum: "$sales" },
-          },
-        },
-      ]);
-
-      res.status(200).send(income);
-    } catch (err) {
-      console.log(err);
-      res.status(500).send(err);
+  try {
+    const income = await Order.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: last7Days },
+          delivery_status: { $ne: "cancelled" }
+        } 
+      },
+      { $project: { day: { $dayOfWeek: "$createdAt" }, sales: "$total" } },
+      { $group: { _id: "$day", total: { $sum: "$sales" } } },
+    ]);
+    
+    // Emitir evento de actualización de stats
+    if (req.io) {
+      req.io.emit("statsUpdated", { 
+        type: "weekly", 
+        data: income 
+      });
     }
+    
+    res.status(200).send(income);
+  } catch (err) {
+    res.status(500).send(err);
   }
-);
+});
 
 module.exports = router;

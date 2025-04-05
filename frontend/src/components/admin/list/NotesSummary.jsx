@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { notesFetch, notesEdit } from "../../../features/notesSlice";
+import { notesFetch, notesEdit, notesDelete } from "../../../features/notesSlice";
 import Filters from "./SummaryHelpers/filters";
 import Pagination from "./SummaryHelpers/pagination";
 import NoteList from "./SummaryHelpers/NoteList";
@@ -121,6 +121,10 @@ const NotesSummary = () => {
     navigate(`/note/${id}`);
   };
 
+  const handleDelete = (id) => {
+    dispatch(notesDelete(id));
+  };
+
   return (
     <>
       <Filters
@@ -141,6 +145,7 @@ const NotesSummary = () => {
         onView={handleNoteView}
         onDispatch={handleNoteDispatch}
         onDeliver={handleNoteDeliver}
+        onDelete={handleDelete}
       />
 
       {sortedNotes.length > itemsPerPage && (

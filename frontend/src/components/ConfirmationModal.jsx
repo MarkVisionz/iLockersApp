@@ -40,7 +40,7 @@ const ConfirmationModal = ({
       .flatMap(([service, details]) => {
         if (details.quantity > 0) {
           return [
-            `\uD83E\uDED1 ${formatServiceName(service)} - Cantidad: ${
+            `👋 ${formatServiceName(service)} - Cantidad: ${
               details.quantity
             }, Precio U: $${details.unitPrice} = $${
               details.quantity * details.unitPrice

@@ -12,12 +12,14 @@ import {
   AiOutlineArrowDown,
 } from "react-icons/ai";
 import { MdOutlineAdminPanelSettings, MdOutlinePerson } from "react-icons/md";
-import UserPagination from "./UserAux/UserPagination"; // Importamos UserPagination
-import UserOrdersCard from "./UserAux/UserOrdersCard"; // Importamos UserOrdersCard
+import UserPagination from "./UserAux/UserPagination";
+import UserOrdersCard from "./UserAux/UserOrdersCard";
+import socket from "../../features/socket";
 
 const UserProfile = () => {
   const params = useParams();
   const auth = useSelector((state) => state.auth);
+  const userId = auth.isAdmin ? params.id : auth._id;
 
   const [user, setUser] = useState({
     name: "",
@@ -30,43 +32,72 @@ const UserProfile = () => {
   const [editing, setEditing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(3); // Número de órdenes por página
-  const [sortOrder, setSortOrder] = useState("desc"); // Establecemos el orden inicial
+  const [itemsPerPage] = useState(3);
+  const [sortOrder, setSortOrder] = useState("desc");
 
-  const userId = auth.isAdmin ? params.id : auth._id;
-
-  // Función para obtener los datos del usuario
+  // Fetch user info
   const fetchUser = useCallback(async () => {
     try {
       setLoading(true);
       const res = await axios.get(`${url}/users/find/${userId}`, setHeaders());
       setUser({ ...res.data, password: "" });
-    } catch (err) {
+    } catch {
       setErrorMessage("Error fetching user data");
     } finally {
       setLoading(false);
     }
   }, [userId]);
 
-  // Función para obtener las órdenes
+  // Fetch orders
   const fetchOrders = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await axios.get(`${url}/orders/find/${userId}`, setHeaders());
       setOrders(res.data);
-    } catch (err) {
+    } catch {
       setErrorMessage("Error fetching orders");
-    } finally {
-      setLoading(false);
     }
   }, [userId]);
 
+  // Setup
   useEffect(() => {
     fetchUser();
     fetchOrders();
-  }, [fetchUser, fetchOrders]);
 
-  // Función para manejar la edición del perfil
+    const handleCreated = (order) => {
+      if (order.userId === userId) {
+        setOrders((prev) => [order, ...prev]);
+      }
+    };
+
+    const handleUpdated = (order) => {
+      if (order.userId === userId) {
+        setOrders((prev) =>
+          prev.map((o) => (o._id === order._id ? { ...o, ...order } : o))
+        );
+      }
+    };
+
+    const handleDeleted = (order) => {
+      if (order.userId === userId) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o._id === order._id ? { ...o, delivery_status: "cancelled" } : o
+          )
+        );
+      }
+    };
+
+    socket.on("orderCreated", handleCreated);
+    socket.on("orderUpdated", handleUpdated);
+    socket.on("orderDeleted", handleDeleted);
+
+    return () => {
+      socket.off("orderCreated", handleCreated);
+      socket.off("orderUpdated", handleUpdated);
+      socket.off("orderDeleted", handleDeleted);
+    };
+  }, [userId, fetchUser, fetchOrders]);
+
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault();
@@ -78,7 +109,7 @@ const UserProfile = () => {
           setHeaders()
         );
         setUser({ ...res.data, password: "" });
-        toast.success("Profile updated", { position: "bottom-left" });
+        toast.success("Profile updated");
         setEditing(false);
       } catch (err) {
         setErrorMessage(err.response?.data || "Error updating profile");
@@ -89,19 +120,18 @@ const UserProfile = () => {
     [user, auth._id]
   );
 
-  // Ordenar las órdenes según sortOrder
   const sortedOrders = useMemo(() => {
-    return [...orders].sort((a, b) => {
-      return sortOrder === "asc"
-        ? new Date(a.createdAt) - new Date(b.createdAt) // Orden ascendente por fecha de creación
-        : new Date(b.createdAt) - new Date(a.createdAt); // Orden descendente por fecha de creación
-    });
+    return [...orders].sort((a, b) =>
+      sortOrder === "asc"
+        ? new Date(a.createdAt) - new Date(b.createdAt)
+        : new Date(b.createdAt) - new Date(a.createdAt)
+    );
   }, [orders, sortOrder]);
 
-  // Paginar las órdenes
-  const indexOfLastOrder = currentPage * itemsPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - itemsPerPage;
-  const currentOrders = sortedOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  const currentOrders = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedOrders.slice(start, start + itemsPerPage);
+  }, [sortedOrders, currentPage, itemsPerPage]);
 
   return (
     <StyledProfile>
@@ -110,21 +140,17 @@ const UserProfile = () => {
           <Avatar>{user.name.charAt(0).toUpperCase()}</Avatar>
           <h3>{user.name}</h3>
           <RoleTag isAdmin={user.isAdmin}>
-            {user.isAdmin ? (
-              <MdOutlineAdminPanelSettings />
-            ) : (
-              <MdOutlinePerson />
-            )}{" "}
-            {user.isAdmin ? "Admin" : "Customer"}
+            {user.isAdmin ? <MdOutlineAdminPanelSettings /> : <MdOutlinePerson />}
+            {user.isAdmin ? " Admin" : " Customer"}
           </RoleTag>
           <p>{user.email}</p>
-          <Button onClick={() => setEditing(!editing)}>
+          <Button onClick={() => setEditing((prev) => !prev)}>
             <AiOutlineEdit /> {editing ? "Cancel" : "Edit Profile"}
           </Button>
         </Header>
 
         {loading && <LoadingSpinner />}
-        {errorMessage && <ErrorMessage message={errorMessage}></ErrorMessage>}
+        {errorMessage && <ErrorMessage message={errorMessage} />}
 
         {editing && (
           <EditForm onSubmit={handleSubmit}>
@@ -152,26 +178,16 @@ const UserProfile = () => {
                 onChange={(e) => setUser({ ...user, password: e.target.value })}
               />
             </label>
-            <Button type="submit">
-              {loading ? "Updating..." : "Save Changes"}
-            </Button>
+            <Button type="submit">{loading ? "Updating..." : "Save Changes"}</Button>
           </EditForm>
         )}
 
         <Orders>
           <OrderControls>
             <h4>Your Orders</h4>
-            <Button
-              onClick={() =>
-                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
-              }
-            >
-              {sortOrder === "asc" ? (
-                <AiOutlineArrowDown />
-              ) : (
-                <AiOutlineArrowUp />
-              )}{" "}
-              {sortOrder === "asc" ? "Oldest First" : "Newest First"}
+            <Button onClick={() => setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}>
+              {sortOrder === "asc" ? <AiOutlineArrowDown /> : <AiOutlineArrowUp />}
+              {sortOrder === "asc" ? " Oldest First" : " Newest First"}
             </Button>
           </OrderControls>
 
@@ -179,7 +195,7 @@ const UserProfile = () => {
             <NoOrdersMessage>No orders found.</NoOrdersMessage>
           ) : (
             currentOrders.map((order) => (
-              <UserOrdersCard key={order._id} order={order} />
+              <UserOrdersCard key={`${order._id}-${order.delivery_status}`} order={order} />
             ))
           )}
 
@@ -194,6 +210,9 @@ const UserProfile = () => {
     </StyledProfile>
   );
 };
+
+export default UserProfile;
+
 
 // Estilos CSS
 const StyledProfile = styled.div`
@@ -303,4 +322,3 @@ const NoOrdersMessage = styled.p`
   font-style: italic;
 `;
 
-export default UserProfile;

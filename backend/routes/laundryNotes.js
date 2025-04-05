@@ -22,7 +22,6 @@ router.post("/", async (req, res) => {
   } = req.body;
 
   try {
-    // Crear una nueva nota
     const laundryNote = new LaundryNote({
       name,
       folio,
@@ -32,8 +31,8 @@ router.post("/", async (req, res) => {
       abono,
       suavitelDesired,
       total,
-      note_status: note_status || "pendiente", // Valor por defecto
-      cleaning_status: cleaning_status || "sucia", // Valor por defecto
+      note_status: note_status || "pendiente",
+      cleaning_status: cleaning_status || "sucia",
       paidAt,
       deliveredAt,
       phoneNumber,
@@ -41,12 +40,18 @@ router.post("/", async (req, res) => {
 
     const savedLaundryNote = await laundryNote.save();
 
+    // ✅ Emitir evento de nota creada
+    if (req.io) {
+      req.io.emit("noteCreated", savedLaundryNote);
+    }
+
     res.status(200).send(savedLaundryNote);
   } catch (error) {
-    console.error("Error saving laundry note:", error.message); // Loguea el error
-    res.status(500).send({ message: error.message }); // Devuelve el error al frontend
+    console.error("Error saving laundry note:", error.message);
+    res.status(500).send({ message: error.message });
   }
 });
+
 
 // GET ALL NOTES
 router.get("/", async (req, res) => {
@@ -72,39 +77,52 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// POST /api/notes/validate-password
+router.post("/validate-password", (req, res) => {
+  const { password } = req.body;
+  if (password === process.env.ADMIN_PASSWORD) {
+    return res.status(200).json({ valid: true });
+  } else {
+    return res.status(200).json({ valid: false });
+  }
+});
+
+
 // EDIT NOTE
 router.put("/:id", async (req, res) => {
   try {
     const note = await LaundryNote.findById(req.params.id);
-
     if (!note) return res.status(404).send("Note not found...");
 
     const { note_status, cleaning_status } = req.body;
 
-    // Actualizar estado del pago (note_status)
     if (note_status) {
       if (note_status === "pagado" && !note.paidAt) {
-        note.paidAt = new Date(); // Registra la fecha de pago
+        note.paidAt = new Date();
       }
       if (note_status === "entregado" && !note.deliveredAt) {
-        note.deliveredAt = new Date(); // Registra la fecha de entrega
+        note.deliveredAt = new Date();
       }
       note.note_status = note_status;
     }
 
-    // Actualizar estado del proceso de la ropa (cleaning_status)
     if (cleaning_status) {
       note.cleaning_status = cleaning_status;
     }
 
-    // Guarda los cambios
     const updatedNote = await note.save();
+
+    // ✅ Emitir evento de nota actualizada
+    if (req.io) {
+      req.io.emit("noteUpdated", updatedNote);
+    }
 
     res.status(200).send(updatedNote);
   } catch (err) {
     res.status(500).send(err);
   }
 });
+
 
 // GET NOTE BY ID
 router.get("/findOne/:id", async (req, res) => {

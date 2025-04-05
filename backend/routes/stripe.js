@@ -1,11 +1,9 @@
 const express = require("express");
 const Stripe = require("stripe");
 const { Order } = require("../models/order");
-
 require("dotenv").config();
 
 const stripe = Stripe(process.env.STRIPE_KEY);
-
 const router = express.Router();
 
 router.post("/create-checkout-session", async (req, res) => {
@@ -15,22 +13,20 @@ router.post("/create-checkout-session", async (req, res) => {
     },
   });
 
-  const line_items = req.body.cartItems.map((item) => {
-    return {
-      price_data: {
-        currency: "mxn",
-        product_data: {
-          name: item.name,
-          images: [item.image.url],
-          metadata: {
-            id: item.id,
-          },
+  const line_items = req.body.cartItems.map((item) => ({
+    price_data: {
+      currency: "mxn",
+      product_data: {
+        name: item.name,
+        images: [item.image.url],
+        metadata: {
+          id: item.id,
         },
-        unit_amount: item.price * 100, // Convert dollars to c
       },
-      quantity: item.cartQuantity,
-    };
-  });
+      unit_amount: item.price * 100,
+    },
+    quantity: item.cartQuantity,
+  }));
 
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
@@ -46,16 +42,9 @@ router.post("/create-checkout-session", async (req, res) => {
             currency: "mxn",
           },
           display_name: "Free shipping",
-          // Delivers between 5-7 business days
           delivery_estimate: {
-            minimum: {
-              unit: "business_day",
-              value: 5,
-            },
-            maximum: {
-              unit: "business_day",
-              value: 7,
-            },
+            minimum: { unit: "business_day", value: 5 },
+            maximum: { unit: "business_day", value: 7 },
           },
         },
       },
@@ -67,16 +56,9 @@ router.post("/create-checkout-session", async (req, res) => {
             currency: "mxn",
           },
           display_name: "Next day air",
-          // Delivers in exactly 1 business day
           delivery_estimate: {
-            minimum: {
-              unit: "business_day",
-              value: 1,
-            },
-            maximum: {
-              unit: "business_day",
-              value: 1,
-            },
+            minimum: { unit: "business_day", value: 1 },
+            maximum: { unit: "business_day", value: 1 },
           },
         },
       },
@@ -95,142 +77,82 @@ router.post("/create-checkout-session", async (req, res) => {
 });
 
 // CREATE ORDER FUNCTION
-const createOrder = async (customer, data, lineItems) => {
+const createOrder = async (customer, data, lineItemsRaw, io) => {
+  const customerDetails = data.customer_details || {};
+  const shippingAddress = customerDetails.address || {};
+
+  const lineItems = await stripe.checkout.sessions.listLineItems(data.id, {
+    expand: ["data.price.product"]
+  });
+
+  const formattedProducts = lineItems.data.map((item) => ({
+    description: item.description,
+    quantity: item.quantity,
+    amount_total: item.amount_total,
+    unit_amount: item.price?.unit_amount || 0,
+    currency: item.currency || "mxn",
+    price_id: item.price?.id || "",
+    product_id: item.price?.product?.id || "",
+    image: item.price?.product?.images?.[0] || "",
+  }));
+
   const newOrder = new Order({
-    userId: customer.metadata.userId,
+    userId: customer.metadata?.userId || null,
     customerId: data.customer,
     paymentIntentId: data.payment_intent,
-    products: lineItems.data,
+    products: formattedProducts,
     subtotal: data.amount_subtotal,
     total: data.amount_total,
-    shipping: data.customer_details,
+    shipping: shippingAddress,
+    phone: customerDetails.phone || customer.phone || "",
+    customer_name: customerDetails.name || customer.name || "Sin nombre",
     payment_status: data.payment_status,
   });
 
   try {
     const savedOrder = await newOrder.save();
-    console.log("Processed Order:", savedOrder);
+
+    // ✅ Emitir evento
+    if (io) {
+      io.emit("orderCreated", savedOrder);
+    }
+
+    console.log("✅ Orden procesada:", savedOrder);
   } catch (err) {
-    console.log(err);
+    console.error("❌ Error al guardar orden:", err.message);
   }
 };
 
-let endpointSecret;
 
-// endpoint_secret =
-//   "whsec_6a70b3f32277bc8492d7c3be7baf2839d7e537dd4a1eaeac79a9e67ce720970d";
-
-// router.post(
-//   "/webhook",
-//   express.raw({ type: "application/json" }),
-//   (request, response) => {
-//     const signature = request.headers["stripe-signature"];
-
-//     let data;
-//     let eventType;
-
-//     if (endpointSecret) {
-//       let event;
-
-//       try {
-//         event = stripe.webhooks.constructEvent(
-//           req.body,
-//           signature,
-//           endpoint_secret
-//         );
-//         console.log(`Webhook Verified`);
-//       } catch (err) {
-//         console.log(
-//           `⚠️  Webhook signature verification failed:  ${err.message}`
-//         );
-//         response.status(400).send(`Webhook Error: ${err.message}`);
-//         return;
-//       }
-
-//       data = event.data.object;
-//       eventType = event.type;
-//     } else {
-//       data = request.body.data.object;
-//       eventType = request.body.type;
-//     }
-
-//     // Handle the event
-
-//     if (eventType === "checkout.session.completed") {
-//       stripe.customers
-//       .retrieve(data.customer)
-//       .then((customer) => {
-//           createOrder(customer, data);
-//           // email receipt to customer
-//         })
-//         .catch((err) => console.log(err.message))
-//     }
-
-//     // Return a response to acknowledge receipt of the event
-//     response.send().end();
-//   }
-// );
-
-// Stripe webhoook
-
+// STRIPE WEBHOOK
 router.post(
   "/webhook",
-  express.json({ type: "application/json" }),
+  express.raw({ type: "application/json" }),
   async (req, res) => {
-    let data;
-    let eventType;
+    const webhookSecret = process.env.STRIPE_WEB_HOOK;
+    const signature = req.headers["stripe-signature"];
+    let event;
 
-    // Check if webhook signing is configured.
-    let webhookSecret;
-    //webhookSecret = process.env.STRIPE_WEB_HOOK;
-
-    if (webhookSecret) {
-      // Retrieve the event by verifying the signature using the raw body and secret.
-      let event;
-      let signature = req.headers["stripe-signature"];
-
-      try {
-        event = stripe.webhooks.constructEvent(
-          req.body,
-          signature,
-          webhookSecret
-        );
-      } catch (err) {
-        console.log(`⚠️  Webhook signature verification failed:  ${err}`);
-        return res.sendStatus(400);
-      }
-      // Extract the object from the event.
-      data = event.data.object;
-      eventType = event.type;
-    } else {
-      // Webhook signing is recommended, but if the secret is not configured in `config.js`,
-      // retrieve the event data directly from the request body.
-      data = req.body.data.object;
-      eventType = req.body.type;
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        signature,
+        webhookSecret
+      );
+    } catch (err) {
+      console.log(`⚠️  Verificación de webhook fallida: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Handle the checkout.session.completed event
-    if (eventType === "checkout.session.completed") {
-      stripe.customers
-        .retrieve(data.customer)
-        .then(async (customer) => {
-          try {
-            stripe.checkout.sessions.listLineItems(
-              data.id,
-              {},
-              function (err, lineItems) {
-                // asynchronously called
-                console.log("line_items", lineItems);
-                // CREATE ORDER
-                createOrder(customer, data, lineItems);
-              }
-            );
-          } catch (err) {
-            console.log(typeof createOrder);
-            console.log(err);
-          }
-        })
-        .catch((err) => console.log(err.message));
+    const data = event.data.object;
+
+    if (event.type === "checkout.session.completed") {
+      try {
+        const customer = await stripe.customers.retrieve(data.customer);
+        await createOrder(customer, data, null, req.io);
+      } catch (err) {
+        console.error("❌ Error procesando orden:", err.message);
+      }
     }
 
     res.status(200).end();

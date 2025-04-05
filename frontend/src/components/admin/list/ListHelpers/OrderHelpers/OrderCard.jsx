@@ -1,27 +1,41 @@
-// OrderCard.js
 import React from "react";
 import styled from "styled-components";
 import moment from "moment";
 
-const OrderCard = ({ order, onView, onDispatch, onDeliver }) => {
+const OrderCard = ({ order, onView, onDispatch, onDeliver, onDelete }) => {
+  const name = order?.shipping?.name || order?.customer_name || "Sin nombre";
+  const total = order?.total
+    ? (order.total / 100).toLocaleString("es-MX", {
+        style: "currency",
+        currency: "MXN",
+      })
+    : "N/A";
+  const date = order?.createdAt
+    ? moment(order.createdAt).format("YYYY-MM-DD HH:mm")
+    : "Fecha no disponible";
+
+  const isCancelled = order.delivery_status === "cancelled";
+
   return (
-    <CardContainer onClick={onView}>
+    <CardContainer onClick={onView} $cancelled={isCancelled}>
       <OrderInfo>
         <OrderId>ID: {order._id}</OrderId>
-        <OrderName>Name: {order.shipping.name}</OrderName>
-        <OrderAmount>Total: ${(order.total / 100)?.toLocaleString()}</OrderAmount>
-        <OrderStatus> 
+        <OrderName>Nombre: {name}</OrderName>
+        <OrderAmount>Total: {total}</OrderAmount>
+        <OrderStatus>
           {order.delivery_status === "pending" ? (
-            <Pending>Pending</Pending>
+            <Pending>Pendiente</Pending>
           ) : order.delivery_status === "dispatched" ? (
-            <Dispatched>Dispatched</Dispatched>
+            <Dispatched>En camino</Dispatched>
           ) : order.delivery_status === "delivered" ? (
-            <Delivered>Delivered</Delivered>
+            <Delivered>Entregado</Delivered>
+          ) : order.delivery_status === "cancelled" ? (
+            <Cancelled>Cancelado</Cancelled>
           ) : (
-            "Error"
+            "Sin estado"
           )}
         </OrderStatus>
-        <OrderDate>Date: {moment(order.createdAt).format('YYYY-MM-DD HH:mm')}</OrderDate>
+        <OrderDate>Fecha: {date}</OrderDate>
       </OrderInfo>
       <Actions>
         <DispatchButton onClick={(e) => { e.stopPropagation(); onDispatch(order._id); }}>
@@ -30,12 +44,16 @@ const OrderCard = ({ order, onView, onDispatch, onDeliver }) => {
         <DeliveryButton onClick={(e) => { e.stopPropagation(); onDeliver(order._id); }}>
           Deliver
         </DeliveryButton>
+        <DeleteButton onClick={(e) => { e.stopPropagation(); onDelete(order._id); }}>
+          Cancelar
+        </DeleteButton>
       </Actions>
     </CardContainer>
   );
 };
 
 export default OrderCard;
+
 
 // Styled Components
 const CardContainer = styled.div`
@@ -49,7 +67,9 @@ const CardContainer = styled.div`
   align-items: flex-start;
   cursor: pointer;
   transition: box-shadow 0.3s ease, transform 0.2s ease;
-  background-color: white;
+  background-color: ${({ $cancelled }) => ($cancelled ? "#f8d7da" : "white")};
+  opacity: ${({ $cancelled }) => ($cancelled ? 0.6 : 1)};
+  pointer-events: ${({ $cancelled }) => ($cancelled ? "none" : "auto")};
 
   &:hover {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -148,6 +168,26 @@ const DeliveryButton = styled.button`
   }
 `;
 
+const DeleteButton = styled.button`
+  background-color: rgb(255, 77, 77);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    background-color: rgb(230, 50, 50);
+    transform: scale(1.05);
+  }
+
+  &:focus {
+    outline: none;
+  }
+`;
+
 const Pending = styled.span`
   color: rgb(255, 165, 0);
   background: rgba(255, 165, 0, 0.12);
@@ -170,4 +210,12 @@ const Delivered = styled.span`
   padding: 0.3rem 0.5rem;
   border-radius: 3px;
   font-size: 1rem;
-`; 
+`;
+
+const Cancelled = styled.span`
+  color: rgb(153, 0, 0);
+  background: rgba(153, 0, 0, 0.12);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1rem;
+`;

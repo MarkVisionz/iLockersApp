@@ -5,7 +5,7 @@ const productSchema = new mongoose.Schema(
     name: { type: String, required: true },
     weight: { type: String, required: true },
     price: { type: Number, required: true },
-    image: { type: Object, required: true },
+    image: { type: Object, required: false },
   },
   { timestamps: true }
 );

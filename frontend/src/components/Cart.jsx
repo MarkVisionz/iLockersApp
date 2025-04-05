@@ -116,9 +116,7 @@ const Cart = () => {
                 <span>Taxes/Delivery Calculated at checkout</span>
               </SummaryRow>
               {auth._id ? (
-                <PayButtonStyled>
                   <PayButton cartItems={cart.cartItems} />
-                </PayButtonStyled>
               ) : (
                 <LoginButton onClick={() => navigate("/login")}>
                   Login to Checkout
@@ -164,24 +162,6 @@ const CartHeader = styled.div`
   p {
     font-size: 1rem;
     color: #555;
-  }
-`;
-
-const PayButtonStyled = styled.div`
-  button {
-    background: #28a745;
-    color: white;
-    padding: 1rem 1.5rem;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.3s ease;
-
-    &:hover {
-      background: #218838;
-    }
   }
 `;
 

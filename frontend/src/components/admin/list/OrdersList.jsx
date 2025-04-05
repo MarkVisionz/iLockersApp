@@ -1,19 +1,19 @@
-// OrdersList.js
 import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { ordersFetch, ordersEdit } from "../../../features/ordersSlice";
+import { ordersFetch, ordersEdit, ordersDelete } from "../../../features/ordersSlice";
 import FilterBar from "./ListHelpers/OrderHelpers/FilterBar";
 import OrderCard from "./ListHelpers/OrderHelpers/OrderCard";
-import Pagination from "./SummaryHelpers/pagination"; // Importar el componente Pagination
+import Pagination from "./SummaryHelpers/pagination";
 import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
 
 const OrdersList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { list = [], loading, error } = useSelector((state) => state.orders);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,17 +26,27 @@ const OrdersList = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    let filtered = list.filter(order => 
-      order.shipping.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.total.toString().includes(searchQuery) ||
-      order._id.includes(searchQuery)
-    );
+    let filtered = list.filter(order => {
+      const name = order?.shipping?.name || order?.customer_name || "";
+      const total = order?.total?.toString() || "";
+      const id = order?._id || "";
+
+      return (
+        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        total.includes(searchQuery) ||
+        id.includes(searchQuery)
+      );
+    });
 
     if (onlyShow) {
       if (onlyShow === 'day') {
-        filtered = filtered.filter(order => moment(order.createdAt).isSame(moment(), 'day'));
+        filtered = filtered.filter(order =>
+          moment(order?.createdAt).isSame(moment(), 'day')
+        );
       } else {
-        filtered = filtered.filter(order => order.delivery_status === onlyShow);
+        filtered = filtered.filter(order =>
+          order?.delivery_status === onlyShow
+        );
       }
     }
 
@@ -45,12 +55,15 @@ const OrdersList = () => {
         const isAscending = sortField.direction === 'ascending' ? 1 : -1;
 
         if (sortField.field === 'date') {
-          return (new Date(a.createdAt) - new Date(b.createdAt)) * isAscending;
+          return (new Date(a?.createdAt) - new Date(b?.createdAt)) * isAscending;
         } else if (sortField.field === 'name') {
-          return a.shipping.name.localeCompare(b.shipping.name) * isAscending;
+          const nameA = a?.shipping?.name || a?.customer_name || "";
+          const nameB = b?.shipping?.name || b?.customer_name || "";
+          return nameA.localeCompare(nameB) * isAscending;
         } else if (sortField.field === 'status') {
-          return a.delivery_status.localeCompare(b.delivery_status) * isAscending;
+          return (a?.delivery_status || "").localeCompare(b?.delivery_status || "") * isAscending;
         }
+
         return 0;
       });
     }
@@ -70,6 +83,12 @@ const OrdersList = () => {
     navigate(`/order/${id}`);
   };
 
+  const handleOrderDelete = (id) => {
+    if (window.confirm("¿Estás seguro de cancelar esta orden?")) {
+      dispatch(ordersEdit({ id, delivery_status: "cancelled" }));
+    }
+  };
+
   const paginatedOrders = filteredOrders.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
@@ -77,36 +96,40 @@ const OrdersList = () => {
 
   return (
     <Container>
-      <FilterBar 
-        searchQuery={searchQuery} 
-        setSearchQuery={setSearchQuery} 
-        sortField={sortField} 
-        setSortField={setSortField} 
-        onlyShow={onlyShow} 
-        setOnlyShow={setOnlyShow} 
+      <FilterBar
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        sortField={sortField}
+        setSortField={setSortField}
+        onlyShow={onlyShow}
+        setOnlyShow={setOnlyShow}
       />
+
       {loading && <LoadingSpinner />}
       {error && <ErrorMessage>{error}</ErrorMessage>}
+
       <OrderContainer>
         {paginatedOrders.length ? (
           paginatedOrders.map((order) => (
-            <OrderCard 
-              key={order._id} 
-              order={order} 
-              onView={() => handleOrderView(order._id)} 
-              onDispatch={handleOrderDispatch} 
-              onDeliver={handleOrderDeliver} 
+            <OrderCard
+              key={order._id}
+              order={order}
+              onView={() => handleOrderView(order._id)}
+              onDispatch={handleOrderDispatch}
+              onDeliver={handleOrderDeliver}
+              onDelete={handleOrderDelete}
             />
           ))
         ) : (
           <NoOrders>No orders available.</NoOrders>
         )}
       </OrderContainer>
-      <Pagination 
-        currentPage={currentPage} 
-        setCurrentPage={setCurrentPage} 
-        totalNotes={filteredOrders.length} 
-        itemsPerPage={itemsPerPage} 
+
+      <Pagination
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        totalNotes={filteredOrders.length}
+        itemsPerPage={itemsPerPage}
       />
     </Container>
   );
