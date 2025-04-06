@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
-import { url, setHeaders } from "./api";
+import { url } from "./api";
 
 const initialState = {
   token: localStorage.getItem("token"),
@@ -16,39 +16,40 @@ const initialState = {
   userLoaded: false,
 };
 
+// REGISTER
 export const registerUser = createAsyncThunk(
   "auth/registerUser",
   async (user, { rejectWithValue }) => {
     try {
-      const token = await axios.post(`${url}/register`, {
-        name: user.name,
-        email: user.email,
-        password: user.password,
-      });
+      const res = await axios.post(`${url}/register`, user);
+      const { token } = res.data;
 
-      localStorage.setItem("token", token.data);
-      return token.data;
+      localStorage.setItem("token", token);
+      return token;
     } catch (err) {
-      console.log(err.response);
-      return rejectWithValue(err.response.data);
+      const errorData = err.response?.data;
+      return rejectWithValue(
+        errorData?.errors || { message: errorData?.message || "Error en el registro" }
+      );
     }
   }
 );
 
+// LOGIN
 export const loginUser = createAsyncThunk(
   "auth/loginUser",
   async (user, { rejectWithValue }) => {
     try {
-      const token = await axios.post(`${url}/login`, {
-        email: user.email,
-        password: user.password,
-      });
+      const res = await axios.post(`${url}/login`, user);
+      const { token } = res.data;
 
-      localStorage.setItem("token", token.data);
-      return token.data;
+      localStorage.setItem("token", token);
+      return token;
     } catch (err) {
-      console.log(err.response);
-      return rejectWithValue(err.response.data);
+      const errorData = err.response?.data;
+      return rejectWithValue(
+        errorData?.errors || { message: errorData?.message || "Error al iniciar sesión" }
+      );
     }
   }
 );
@@ -57,9 +58,8 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    loadUser(state, action) {
+    loadUser(state) {
       const token = state.token;
-
       if (token) {
         const user = jwtDecode(token);
         return {
@@ -68,87 +68,64 @@ const authSlice = createSlice({
           name: user.name,
           email: user.email,
           _id: user._id,
-          isAdmin: user.isAdmin,
+          isAdmin: user.isAdmin || user.role === "admin",
           userLoaded: true,
         };
-      } else return { ...state, userLoaded: true };
+      }
+      return { ...state, userLoaded: true };
     },
-    logoutUser(state, action) {
+    logoutUser(state) {
       localStorage.removeItem("token");
-
       return {
-        ...state,
+        ...initialState,
         token: "",
-        name: "",
-        email: "",
-        _id: "",
-        isAdmin: false,
-        registerStatus: "",
-        registerError: "",
-        loginStatus: "",
-        loginError: "",
-        userLoaded: false,
       };
     },
   },
   extraReducers: (builder) => {
-
-    // REGISTER USER
-    builder.addCase(registerUser.pending, (state, action) => {
-      return { ...state, registerStatus: "pending" };
-    });
-
-    builder.addCase(registerUser.fulfilled, (state, action) => {
-      if (action.payload) {
+    // REGISTER
+    builder
+      .addCase(registerUser.pending, (state) => {
+        state.registerStatus = "pending";
+        state.registerError = "";
+      })
+      .addCase(registerUser.fulfilled, (state, action) => {
         const user = jwtDecode(action.payload);
-        return {
-          ...state,
-          token: action.payload,
-          name: user.name,
-          email: user.email,
-          _id: user._id,
-          isAdmin: user.isAdmin,
-          registerStatus: "success",
-        };
-      } else return state;
-    });
+        state.token = action.payload;
+        state.name = user.name;
+        state.email = user.email;
+        state._id = user._id;
+        state.isAdmin = user.isAdmin || user.role === "admin";
+        state.registerStatus = "success";
+        state.registerError = "";
+      })
+      .addCase(registerUser.rejected, (state, action) => {
+        state.registerStatus = "rejected";
+        state.registerError = action.payload;
+      });
 
-    builder.addCase(registerUser.rejected, (state, action) => {
-      return {
-        ...state,
-        registerStatus: "rejected",
-        registerError: action.payload,
-      };
-    });
-
-    // LOGIN USER
-    builder.addCase(loginUser.pending, (state, action) => {
-      return { ...state, loginStatus: "pending" };
-    });
-    builder.addCase(loginUser.fulfilled, (state, action) => {
-      if (action.payload) {
+    // LOGIN
+    builder
+      .addCase(loginUser.pending, (state) => {
+        state.loginStatus = "pending";
+        state.loginError = "";
+      })
+      .addCase(loginUser.fulfilled, (state, action) => {
         const user = jwtDecode(action.payload);
-        return {
-          ...state,
-          token: action.payload,
-          name: user.name,
-          email: user.email,
-          _id: user._id,
-          isAdmin: user.isAdmin,
-          loginStatus: "success",
-        };
-      } else return state;
-    });
-    builder.addCase(loginUser.rejected, (state, action) => {
-      return {
-        ...state,
-        loginStatus: "rejected",
-        loginError: action.payload,
-      };
-    });
+        state.token = action.payload;
+        state.name = user.name;
+        state.email = user.email;
+        state._id = user._id;
+        state.isAdmin = user.isAdmin || user.role === "admin";
+        state.loginStatus = "success";
+        state.loginError = "";
+      })
+      .addCase(loginUser.rejected, (state, action) => {
+        state.loginStatus = "rejected";
+        state.loginError = action.payload;
+      });
   },
 });
 
 export const { loadUser, logoutUser } = authSlice.actions;
-
 export default authSlice.reducer;

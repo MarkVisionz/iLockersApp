@@ -1,11 +1,12 @@
 export const url = "http://localhost:5001/api";
 
 export const setHeaders = () => {
-  const headers = {
+  const token = localStorage.getItem("token");
+
+  return {
     headers: {
-      "x-auth-token": localStorage.getItem("token"),
+      ...(token && { "x-auth-token": token }),
     },
   };
-
-  return headers;
 };
+

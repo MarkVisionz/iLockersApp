@@ -1,6 +1,6 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { logoutUser } from "../features/authSlice";
 import { toast } from "react-toastify";
 
@@ -9,15 +9,17 @@ const NavBar = () => {
   const dispatch = useDispatch();
   const { cartTotalQuantity } = useSelector((state) => state.cart);
   const auth = useSelector((state) => state.auth);
+  const location = useLocation();
+  const isHome = location.pathname === "/";
 
   const handleLogout = () => {
     dispatch(logoutUser(null));
     navigate("/");
-    toast.warning("Logged out!", { position: "bottom-left" });
+    toast.warning("Sesión cerrada", { position: "bottom-left" });
   };
 
   return (
-    <NavContainer>
+    <NavContainer $isHome={isHome}>
       <LogoLink to="/">
         <LogoImage
           src="https://res.cloudinary.com/mkocloud/image/upload/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png"
@@ -25,104 +27,165 @@ const NavBar = () => {
         />
       </LogoLink>
 
-      <CartLink to="/cart">
-        <CartIcon>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="25"
-            height="25"
-            fill="currentColor"
-            className="bi bi-bag"
-            viewBox="0 0 16 16"
-          >
-            <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
-          </svg>
-          <BagQuantity>{cartTotalQuantity}</BagQuantity>
-        </CartIcon>
-      </CartLink>
+      <NavContent>
+        {auth._id ? (
+          <NavLinks>
+            {!auth.isAdmin ? (
+              <NavButton to="/user/profile">Perfil</NavButton>
+            ) : (
+              <>
+                <NavButton to="/admin/summary">Admin</NavButton>
+                <NavButton to="/laundry-screen">Lavandería</NavButton>
+              </>
+            )}
+            <LogoutButton onClick={handleLogout}>Salir</LogoutButton>
+          </NavLinks>
+        ) : (
+          <AuthLinks>
+            <NavButton to="/login">Entrar</NavButton>
+            <NavButton to="/register">Registrarse</NavButton>
+          </AuthLinks>
+        )}
 
-      {auth._id ? (
-        <NavLinks>
-          {!auth.isAdmin ? (
-            <StyledLink to="/user/profile">Profile</StyledLink>
-          ) : (
-            <>
-              <StyledLink to="/admin/summary">Admin</StyledLink>
-              <StyledLink to="/laundry-screen">Laundry Control</StyledLink>
-            </>
-          )}
-          <LogoutButton onClick={handleLogout}>Logout</LogoutButton>
-        </NavLinks>
-      ) : (
-        <AuthLinks>
-          <StyledLink to="/login">Login</StyledLink>
-          <StyledLink to="/register">Register</StyledLink>
-        </AuthLinks>
-      )}
+        <CartLink to="/cart" $isHome={isHome}>
+          <CartIcon $isHome={isHome}>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="26"
+              height="26"
+              fill="currentColor"
+              viewBox="0 0 16 16"
+            >
+              <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+            </svg>
+            {cartTotalQuantity > 0 && (
+              <BagQuantity>{cartTotalQuantity}</BagQuantity>
+            )}
+          </CartIcon>
+        </CartLink>
+      </NavContent>
     </NavContainer>
   );
 };
 
 export default NavBar;
 
-/* Styled Components */
-
-// Contenedor Principal del NavBar
 const NavContainer = styled.nav`
   position: sticky;
   top: 0;
   height: 90px;
-  background: #000000; /* Fondo oscuro */
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem 1rem 1rem;
-  z-index: 1000;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  justify-content: space-between;
+  padding: 0 2rem;
+  z-index: 999;
+  transition: all 0.3s ease-in-out;
 
-  @media (max-width: 768px) {
-    padding: 0 1.5rem;
-  }
+  ${(props) =>
+    props.$isHome
+      ? css`
+          background: rgba(255, 255, 255, 0.92);
+          backdrop-filter: blur(8px);
+          box-shadow: 0 0px 10px rgba(255, 255, 255, 0.5);
+          border-bottom: 1px solid rgba(200, 200, 200, 0.2);
+
+          &::after {
+            content: "";
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 100%;
+            height: 18px;
+            background: radial-gradient(white 30%, transparent 70%);
+            filter: blur(10px);
+            opacity: 0.8;
+            pointer-events: none;
+          }
+        `
+      : css`
+          background: rgba(10, 10, 10, 0.85);
+          backdrop-filter: blur(10px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        `}
 `;
 
-// Enlace del Logo
 const LogoLink = styled(Link)`
   display: flex;
   align-items: center;
 `;
 
-// Imagen del Logo
 const LogoImage = styled.img`
-  width: 150px;
-  height: auto;
+  height: 120px;
+  transition: transform 0.3s ease;
 
-  @media (max-width: 768px) {
-    width: 120px;
+  &:hover {
+    transform: scale(1.05);
   }
 `;
 
-// Enlace del Carrito
+const NavContent = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+
+  @media (max-width: 768px) {
+    gap: 1rem;
+  }
+`;
+
+const NavLinks = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+`;
+
+const AuthLinks = styled(NavLinks)``;
+
+const NavButton = styled(Link)`
+  padding: 0.5rem 1.2rem;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  text-decoration: none;
+  background: linear-gradient(145deg, #141622, #1f1f28);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.06);
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: #007bff;
+    color: white;
+  }
+`;
+
+const LogoutButton = styled.div`
+  padding: 0.5rem 1.2rem;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: linear-gradient(145deg, #27272a, #1f1f28);
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: #e74c3c;
+  }
+`;
+
 const CartLink = styled(Link)`
   position: relative;
   display: flex;
   align-items: center;
-  color: white;
-  margin-left: auto;
-
-  @media (max-width: 768px) {
-    margin-left: 0;
-  }
+  color: ${(props) => (props.$isHome ? "#111" : "white")};
 `;
 
-// Icono del Carrito
 const CartIcon = styled.div`
   position: relative;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
 
   svg {
-    transition: transform 0.2s;
+    transition: transform 0.2s ease;
+    color: ${(props) => (props.$isHome ? "#111" : "white")};
   }
 
   &:hover svg {
@@ -130,75 +193,18 @@ const CartIcon = styled.div`
   }
 `;
 
-// Cantidad en el Carrito
 const BagQuantity = styled.span`
   position: absolute;
   top: -8px;
-  right: -10px;
+  right: -12px;
   background: #e74c3c;
   color: white;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
   font-size: 12px;
+  font-weight: 600;
+  border-radius: 50%;
   display: flex;
+  align-items: center;
   justify-content: center;
-  align-items: center;
-`;
-
-// Contenedor de Enlaces de Navegación
-const NavLinks = styled.div`
-  display: flex;
-  align-items: center;
-  margin-left: 2rem;
-
-  @media (max-width: 768px) {
-    margin-left: 1rem;
-  }
-`;
-
-// Enlaces de Autenticación
-const AuthLinks = styled.div`
-  display: flex;
-  align-items: center;
-  margin-left: 2rem;
-
-  @media (max-width: 768px) {
-    margin-left: 1rem;
-  }
-`;
-
-// Estilo para los Enlaces
-const StyledLink = styled(Link)`
-  color: white;
-  text-decoration: none;
-  margin-right: 2rem;
-  font-size: 16px;
-  position: relative;
-  transition: color 0.3s;
-
-  &:hover {
-    color: #e74c3c; /* Color al pasar el mouse */
-  }
-
-  @media (max-width: 768px) {
-    margin-right: 1rem;
-    font-size: 14px;
-  }
-`;
-
-// Botón de Logout
-const LogoutButton = styled.div`
-  color: white;
-  cursor: pointer;
-  font-size: 16px;
-  transition: color 0.3s;
-
-  &:hover {
-    color: #e74c3c; /* Color al pasar el mouse */
-  }
-
-  @media (max-width: 768px) {
-    font-size: 14px;
-  }
 `;

@@ -1,353 +1,423 @@
-import React, { useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { addToCart, clearCart, decreaseCart, removeFromCart, getTotals } from "../features/cartSlice";
 import styled from "styled-components";
 import {
-  clearCart,
-  addToCart,
-  decreaseCart,
-  removeFromCart,
-  getTotals,
-} from "../features/cartSlice";
-import PayButton from "./PayButton";
-import {
-  AiOutlineArrowLeft,
-  AiOutlineDelete,
-  AiOutlineMinus,
   AiOutlinePlus,
+  AiOutlineMinus,
   AiOutlineShoppingCart,
+  AiOutlineDelete,
+  AiOutlineMenu,
+  AiOutlineClose,
 } from "react-icons/ai";
+import { useEffect, useState } from "react";
+import PayButton from "./PayButton";
+import { useNavigate } from "react-router-dom";
+import { LoadingSpinner, ErrorMessage } from "./LoadingAndError";
 
 const Cart = () => {
+  const { items: products, status } = useSelector((state) => state.products);
   const cart = useSelector((state) => state.cart);
   const auth = useSelector((state) => state.auth);
-
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  const [quantities, setQuantities] = useState({});
+  const [cartVisible, setCartVisible] = useState(true);
+
   useEffect(() => {
     dispatch(getTotals());
-  }, [cart, dispatch]);
+  }, [cart.cartItems, dispatch]);
 
-  const handleIncreaseCart = (cartItem) => {
-    dispatch(addToCart(cartItem));
+  const handleManualQuantityChange = (productId, value) => {
+    const parsed = parseInt(value);
+    setQuantities((prev) => ({
+      ...prev,
+      [productId]: isNaN(parsed) || parsed < 1 ? 1 : parsed,
+    }));
   };
 
-  const handleDecreaseCart = (cartItem) => {
-    dispatch(decreaseCart(cartItem));
+  const handleClickQuantity = (productId, type) => {
+    setQuantities((prev) => {
+      const current = prev[productId] || 1;
+      const newQty = type === "increase" ? current + 1 : Math.max(1, current - 1);
+      return { ...prev, [productId]: newQty };
+    });
   };
 
-  const handleRemoveFromCart = (cartItem) => {
-    dispatch(removeFromCart(cartItem));
+  const handleAddToCart = (product) => {
+    const quantity = quantities[product._id] || 1;
+    for (let i = 0; i < quantity; i++) {
+      dispatch(addToCart(product));
+    }
+    setQuantities((prev) => ({ ...prev, [product._id]: 1 }));
   };
 
-  const handleClearCart = () => {
-    dispatch(clearCart());
-  };
+  const handleRemove = (item) => dispatch(removeFromCart(item));
+  const handleIncrease = (item) => dispatch(addToCart(item));
+  const handleDecrease = (item) => dispatch(decreaseCart(item));
+  const handleClearCart = () => dispatch(clearCart());
 
   return (
-    <CartWrapper>
-      <CartHeader>
-        <h1>Your Laundry Bag</h1>
-        <p>Review your items before checking out.</p>
-      </CartHeader>
+    <HomeWrapper>
+      <Header>
+        <h2>Explora nuestros productos</h2>
+        <p>Agrega tu ropa sin salir de casa</p>
+      </Header>
 
-      {cart.cartItems.length === 0 ? (
-        <EmptyState>
-          <EmptyIcon>
-            <AiOutlineShoppingCart size={100} color="#ddd" />
-          </EmptyIcon>
-          <h2>Your bag is empty!</h2>
-          <p>Looks like you haven't added anything yet.</p>
-          <StartShopping to="/">
-            <AiOutlineArrowLeft size={20} /> Start Shopping
-          </StartShopping>
-        </EmptyState>
-      ) : (
-        <Content>
-          <TableHeader>
-            <div>Product</div>
-            <div>Price</div>
-            <div>Quantity</div>
-            <div>Total</div>
-          </TableHeader>
+      <ResponsiveWrapper>
+        <ToggleButton onClick={() => setCartVisible(!cartVisible)}>
+          {cartVisible ? <AiOutlineClose /> : <AiOutlineMenu />}
+        </ToggleButton>
 
-          <CartList>
-            {cart.cartItems.map((item) => (
-              <CartItem key={item._id}>
-                <ProductInfo>
-                  <ProductImage src={item.image?.url} alt={item.name} />
-                  <ProductTitle>
-                    <ProductName>{item.name}</ProductName>
-                    <RemoveButton onClick={() => handleRemoveFromCart(item)}>
-                      <AiOutlineDelete size={16} /> Remove
-                    </RemoveButton>
-                  </ProductTitle>
-                </ProductInfo>
-                <Price>${item.price.toFixed(2)}</Price>
-                <Quantity>
-                  <QuantityButton onClick={() => handleDecreaseCart(item)}>
-                    <AiOutlineMinus />
-                  </QuantityButton>
-                  <QuantityCount>{item.cartQuantity}</QuantityCount>
-                  <QuantityButton onClick={() => handleIncreaseCart(item)}>
-                    <AiOutlinePlus />
-                  </QuantityButton>
-                </Quantity>
-                <Total>${(item.cartQuantity * item.price).toFixed(2)}</Total>
-              </CartItem>
-            ))}
-          </CartList>
-
-          <CartFooter>
-            <ClearCartButton onClick={handleClearCart}>
-              <AiOutlineDelete size={18} /> Clear Bag
-            </ClearCartButton>
-
-            <ContinueShopping to="/">
-              <AiOutlineArrowLeft size={20} /> Continue Shopping
-            </ContinueShopping>
-            <CartSummary>
-              <SummaryRow>
-                <span>Subtotal</span>
-                <span>${cart.cartTotalAmount.toFixed(2)}</span>
-              </SummaryRow>
-              <SummaryRow>
-                <span>Taxes/Delivery Calculated at checkout</span>
-              </SummaryRow>
-              {auth._id ? (
+        {cartVisible && (
+          <CartSidebar>
+            <CartHeader>
+              <AiOutlineShoppingCart /> Carrito
+            </CartHeader>
+            {cart.cartItems.length === 0 ? (
+              <p>Tu carrito está vacío.</p>
+            ) : (
+              <>
+                {cart.cartItems.map((item) => (
+                  <CartItem key={item._id}>
+                    <span>{item.name}</span>
+                    <Quantity>
+                      <QtyButton onClick={() => handleDecrease(item)}>
+                        <AiOutlineMinus />
+                      </QtyButton>
+                      <QtyCount>{item.cartQuantity}</QtyCount>
+                      <QtyButton onClick={() => handleIncrease(item)}>
+                        <AiOutlinePlus />
+                      </QtyButton>
+                      <RemoveBtn onClick={() => handleRemove(item)}>
+                        <AiOutlineDelete />
+                      </RemoveBtn>
+                    </Quantity>
+                  </CartItem>
+                ))}
+                <TotalRow>
+                  <span>Total:</span>
+                  <span>$ {cart.cartTotalAmount.toFixed(2)}</span>
+                </TotalRow>
+                {auth._id ? (
                   <PayButton cartItems={cart.cartItems} />
-              ) : (
-                <LoginButton onClick={() => navigate("/login")}>
-                  Login to Checkout
-                </LoginButton>
-              )}
-            </CartSummary>
-          </CartFooter>
-        </Content>
-      )}
-    </CartWrapper>
+                ) : (
+                  <LoginBtn onClick={() => navigate("/login")}>Inicia sesión para pagar</LoginBtn>
+                )}
+                <ClearCartBtn onClick={handleClearCart}>
+                  <AiOutlineDelete /> Vaciar carrito
+                </ClearCartBtn>
+              </>
+            )}
+          </CartSidebar>
+        )}
+
+        <Grid>
+          {status === "success" ? (
+            products.map((product) => (
+              <Card key={product._id}>
+                <ImageWrapper>
+                  <img src={product.image?.url} alt={product.name} />
+                </ImageWrapper>
+                <Info>
+                  <Name>{product.name}</Name>
+                  <Weight>Peso Unitario: {product.weight}g</Weight>
+                  <Price>Precio: $ {product.price.toFixed(2)}</Price>
+                  <QuantityControls>
+                    <QtyButton onClick={() => handleClickQuantity(product._id, "decrease")}>
+                      <AiOutlineMinus />
+                    </QtyButton>
+                    <QtyInput
+                      type="number"
+                      min="1"
+                      value={quantities[product._id] || 1}
+                      onChange={(e) => handleManualQuantityChange(product._id, e.target.value)}
+                    />
+                    <QtyButton onClick={() => handleClickQuantity(product._id, "increase")}>
+                      <AiOutlinePlus />
+                    </QtyButton>
+                  </QuantityControls>
+                  <AddButton onClick={() => handleAddToCart(product)}>
+                    Agregar al carrito
+                  </AddButton>
+                </Info>
+              </Card>
+            ))
+          ) : status === "pending" ? (
+            <LoadingSpinner message={"Cargando productos..."}></LoadingSpinner>
+          ) : (
+            <ErrorMessage message={"Error al cargar productos"}></ErrorMessage>
+          )}
+        </Grid>
+      </ResponsiveWrapper>
+    </HomeWrapper>
   );
 };
 
 export default Cart;
 
-// Styled Components
-const CartWrapper = styled.div`
-  max-width: 1200px;
-  margin: 1.5rem auto;
+// COMPONENTES DE ESTILO
+
+const HomeWrapper = styled.div`
   padding: 2rem;
-  background: #f8faff;
-  border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  background-color: #f4f6f8;
 `;
 
-const ProductTitle = styled.div`
-  text-align: center;
-`;
-
-const EmptyIcon = styled.div`
-  margin-bottom: 1.5rem;
-`;
-
-const CartHeader = styled.div`
-  text-align: center;
+const Header = styled.div`
   margin-bottom: 2rem;
+  text-align: center;
 
-  h1 {
-    font-size: 2.5rem;
-    color: #333;
+  h2 {
+    color: #007bff;
   }
 
   p {
-    font-size: 1rem;
-    color: #555;
+    color: #666;
   }
 `;
 
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 3rem;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
-`;
-
-const StartShopping = styled(Link)`
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem 1.2rem;
-  margin-top: 1rem;
-  color: #007bff;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: bold;
-  transition: all 0.3s ease;
-  align-items: center;
-
-  &:hover {
-    color: #0056b3;
-  }
-`;
-
-const Content = styled.div`
+const ResponsiveWrapper = styled.div`
   display: flex;
-  flex-direction: column;
+  flex-direction: row-reverse;
   gap: 2rem;
+  align-items: flex-start;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
 `;
 
-const TableHeader = styled.div`
-  display: grid;
-  grid-template-columns: 3fr 1fr 1fr 1fr;
-  background: #e9ecef;
-  padding: 1rem;
-  border-radius: 8px;
-  font-weight: bold;
-  color: #555;
-`;
-
-const CartList = styled.div`
+const CartSidebar = styled.div`
+  width: 300px;
   background: white;
-  border-radius: 16px;
-  padding: 2rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 6rem;
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  align-self: flex-start;
+  z-index: 1;
+
+  @media (max-width: 768px) {
+    position: static;
+    max-height: none;
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: #f9f9f9;
+  }
+`;
+
+const CartHeader = styled.h4`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  color: #333;
 `;
 
 const CartItem = styled.div`
-  display: grid;
-  grid-template-columns: 3fr 1fr 1fr 1fr;
-  align-items: center;
-  padding: 1rem 0;
-  border-bottom: 1px solid #ddd;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr 1fr 1fr 1fr;
-    gap: 1rem;
-  }
-
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const ProductInfo = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
 `;
 
-const ProductImage = styled.img`
-  width: 80px;
-  height: 80px;
-  border-radius: 8px;
-  object-fit: cover;
-`;
-
-const ProductName = styled.h3`
-  font-size: 1rem;
-  color: #333;
-  margin-bottom: 0.5rem;
-`;
-
-const RemoveButton = styled.button`
+const RemoveBtn = styled.button`
   background: none;
-  color: #ff6b6b;
   border: none;
+  color: #dc3545;
   cursor: pointer;
-  font-size: 0.9rem;
+  transition: transform 0.2s ease;
 
   &:hover {
-    color: #ff1e1e;
+    color: #c82333;
+    transform: scale(1.05);
   }
 `;
 
-const Price = styled.div`
-  font-size: 1rem;
-  color: #555;
+const ClearCartBtn = styled.button`
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    background-color: #c82333;
+    transform: scale(1.05);
+  }
+`;
+
+const TotalRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  font-weight: bold;
+  color: #444;
+`;
+
+const LoginBtn = styled.button`
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    background: #0056b3;
+    transform: scale(1.05);
+  }
 `;
 
 const Quantity = styled.div`
   display: flex;
   align-items: center;
+  gap: 0.5rem;
 `;
 
-const QuantityButton = styled.button`
-  background: #007bff;
-  color: white;
-  border: none;
-  padding: 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
+const Grid = styled.div`
+  flex: 2;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1.5rem;
 
-  &:hover {
-    background: #0056b3;
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 `;
 
-const QuantityCount = styled.div`
-  margin: 0 0.5rem;
-  font-weight: bold;
-`;
-
-const Total = styled.div`
-  font-weight: bold;
-`;
-
-const CartFooter = styled.div`
+const Card = styled.div`
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
   text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+`;
+
+const ImageWrapper = styled.div`
+  img {
+    width: 100%;
+    height: 140px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+`;
+
+const Info = styled.div`
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 0.5rem;
 `;
 
-const ClearCartButton = styled.button`
-  background: #ff6b6b;
-  color: white;
-  border: none;
-  padding: 1rem;
-  border-radius: 8px;
+const Name = styled.h3`
+  font-size: 1.1rem;
+  color: #333;
+`;
+
+const Weight = styled.span`
+  color: #777;
+`;
+
+const Price = styled.span`
   font-weight: bold;
-  cursor: pointer;
+  color: #444;
+`;
+
+const QuantityControls = styled.div`
   display: flex;
+  justify-content: center;
   align-items: center;
-
-  &:hover {
-    background: #ff1e1e;
-  }
+  gap: 0.5rem;
 `;
 
-const CartSummary = styled.div`
-  margin: 2rem 0;
-`;
-
-const SummaryRow = styled.div`
-  display: flex;
-  justify-content: space-evenly;
-  padding: 0.5rem 0;
-`;
-
-const LoginButton = styled.button`
+const QtyButton = styled.button`
+  padding: 0.4rem;
+  border: none;
+  border-radius: 6px;
   background: #007bff;
   color: white;
-  border: none;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.3s ease;
 
   &:hover {
     background: #0056b3;
   }
 `;
 
-const ContinueShopping = styled(Link)`
-  margin-top: 1rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: bold;
-  color: #007bff;
-  text-decoration: none;
+const QtyCount = styled.span`
+  min-width: 20px;
+  text-align: center;
+`;
+
+const QtyInput = styled.input`
+  width: 3rem;
+  text-align: center;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 0.3rem;
+  font-size: 1rem;
+  -moz-appearance: textfield;
+
+  &::-webkit-inner-spin-button,
+  &::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+`;
+
+const AddButton = styled.button`
+  background: #28a745;
+  color: white;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
-    color: #0056b3;
+    background: #218838;
+    transform: scale(1.05);
+  }
+`;
+
+const ToggleButton = styled.button`
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  margin-bottom: 1rem;
+
+  @media (min-width: 769px) {
+    display: none;
   }
 `;
