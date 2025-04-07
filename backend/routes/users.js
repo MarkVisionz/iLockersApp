@@ -32,16 +32,22 @@ router.get("/find/:id", isUser, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
 
-    res.status(200).send({
+    if (!user) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.status(200).json({
       _id: user._id,
       name: user.name,
       email: user.email,
       isAdmin: user.isAdmin,
     });
   } catch (error) {
-    res.status(500).send(error);
+    console.error("❌ Error en /find/:id", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 });
+
 
 // UPDATE USER
 router.put("/:id", isUser, async (req, res) => {

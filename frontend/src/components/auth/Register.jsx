@@ -1,17 +1,14 @@
 // src/components/Auth/Register.jsx
 import { useEffect, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { registerUser } from "../../features/authSlice";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { useRegisterForm } from "./Hooks/useRegisterForm";
+import { motion } from "framer-motion";
+import { useFirebaseRegisterForm } from "./Hooks/useFirebaseRegisterForm";
 import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import styled from "styled-components";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import {
   BackgroundWrapper,
   PageWrapper,
-  WelcomeText,
   Form,
   FormGroup,
   ButtonLogin,
@@ -21,13 +18,14 @@ import {
 } from "./StyledForm";
 
 import { LoginBackground } from "../LoginBackground";
+import GoogleLoginButton from "./GoogleLoginButton";
+import AppleLoginButton from "./AppleLoginButton";
+import FacebookLoginButton from "./FacebookLoginButton";
+import EmailVerification from "./EmailVerification"; // ✅ nuevo
 
 const Register = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const auth = useSelector((state) => state.auth);
   const [showForm, setShowForm] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
 
   const {
     formData,
@@ -42,43 +40,22 @@ const Register = () => {
     validateForm,
     handleBackendError,
     resetForm,
-  } = useRegisterForm();
+    handleSubmit,
+    verificationEmail, // ✅ nuevo
+  } = useFirebaseRegisterForm();
 
   useEffect(() => {
-    if (auth._id) {
-      navigate("/cart");
+    const hasSeenWelcome = localStorage.getItem("hasSeenWelcomeRegister");
+    if (hasSeenWelcome) {
+      setShowForm(true);
     } else {
-      const hasSeenWelcome = localStorage.getItem("hasSeenWelcomeRegister");
-      if (hasSeenWelcome) {
+      const timer = setTimeout(() => {
         setShowForm(true);
-      } else {
-        const timer = setTimeout(() => {
-          setShowForm(true);
-          localStorage.setItem("hasSeenWelcomeRegister", "true");
-        }, 1800);
-        return () => clearTimeout(timer);
-      }
+        localStorage.setItem("hasSeenWelcomeRegister", "true");
+      }, 1800);
+      return () => clearTimeout(timer);
     }
-  }, [auth._id, navigate]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    setIsSubmitting(true);
-    try {
-      await dispatch(registerUser(formData)).unwrap();
-      setShowSuccess(true);
-      setTimeout(() => {
-        resetForm();
-        navigate("/cart");
-      }, 1500);
-    } catch (error) {
-      handleBackendError(error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  }, []);
 
   const hasFieldErrors = Object.keys(errors).some(
     (key) => key !== "form" && errors[key]
@@ -95,152 +72,120 @@ const Register = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
-              <Form
-                onSubmit={handleSubmit}
-                className={errors.form || hasFieldErrors ? "shake" : ""}
-                aria-label="Formulario de registro"
-              >
-                <h2>Regístrate</h2>
+              {verificationEmail ? (
+                <EmailVerification email={formData.email} password={formData.password} />
 
-                {errors.form && <ErrorMessage message={errors.form} />}
-
-                <FormGroup>
-                  <label htmlFor="name">Nombre</label>
-                  <input
-                    type="text"
-                    name="name"
-                    id="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    onBlur={handleBlur}
-                    placeholder="Nombre completo"
-                    aria-required="true"
-                    aria-invalid={!!errors.name}
-                    aria-describedby={errors.name ? "name-error" : undefined}
-                  />
-                  {errors.name && (
-                    <ErrorMessage id="name-error" message={errors.name} />
-                  )}
-                </FormGroup>
-
-                <FormGroup>
-                  <label htmlFor="email">Correo</label>
-                  <input
-                    type="email"
-                    name="email"
-                    id="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    onBlur={handleBlur}
-                    placeholder="Correo electrónico"
-                    aria-required="true"
-                    aria-invalid={!!errors.email}
-                    aria-describedby={errors.email ? "email-error" : undefined}
-                  />
-                  {errors.email && (
-                    <ErrorMessage id="email-error" message={errors.email} />
-                  )}
-                </FormGroup>
-
-                <FormGroup>
-                  <label htmlFor="password">Contraseña</label>
-                  <PasswordWrapper>
+              ) : (
+                <Form
+                  onSubmit={handleSubmit}
+                  className={errors.form || hasFieldErrors ? "shake" : ""}
+                  aria-label="Formulario de registro"
+                >
+                  <Title>Crear cuenta</Title>
+                  <Subtitle>
+                    Regístrate para comenzar con Easy Laundry
+                  </Subtitle>
+                  <FormGroup>
+                    <label htmlFor="name">Nombre</label>
                     <input
-                      type={showPassword ? "text" : "password"}
-                      name="password"
-                      id="password"
-                      value={formData.password}
+                      type="text"
+                      name="name"
+                      id="name"
+                      value={formData.name}
                       onChange={handleInputChange}
                       onBlur={handleBlur}
-                      placeholder="Contraseña segura"
+                      placeholder="Nombre completo"
                       aria-required="true"
-                      aria-invalid={!!errors.password}
+                      aria-invalid={!!errors.name}
                       aria-describedby={
-                        errors.password ? "password-error" : undefined
+                        errors.name ? "name-error" : undefined
                       }
                     />
-                    <TogglePasswordButton
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={
-                        showPassword
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
-                      }
-                    >
-                      {showPassword ? <FiEyeOff /> : <FiEye />}
-                    </TogglePasswordButton>
-                  </PasswordWrapper>
-                  {errors.password && (
-                    <ErrorMessage
-                      id="password-error"
-                      message={errors.password}
-                    />
-                  )}
-                </FormGroup>
+                    {errors.name && (
+                      <ErrorMessage id="name-error" message={errors.name} />
+                    )}
+                  </FormGroup>
 
-                <FormGroup>
-                  <label htmlFor="confirmPassword">Confirmar Contraseña</label>
-                  <PasswordWrapper>
+                  <FormGroup>
+                    <label htmlFor="email">Correo</label>
                     <input
-                      type={showPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      id="confirmPassword"
-                      value={formData.confirmPassword}
+                      type="email"
+                      name="email"
+                      id="email"
+                      value={formData.email}
                       onChange={handleInputChange}
                       onBlur={handleBlur}
-                      placeholder="Repite tu contraseña"
+                      placeholder="Correo electrónico"
                       aria-required="true"
-                      aria-invalid={!!errors.confirmPassword}
+                      aria-invalid={!!errors.email}
                       aria-describedby={
-                        errors.confirmPassword
-                          ? "confirmPassword-error"
-                          : undefined
+                        errors.email ? "email-error" : undefined
                       }
                     />
-                    <TogglePasswordButton
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={
-                        showPassword
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
-                      }
-                    >
-                      {showPassword ? <FiEyeOff /> : <FiEye />}
-                    </TogglePasswordButton>
-                  </PasswordWrapper>
-                  {errors.confirmPassword && (
-                    <ErrorMessage
-                      id="confirmPassword-error"
-                      message={errors.confirmPassword}
-                    />
-                  )}
-                </FormGroup>
+                    {errors.email && (
+                      <ErrorMessage id="email-error" message={errors.email} />
+                    )}
+                  </FormGroup>
 
-                <ButtonLogin disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <LoadingSpinner message="Registrando..." />
-                  ) : (
-                    "Crear cuenta"
-                  )}
-                </ButtonLogin>
+                  <FormGroup>
+                    <label htmlFor="password">Contraseña</label>
+                    <PasswordWrapper>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        id="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        onBlur={handleBlur}
+                        placeholder="Contraseña segura"
+                        aria-required="true"
+                        aria-invalid={!!errors.password}
+                        aria-describedby={
+                          errors.password ? "password-error" : undefined
+                        }
+                      />
+                      <TogglePasswordButton
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={
+                          showPassword
+                            ? "Ocultar contraseña"
+                            : "Mostrar contraseña"
+                        }
+                      >
+                        {showPassword ? <FiEyeOff /> : <FiEye />}
+                      </TogglePasswordButton>
+                    </PasswordWrapper>
+                    {errors.password && (
+                      <ErrorMessage
+                        id="password-error"
+                        message={errors.password}
+                      />
+                    )}
+                  </FormGroup>
 
-                {showSuccess && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    <p style={{ color: "green" }}>¡Registro exitoso!</p>
-                  </motion.div>
-                )}
+                  <ButtonLogin disabled={isSubmitting} type="submit">
+                    {isSubmitting ? (
+                      <LoadingSpinner message="Registrando..." />
+                    ) : (
+                      "Crear cuenta"
+                    )}
+                  </ButtonLogin>
 
-                <SignupPrompt>
-                  ¿Ya tienes una cuenta? <Link to="/login">Inicia sesión</Link>
-                </SignupPrompt>
-              </Form>
+                  {errors.form && <ErrorMessage message={errors.form} />}
+
+                  <Divider>o continúa con </Divider>
+
+                  <GoogleLoginButton />
+                  <FacebookLoginButton />
+                  <AppleLoginButton />
+
+                  <SignupPrompt>
+                    ¿Ya tienes una cuenta?{" "}
+                    <Link to="/login">Inicia sesión</Link>
+                  </SignupPrompt>
+                </Form>
+              )}
             </motion.div>
           )}
         </PageWrapper>
@@ -250,3 +195,41 @@ const Register = () => {
 };
 
 export default Register;
+
+const Title = styled.h2`
+  font-size: 1.6rem;
+  text-align: center;
+  margin-bottom: 0.25rem;
+`;
+
+const Subtitle = styled.p`
+  text-align: center;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
+  color: #888;
+`;
+
+const Divider = styled.div`
+  text-align: center;
+  color: #aaa;
+  font-size: 0.85rem;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: #ddd;
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
+  }
+`;

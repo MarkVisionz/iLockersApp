@@ -12,6 +12,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import Register from "./components/auth/Register";
 import Login from "./components/auth/Login";
+import ForgotPassword from "./components/auth/ForgotPassword";
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
@@ -56,6 +57,7 @@ function App() {
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/product/:id" element={<Product />} />
             <Route path="/order/:id" element={<Order />} />
             <Route path="/note/:id" element={<Note />} />

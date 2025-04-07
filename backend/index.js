@@ -14,6 +14,8 @@ const productsRoute = require("./routes/products");
 const notesRoute = require("./routes/laundryNotes");
 const ServiceRoute = require("./routes/laundryServices");
 const products = require("./products");
+const firebaseAuth = require("./routes/firebaseAuth");
+
 
 require("dotenv").config();
 
@@ -67,6 +69,8 @@ app.use(
   notesRoute
 );
 app.use("/api/services", ServiceRoute);
+app.use("/api/auth", firebaseAuth);
+
 
 // ✅ Ruta raíz y productos
 app.get("/", (req, res) => {

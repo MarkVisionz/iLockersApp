@@ -130,7 +130,7 @@ const FloatingObjects = () => {
     group.current.forEach((body, i) => {
       if (!body || !body.translation || !body.applyImpulse) return;
       const { x, y, z } = body.translation();
-      const toCenter = new THREE.Vector3(-x, -y, -z).normalize().multiplyScalar(10);
+      const toCenter = new THREE.Vector3(-x, -y, -z).normalize().multiplyScalar(0.05);
       body.applyImpulse(toCenter, true);
     });
   });

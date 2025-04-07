@@ -137,7 +137,7 @@ const UserProfile = () => {
     <StyledProfile>
       <ProfileContainer>
         <Header>
-          <Avatar>{user.name.charAt(0).toUpperCase()}</Avatar>
+        <Avatar>{user.name?.charAt(0)?.toUpperCase() || "U"}</Avatar>
           <h3>{user.name}</h3>
           <RoleTag isAdmin={user.isAdmin}>
             {user.isAdmin ? <MdOutlineAdminPanelSettings /> : <MdOutlinePerson />}

@@ -20,6 +20,9 @@ import {
   ForgotLink,
 } from "./StyledForm";
 import { LoginBackground } from "../LoginBackground";
+import GoogleLoginButton from "./GoogleLoginButton";
+import FacebookLoginButton from "./FacebookLoginButton";
+import AppleLoginButton from "./AppleLoginButton";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -167,6 +170,12 @@ const Login = () => {
                   )}
                 </ButtonLogin>
 
+                <Divider>o continúa con: </Divider>
+
+                <GoogleLoginButton />
+                <FacebookLoginButton />
+                <AppleLoginButton/>
+
                 <SignupPrompt>
                   ¿No tienes una cuenta? <Link to="/register">Regístrate</Link>
                 </SignupPrompt>
@@ -187,6 +196,31 @@ const AttemptsWarning = styled.div`
   text-align: center;
   font-weight: 500;
   margin-bottom: 0.5rem;
+`;
+
+const Divider = styled.div`
+  text-align: center;
+  color: #aaa;
+  font-size: 0.85rem;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: #ddd;
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
+  }
 `;
 
 export default Login;

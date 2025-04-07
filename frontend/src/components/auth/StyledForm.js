@@ -121,7 +121,7 @@ export const ButtonLogin = styled.button`
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.5rem;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
