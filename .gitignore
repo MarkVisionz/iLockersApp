@@ -1,4 +1,6 @@
+.DS_Store
+backend/.DS_Store
+backend/utils/firebase-admin.json
 node_modules/
 .env
-firebase-admin.json
-dist/
+dist/n
