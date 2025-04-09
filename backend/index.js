@@ -16,6 +16,7 @@ const ServiceRoute = require("./routes/laundryServices");
 const products = require("./products");
 const firebaseAuth = require("./routes/firebaseAuth");
 
+require("./cron/cleanUnverifiedUsersJob");
 
 require("dotenv").config();
 
@@ -95,10 +96,10 @@ server.listen(PORT, () => {
 
   // Escuchar eventos socket
   io.on("connection", (socket) => {
-    console.log("🟢 New client connected: " + socket.id);
+    // console.log("🟢 New client connected: " + socket.id);
 
     socket.on("disconnect", () => {
-      console.log("🔴 Client disconnected: " + socket.id);
+      // console.log("🔴 Client disconnected: " + socket.id);
     });
   });
 });

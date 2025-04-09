@@ -13,6 +13,9 @@ import "react-toastify/dist/ReactToastify.css";
 import Register from "./components/auth/Register";
 import Login from "./components/auth/Login";
 import ForgotPassword from "./components/auth/ForgotPassword";
+import ResetPassword from "./components/auth/ResetPassword";
+import EmailVerification from "./components/auth/EmailVerification";
+import ProtectedVerificationRoute from "./components/auth/ProtectedRoute";
 
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
@@ -45,7 +48,7 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <ToastContainer limit={3} />
-        
+
         <NavBar />
         <div className="content-container">
           <Routes>
@@ -57,7 +60,17 @@ function App() {
             <Route path="/checkout-success" element={<CheckoutSuccess />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/verify-email"
+              element={
+                <ProtectedVerificationRoute>
+                  <EmailVerification />
+                </ProtectedVerificationRoute>
+              }
+            />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+
             <Route path="/product/:id" element={<Product />} />
             <Route path="/order/:id" element={<Order />} />
             <Route path="/note/:id" element={<Note />} />

@@ -1,38 +1,77 @@
-// src/components/Auth/FacebookLoginButton.jsx
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { auth as authFirebase, facebookProvider } from "../../features/firebase-config";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { loginWithGoogle } from "../../features/authSlice"; // Reutilizamos la misma acción
-import styled from "styled-components";
+import { loginWithToken } from "../../features/authSlice";
+import { loginWithFirebaseToken } from "../../services/authApiService";
 import { FaFacebookSquare } from "react-icons/fa";
+import { useState } from "react";
+import styled from "styled-components";
+import { launchConfetti } from "../../utils/confetti";
 
 
 const FacebookLoginButton = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const auth = useSelector((state) => state.auth);
+  const [localStatus, setLocalStatus] = useState({
+    loading: false,
+    error: null,
+  });
 
   const handleFacebookLogin = async () => {
+    setLocalStatus({ loading: true, error: null });
+
     try {
+      // ✅ 1. Establecer persistencia en localStorage
+      await setPersistence(authFirebase, browserLocalPersistence);
+
+      // ✅ 2. Autenticación con Facebook
       const result = await signInWithPopup(authFirebase, facebookProvider);
-      const token = await result.user.getIdToken();
-      await dispatch(loginWithGoogle(token)).unwrap();
+      const user = result.user;
+
+      if (!user.email) {
+        throw new Error("Tu cuenta de Facebook no tiene correo asociado");
+      }
+
+      // ✅ 3. Obtener token de Firebase
+      const token = await user.getIdToken(true);
+
+      // ✅ 4. Llamar al backend para crear o cargar usuario
+      const res = await loginWithFirebaseToken(
+        token,
+        user.displayName || user.email.split("@")[0]
+      );
+
+      // ✅ 5. Guardar token en Redux
+      await dispatch(loginWithToken({ token: res.token })).unwrap();
+
+      // ✅ 6. Redirigir
       navigate("/cart");
-    } catch (err) {
-      console.error("❌ Error Facebook Auth:", err);
+      launchConfetti();
+    } catch (error) {
+      console.error("❌ Error en Facebook Auth:", error);
+      setLocalStatus({
+        loading: false,
+        error: error.message || "Error al autenticar con Facebook",
+      });
     }
   };
 
   return (
-    <FacebookButton type="button" onClick={handleFacebookLogin} disabled={auth.loginStatus === "pending"}>
+    <FacebookButton
+      type="button"
+      onClick={handleFacebookLogin}
+      disabled={localStatus.loading}
+      aria-busy={localStatus.loading}
+    >
       <FaFacebookSquare size={24} />
-      {auth.loginStatus === "pending" ? "Cargando..." : "Continuar con Facebook"}
+      {localStatus.loading ? "Cargando..." : "Continuar con Facebook"}
+      {localStatus.error && (
+        <span className="sr-only">Error: {localStatus.error}</span>
+      )}
     </FacebookButton>
   );
 };
-
-export default FacebookLoginButton;
 
 const FacebookButton = styled.button`
   width: 100%;
@@ -55,3 +94,5 @@ const FacebookButton = styled.button`
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 `;
+
+export default FacebookLoginButton;

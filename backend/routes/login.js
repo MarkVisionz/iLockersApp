@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { User } = require("../models/user");
+const User = require("../models/user"); // ✅ sin destructuring
 const Joi = require("joi");
 const express = require("express");
 const genAuthToken = require("../utils/genAuthToken");
@@ -47,6 +47,14 @@ router.post("/", loginLimiter, async (req, res) => {
       return res.status(401).json({
         success: false,
         message: "Correo o contraseña incorrectos",
+      });
+    }
+
+    // Verificar si la cuenta es social (Google, Facebook, Apple)
+    if (user.password === "firebase_oauth") {
+      return res.status(400).json({
+        success: false,
+        message: "Esta cuenta fue creada con Google/Facebook/Apple. Por favor inicia sesión con ese método.",
       });
     }
 

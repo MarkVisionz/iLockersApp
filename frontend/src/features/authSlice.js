@@ -1,31 +1,41 @@
-// authSlice.js actualizado con finalizeFirebaseRegistration
+// src/features/authSlice.js
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { jwtDecode } from "jwt-decode";
-import { loginUserApi, loginWithGoogleApi } from "../services/authApiService";
+import { auth } from "../features/firebase-config";
+import { deleteUser } from "firebase/auth";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signInWithEmailAndPassword,
-  onAuthStateChanged,
 } from "firebase/auth";
-import { auth } from "../features/firebase-config";
 import axios from "axios";
+import { loginUserApi, loginWithFirebaseToken } from "../services/authApiService";
+import {isFirebaseUser} from "../utils/checkFireBaseUser"
 
+// 🔧 Helper para errores consistentes
+const formatError = (error) => ({
+  message: error.response?.data?.message || error.message,
+  code: error.code,
+  fields: error.response?.data?.errors || [],
+});
+
+// 🧠 Estado inicial
 const initialState = {
   token: localStorage.getItem("token"),
   name: "",
   email: "",
   _id: "",
   isAdmin: false,
-  registerStatus: "",
-  registerError: "",
-  loginStatus: "",
-  loginError: "",
+  registerStatus: "", // pending | email_sent | finalizing | completed | mongo_failed | failed
+  registerError: null,
+  loginStatus: "", // pending | success | failed
+  loginError: null,
   userLoaded: false,
-  verificationEmail: "",
+  verificationEmail: localStorage.getItem("pendingVerificationEmail") || "",
+  profileComplete: false,
 };
 
-// REGISTRO y verificación
+// 📩 REGISTRO - Firebase + email verificación
 export const registerUser = createAsyncThunk(
   "auth/registerUser",
   async ({ name, email, password }, { rejectWithValue }) => {
@@ -33,175 +43,228 @@ export const registerUser = createAsyncThunk(
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await sendEmailVerification(cred.user);
 
+      localStorage.setItem("tempUserData", JSON.stringify({ name, email }));
+
       return {
-        status: "verification_sent",
         email: cred.user.email,
         name,
+        uid: cred.user.uid,
       };
-    } catch (err) {
-      return rejectWithValue([{ field: "form", message: err.message }]);
+    } catch (error) {
+      return rejectWithValue(formatError(error));
     }
   }
 );
 
-// Finaliza registro y guarda en Mongo después de verificar
+// 📦 FINALIZAR registro: guarda en MongoDB
 export const finalizeFirebaseRegistration = createAsyncThunk(
   "auth/finalizeFirebaseRegistration",
-  async ({ email, name }, { rejectWithValue }) => {
+  async ({ email, name, uid }, { rejectWithValue }) => {
     try {
       const res = await axios.post("/api/auth/firebase-register", {
         email,
         name,
-        password: "firebase_oauth",
+        password: uid, // puedes cambiar esto si manejas passwords reales
+        profileComplete: false,
+        firebaseUid: uid, // 🆕 importante para poder luego eliminar en Firebase
       });
 
+      localStorage.removeItem("tempUserData");
       return res.data;
     } catch (error) {
-      return rejectWithValue("Error al guardar en MongoDB");
+      console.error("❌ Error en MongoDB. Intentando eliminar usuario en Firebase...");
+
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          await deleteUser(currentUser);
+          console.log("🗑️ Usuario eliminado de Firebase por fallo en MongoDB");
+        } catch (deleteErr) {
+          console.error("⚠️ No se pudo eliminar de Firebase:", deleteErr.message);
+        }
+      }
+
+      return rejectWithValue(formatError(error));
     }
   }
 );
 
-// LOGIN tradicional
+// 🔐 LOGIN usando Firebase token
+const handleLogin = async (authFn, credentials) => {
+  try {
+    const userCredential = await authFn(
+      auth,
+      credentials.email,
+      credentials.password
+    );
+    await userCredential.user.reload();
+
+    if (!userCredential.user.emailVerified) {
+      throw { code: "auth/email-not-verified", message: "Email no verificado" };
+    }
+
+    const token = await userCredential.user.getIdToken();
+
+    const res = await axios.post("/api/auth/firebase-login", {
+      token,
+      name:
+        credentials.name ||
+        userCredential.user.displayName ||
+        userCredential.user.email.split("@")[0],
+    });
+
+    localStorage.setItem("token", res.data.token);
+    return res.data.token;
+  } catch (error) {
+    throw formatError(error);
+  }
+};
+
+// 🚪 LOGIN email/password
 export const loginUser = createAsyncThunk(
   "auth/loginUser",
-  async (user, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
-      const res = await loginUserApi(user);
-      const { token } = res.data;
+      const useFirebase = await isFirebaseUser(credentials.email);
+
+      if (useFirebase) {
+        // 🔐 Login Firebase
+        return await handleLogin(signInWithEmailAndPassword, credentials);
+      } else {
+        // 🔐 Login tradicional (MongoDB)
+        const res = await loginUserApi(credentials); // ← este ya guarda el token en localStorage
+        return res; // retorna el token para ser decodificado por jwtDecode
+      }
+    } catch (error) {
+      return rejectWithValue(error);
+    }
+  }
+);
+
+
+
+
+// Login with Token
+export const loginWithToken = createAsyncThunk(
+  "auth/loginWithToken",
+  async ({ token }, { rejectWithValue }) => {
+    try {
+      const decoded = jwtDecode(token);
       localStorage.setItem("token", token);
       return token;
-    } catch (err) {
-      const errorData = err.response?.data;
-      return rejectWithValue(
-        errorData?.errors || {
-          message: errorData?.message || "Error al iniciar sesión",
-        }
-      );
+    } catch (error) {
+      return rejectWithValue({
+        message: "Token inválido",
+        code: "auth/invalid-token",
+      });
     }
   }
 );
 
-// LOGIN CON GOOGLE
-export const loginWithGoogle = createAsyncThunk(
-  "auth/loginWithGoogle",
-  async (token, { rejectWithValue }) => {
-    try {
-      const res = await loginWithGoogleApi(token);
-      localStorage.setItem("token", res.data.token);
-      return res.data.token;
-    } catch (err) {
-      return rejectWithValue({ message: "Error en login con Google" });
-    }
-  }
-);
-
+// 🍰 SLICE
 const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
     loadUser(state) {
-      const token = state.token;
+      const token = state.token || localStorage.getItem("token");
       if (token) {
-        const user = jwtDecode(token);
-        return {
-          ...state,
-          token,
-          name: user.name,
-          email: user.email,
-          _id: user._id,
-          isAdmin: user.isAdmin,
-          userLoaded: true,
-        };
+        try {
+          const user = jwtDecode(token);
+          return {
+            ...state,
+            ...user,
+            token,
+            userLoaded: true,
+          };
+        } catch {
+          return { ...state, userLoaded: true };
+        }
       }
       return { ...state, userLoaded: true };
     },
     logoutUser(state) {
       localStorage.removeItem("token");
-      return {
-        ...initialState,
-        token: "",
-      };
+      localStorage.removeItem("pendingVerificationEmail");
+      return initialState;
+    },
+    clearVerification(state) {
+      state.verificationEmail = "";
+      localStorage.removeItem("pendingVerificationEmail");
+    },
+    setVerificationEmail(state, action) {
+      state.verificationEmail = action.payload;
+      localStorage.setItem("pendingVerificationEmail", action.payload);
+    },
+    resetAuthErrors(state) {
+      state.loginError = null;
+      state.registerError = null;
     },
   },
   extraReducers: (builder) => {
     builder
+      // ⏳ Registro
       .addCase(registerUser.pending, (state) => {
         state.registerStatus = "pending";
-        state.registerError = "";
+        state.registerError = null;
       })
-      .addCase(registerUser.fulfilled, (state, action) => {
+      .addCase(registerUser.fulfilled, (state, { payload }) => {
         state.registerStatus = "email_sent";
-        state.verificationEmail = action.payload.email;
-        state.name = action.payload.name;
-        state.registerError = "";
+        state.verificationEmail = payload.email;
+        state.name = payload.name;
+        localStorage.setItem("pendingVerificationEmail", payload.email);
       })
-      .addCase(registerUser.rejected, (state, action) => {
-        state.registerStatus = "rejected";
-        state.registerError = action.payload;
+      .addCase(registerUser.rejected, (state, { payload }) => {
+        state.registerStatus = "failed";
+        state.registerError = payload;
       })
 
+      // ✅ Finalizar registro
       .addCase(finalizeFirebaseRegistration.pending, (state) => {
-        state.registerStatus = "saving_user";
+        state.registerStatus = "finalizing";
       })
-      .addCase(finalizeFirebaseRegistration.fulfilled, (state) => {
+      .addCase(finalizeFirebaseRegistration.fulfilled, (state, { payload }) => {
         state.registerStatus = "completed";
+        state.token = payload.token;
+        state.profileComplete = payload.user.profileComplete;
       })
-      .addCase(finalizeFirebaseRegistration.rejected, (state) => {
-        state.registerStatus = "mongo_error";
+      .addCase(finalizeFirebaseRegistration.rejected, (state, { payload }) => {
+        state.registerStatus = "mongo_failed";
+        state.registerError = payload;
       })
 
+      // 🔑 Login
       .addCase(loginUser.pending, (state) => {
         state.loginStatus = "pending";
-        state.loginError = "";
+        state.loginError = null;
       })
-      .addCase(loginUser.fulfilled, (state, action) => {
-        const user = jwtDecode(action.payload);
-        state.token = action.payload;
-        state.name = user.name;
-        state.email = user.email;
-        state._id = user._id;
-        state.isAdmin = user.isAdmin;
-        state.loginStatus = "success";
-        state.loginError = "";
+      .addCase(loginUser.fulfilled, (state, { payload }) => {
+        const user = jwtDecode(payload);
+        Object.assign(state, {
+          ...user,
+          token: payload,
+          loginStatus: "success",
+        });
       })
-      .addCase(loginUser.rejected, (state, action) => {
-        state.loginStatus = "rejected";
-        state.loginError = Array.isArray(action.payload)
-          ? action.payload
-          : [
-              {
-                field: "form",
-                message: action.payload?.message || "Error inesperado",
-              },
-            ];
+      .addCase(loginUser.rejected, (state, { payload }) => {
+        state.loginStatus = "failed";
+        state.loginError = payload;
       })
-
-      .addCase(loginWithGoogle.pending, (state) => {
-        state.loginStatus = "pending";
-        state.loginError = "";
+      .addCase(loginWithToken.fulfilled, (state, { payload }) => {
+        const user = jwtDecode(payload);
+        Object.assign(state, {
+          ...user,
+          token: payload,
+          loginStatus: "success",
+        });
       })
-      .addCase(loginWithGoogle.fulfilled, (state, action) => {
-        const user = jwtDecode(action.payload);
-        state.token = action.payload;
-        state.name = user.name;
-        state.email = user.email;
-        state._id = user._id;
-        state.isAdmin = user.isAdmin;
-        state.loginStatus = "success";
-        state.loginError = "";
-      })
-      .addCase(loginWithGoogle.rejected, (state, action) => {
-        state.loginStatus = "rejected";
-        state.loginError = [
-          {
-            field: "form",
-            message: action.payload?.message || "Error en login con Google",
-          },
-        ];
+      .addCase(loginWithToken.rejected, (state, { payload }) => {
+        state.loginStatus = "failed";
+        state.loginError = payload;
       });
   },
 });
 
-export const { loadUser, logoutUser } = authSlice.actions;
+export const { loadUser, logoutUser, clearVerification, setVerificationEmail, resetAuthErrors } =
+  authSlice.actions;
 export default authSlice.reducer;

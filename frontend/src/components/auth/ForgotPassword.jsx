@@ -1,17 +1,25 @@
 // src/components/Auth/ForgotPassword.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../features/firebase-config";
 import styled from "styled-components";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { ErrorMessage } from "../LoadingAndError";
-
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => navigate("/login"), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, navigate]);
 
   const handleReset = async (e) => {
     e.preventDefault();
@@ -33,27 +41,50 @@ const ForgotPassword = () => {
   };
 
   return (
-    <Container as={motion.div} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <Title>Recuperar contraseña</Title>
-      <form onSubmit={handleReset}>
+    <Container
+      as={motion.div}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8 }}
+    >
+      <Title>🔐 Recuperar contraseña</Title>
+      <Subtitle>Te enviaremos un enlace para restaurar tu contraseña</Subtitle>
+
+      <motion.form
+        onSubmit={handleReset}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+      >
         <Input
           type="email"
           placeholder="Correo registrado"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          aria-label="Correo electrónico"
         />
+
         {error && <ErrorMessage message={error} />}
-        {success && <p style={{ color: "green", marginTop: "1rem" }}> ✅ Correo enviado correctamente</p>}
-        <Button type="submit" disabled={loading}>
+
+        {success && (
+          <SuccessBox
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            ✅ Correo enviado correctamente. Serás redirigido al login en unos segundos...
+          </SuccessBox>
+        )}
+
+        <Button type="submit" disabled={loading} whileTap={{ scale: 0.97 }}>
           {loading ? "Enviando..." : "Enviar correo de recuperación"}
         </Button>
-      </form>
+      </motion.form>
     </Container>
   );
 };
 
 export default ForgotPassword;
-
 
 const Container = styled.div`
   max-width: 400px;
@@ -62,23 +93,35 @@ const Container = styled.div`
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  text-align: center;
+
+  @media (max-width: 480px) {
+    margin: 2rem 1rem;
+    padding: 1.5rem;
+  }
 `;
 
 const Title = styled.h2`
-  text-align: center;
   color: #007bff;
+  font-size: 1.6rem;
+`;
+
+const Subtitle = styled.p`
+  font-size: 0.95rem;
+  color: #666;
+  margin-top: 0.5rem;
 `;
 
 const Input = styled.input`
   width: 100%;
   padding: 0.8rem;
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   border-radius: 8px;
   border: 1px solid #ccc;
   font-size: 1rem;
 `;
 
-const Button = styled.button`
+const Button = styled(motion.button)`
   width: 100%;
   padding: 0.9rem;
   margin-top: 1.5rem;
@@ -88,9 +131,19 @@ const Button = styled.button`
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: background 0.3s ease;
 
   &:hover {
     background: #0069d9;
   }
+`;
+
+const SuccessBox = styled(motion.div)`
+  margin-top: 1.5rem;
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
 `;

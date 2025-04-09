@@ -1,12 +1,14 @@
+// src/components/Auth/Login.jsx
 import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../../features/authSlice";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import styled from "styled-components";
 import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import { useLoginForm } from "./Hooks/useLoginForm";
+
 import {
   BackgroundWrapper,
   PageWrapper,
@@ -19,6 +21,7 @@ import {
   TogglePasswordButton,
   ForgotLink,
 } from "./StyledForm";
+
 import { LoginBackground } from "../LoginBackground";
 import GoogleLoginButton from "./GoogleLoginButton";
 import FacebookLoginButton from "./FacebookLoginButton";
@@ -65,6 +68,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
+
     setIsSubmitting(true);
     try {
       const result = await dispatch(loginUser(formData)).unwrap();
@@ -145,21 +149,19 @@ const Login = () => {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       aria-label={
-                        showPassword
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
+                        showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
                       }
                     >
                       {showPassword ? <FiEyeOff /> : <FiEye />}
                     </TogglePasswordButton>
                   </PasswordWrapper>
-                  {errors.password && (
-                    <ErrorMessage message={errors.password} />
-                  )}
+                  {errors.password && <ErrorMessage message={errors.password} />}
                 </FormGroup>
 
                 <ForgotLink>
-                  <Link to="/forgot-password">¿Olvidaste tu contraseña?</Link>
+                  <Link to="/forgot-password" aria-label="Recuperar contraseña">
+                    ¿Olvidaste tu contraseña?
+                  </Link>
                 </ForgotLink>
 
                 <ButtonLogin disabled={isSubmitting} aria-busy={isSubmitting}>
@@ -170,11 +172,11 @@ const Login = () => {
                   )}
                 </ButtonLogin>
 
-                <Divider>o continúa con: </Divider>
+                <Divider>o continúa con:</Divider>
 
                 <GoogleLoginButton />
                 <FacebookLoginButton />
-                <AppleLoginButton/>
+                <AppleLoginButton />
 
                 <SignupPrompt>
                   ¿No tienes una cuenta? <Link to="/register">Regístrate</Link>
@@ -188,8 +190,9 @@ const Login = () => {
   );
 };
 
-// Styled Components (actualizados)
+export default Login;
 
+// Estilos adicionales
 const AttemptsWarning = styled.div`
   color: #dc3545;
   font-size: 0.9rem;
@@ -222,5 +225,3 @@ const Divider = styled.div`
     right: 0;
   }
 `;
-
-export default Login;

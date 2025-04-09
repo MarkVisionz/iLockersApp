@@ -1,42 +1,77 @@
-// src/components/Auth/AppleLoginButton.jsx
 import { signInWithPopup, OAuthProvider } from "firebase/auth";
 import { auth as authFirebase } from "../../features/firebase-config";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { loginWithGoogle } from "../../features/authSlice";
-import styled from "styled-components";
+import { loginUser } from "../../features/authSlice"; // ✅ unificado
+import { loginWithFirebaseToken } from "../../services/authApiService";
 import { FaApple } from "react-icons/fa";
-
+import { useState } from "react";
+import styled from "styled-components";
 
 const AppleLoginButton = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const auth = useSelector((state) => state.auth);
+  const [localStatus, setLocalStatus] = useState({
+    loading: false,
+    error: null,
+  });
 
   const handleAppleLogin = async () => {
+    setLocalStatus({ loading: true, error: null });
+
     try {
+      // 1. Configuración del proveedor Apple
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
 
+      // 2. Autenticación con Apple
       const result = await signInWithPopup(authFirebase, provider);
-      const token = await result.user.getIdToken();
-      await dispatch(loginWithGoogle(token)).unwrap();
+      const user = result.user;
+
+      // 3. Validar si tiene email
+      if (!user.email) {
+        throw new Error("Tu cuenta de Apple no proporciona correo electrónico");
+      }
+
+      // 4. Obtener token desde Firebase
+      const token = await user.getIdToken(true);
+
+      // 5. Enviar token al backend y obtener respuesta
+      const res = await loginWithFirebaseToken(
+        token,
+        user.displayName || user.email.split("@")[0]
+      );
+
+      // 6. Guardar en Redux el token autenticado
+      await dispatch(loginUser({ token })).unwrap();
+
+      // 7. Redirigir
       navigate("/cart");
-    } catch (err) {
-      console.error("❌ Error Apple Auth:", err);
+    } catch (error) {
+      console.error("❌ Error en Apple Auth:", error);
+      setLocalStatus({
+        loading: false,
+        error: error.message || "Error al autenticar con Apple",
+      });
     }
   };
 
   return (
-    <AppleButton type="button" onClick={handleAppleLogin} disabled={auth.loginStatus === "pending"}>
+    <AppleButton
+      type="button"
+      onClick={handleAppleLogin}
+      disabled={localStatus.loading}
+      aria-busy={localStatus.loading}
+    >
       <FaApple size={24} />
-      {auth.loginStatus === "pending" ? "Cargando..." : "Continuar con Apple"}
+      {localStatus.loading ? "Cargando..." : "Continuar con Apple"}
+      {localStatus.error && (
+        <span className="sr-only">Error: {localStatus.error}</span>
+      )}
     </AppleButton>
   );
 };
-
-export default AppleLoginButton;
 
 const AppleButton = styled.button`
   width: 100%;
@@ -59,3 +94,5 @@ const AppleButton = styled.button`
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 `;
+
+export default AppleLoginButton;

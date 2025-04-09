@@ -6,6 +6,8 @@ import { useFirebaseRegisterForm } from "./Hooks/useFirebaseRegisterForm";
 import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import styled from "styled-components";
 import { FiEye, FiEyeOff } from "react-icons/fi";
+import { useSelector } from "react-redux";
+
 import {
   BackgroundWrapper,
   PageWrapper,
@@ -21,11 +23,10 @@ import { LoginBackground } from "../LoginBackground";
 import GoogleLoginButton from "./GoogleLoginButton";
 import AppleLoginButton from "./AppleLoginButton";
 import FacebookLoginButton from "./FacebookLoginButton";
-import EmailVerification from "./EmailVerification"; // ✅ nuevo
 
 const Register = () => {
   const navigate = useNavigate();
-  const [showForm, setShowForm] = useState(false);
+  const verificationEmail = useSelector((state) => state.auth.verificationEmail);
 
   const {
     formData,
@@ -34,28 +35,16 @@ const Register = () => {
     isSubmitting,
     showPassword,
     setShowPassword,
-    setIsSubmitting,
     handleInputChange,
     handleBlur,
-    validateForm,
-    handleBackendError,
-    resetForm,
     handleSubmit,
-    verificationEmail, // ✅ nuevo
   } = useFirebaseRegisterForm();
 
   useEffect(() => {
-    const hasSeenWelcome = localStorage.getItem("hasSeenWelcomeRegister");
-    if (hasSeenWelcome) {
-      setShowForm(true);
-    } else {
-      const timer = setTimeout(() => {
-        setShowForm(true);
-        localStorage.setItem("hasSeenWelcomeRegister", "true");
-      }, 1800);
-      return () => clearTimeout(timer);
+    if (verificationEmail) {
+      navigate("/verify-email");
     }
-  }, []);
+  }, [verificationEmail, navigate]);
 
   const hasFieldErrors = Object.keys(errors).some(
     (key) => key !== "form" && errors[key]
@@ -65,129 +54,115 @@ const Register = () => {
     <LoginBackground>
       <BackgroundWrapper>
         <PageWrapper>
-          {showForm && (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
+          <motion.div
+            key="form"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <Form
+              onSubmit={handleSubmit}
+              className={errors.form || hasFieldErrors ? "shake" : ""}
+              aria-label="Formulario de registro"
             >
-              {verificationEmail ? (
-                <EmailVerification email={formData.email} password={formData.password} />
+              <Title>Crear cuenta</Title>
+              <Subtitle>
+                Regístrate para comenzar con Easy Laundry
+              </Subtitle>
 
-              ) : (
-                <Form
-                  onSubmit={handleSubmit}
-                  className={errors.form || hasFieldErrors ? "shake" : ""}
-                  aria-label="Formulario de registro"
-                >
-                  <Title>Crear cuenta</Title>
-                  <Subtitle>
-                    Regístrate para comenzar con Easy Laundry
-                  </Subtitle>
-                  <FormGroup>
-                    <label htmlFor="name">Nombre</label>
-                    <input
-                      type="text"
-                      name="name"
-                      id="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      onBlur={handleBlur}
-                      placeholder="Nombre completo"
-                      aria-required="true"
-                      aria-invalid={!!errors.name}
-                      aria-describedby={
-                        errors.name ? "name-error" : undefined
-                      }
-                    />
-                    {errors.name && (
-                      <ErrorMessage id="name-error" message={errors.name} />
-                    )}
-                  </FormGroup>
+              <FormGroup>
+                <label htmlFor="name">Nombre</label>
+                <input
+                  type="text"
+                  name="name"
+                  id="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  onBlur={handleBlur}
+                  placeholder="Nombre completo"
+                  aria-required="true"
+                  aria-invalid={!!errors.name}
+                  aria-describedby={errors.name ? "name-error" : undefined}
+                />
+                {errors.name && (
+                  <ErrorMessage id="name-error" message={errors.name} />
+                )}
+              </FormGroup>
 
-                  <FormGroup>
-                    <label htmlFor="email">Correo</label>
-                    <input
-                      type="email"
-                      name="email"
-                      id="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      onBlur={handleBlur}
-                      placeholder="Correo electrónico"
-                      aria-required="true"
-                      aria-invalid={!!errors.email}
-                      aria-describedby={
-                        errors.email ? "email-error" : undefined
-                      }
-                    />
-                    {errors.email && (
-                      <ErrorMessage id="email-error" message={errors.email} />
-                    )}
-                  </FormGroup>
+              <FormGroup>
+                <label htmlFor="email">Correo</label>
+                <input
+                  type="email"
+                  name="email"
+                  id="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  onBlur={handleBlur}
+                  placeholder="Correo electrónico"
+                  aria-required="true"
+                  aria-invalid={!!errors.email}
+                  aria-describedby={errors.email ? "email-error" : undefined}
+                />
+                {errors.email && (
+                  <ErrorMessage id="email-error" message={errors.email} />
+                )}
+              </FormGroup>
 
-                  <FormGroup>
-                    <label htmlFor="password">Contraseña</label>
-                    <PasswordWrapper>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        name="password"
-                        id="password"
-                        value={formData.password}
-                        onChange={handleInputChange}
-                        onBlur={handleBlur}
-                        placeholder="Contraseña segura"
-                        aria-required="true"
-                        aria-invalid={!!errors.password}
-                        aria-describedby={
-                          errors.password ? "password-error" : undefined
-                        }
-                      />
-                      <TogglePasswordButton
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        aria-label={
-                          showPassword
-                            ? "Ocultar contraseña"
-                            : "Mostrar contraseña"
-                        }
-                      >
-                        {showPassword ? <FiEyeOff /> : <FiEye />}
-                      </TogglePasswordButton>
-                    </PasswordWrapper>
-                    {errors.password && (
-                      <ErrorMessage
-                        id="password-error"
-                        message={errors.password}
-                      />
-                    )}
-                  </FormGroup>
+              <FormGroup>
+                <label htmlFor="password">Contraseña</label>
+                <PasswordWrapper>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    id="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    onBlur={handleBlur}
+                    placeholder="Contraseña segura"
+                    aria-required="true"
+                    aria-invalid={!!errors.password}
+                    aria-describedby={
+                      errors.password ? "password-error" : undefined
+                    }
+                  />
+                  <TogglePasswordButton
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    {showPassword ? <FiEyeOff /> : <FiEye />}
+                  </TogglePasswordButton>
+                </PasswordWrapper>
+                {errors.password && (
+                  <ErrorMessage
+                    id="password-error"
+                    message={errors.password}
+                  />
+                )}
+              </FormGroup>
 
-                  <ButtonLogin disabled={isSubmitting} type="submit">
-                    {isSubmitting ? (
-                      <LoadingSpinner message="Registrando..." />
-                    ) : (
-                      "Crear cuenta"
-                    )}
-                  </ButtonLogin>
+              <ButtonLogin disabled={isSubmitting} type="submit">
+                {isSubmitting ? (
+                  <LoadingSpinner message="Registrando..." />
+                ) : (
+                  "Crear cuenta"
+                )}
+              </ButtonLogin>
 
-                  {errors.form && <ErrorMessage message={errors.form} />}
+              {errors.form && <ErrorMessage message={errors.form} />}
 
-                  <Divider>o continúa con </Divider>
+              <Divider>o continúa con </Divider>
 
-                  <GoogleLoginButton />
-                  <FacebookLoginButton />
-                  <AppleLoginButton />
+              <GoogleLoginButton />
+              <FacebookLoginButton />
+              <AppleLoginButton />
 
-                  <SignupPrompt>
-                    ¿Ya tienes una cuenta?{" "}
-                    <Link to="/login">Inicia sesión</Link>
-                  </SignupPrompt>
-                </Form>
-              )}
-            </motion.div>
-          )}
+              <SignupPrompt>
+                ¿Ya tienes una cuenta?{" "}
+                <Link to="/login">Inicia sesión</Link>
+              </SignupPrompt>
+            </Form>
+          </motion.div>
         </PageWrapper>
       </BackgroundWrapper>
     </LoginBackground>
@@ -196,16 +171,15 @@ const Register = () => {
 
 export default Register;
 
+// Estilos locales
 const Title = styled.h2`
   font-size: 1.6rem;
   text-align: center;
-  margin-bottom: 0.25rem;
 `;
 
 const Subtitle = styled.p`
   text-align: center;
   font-size: 0.95rem;
-  margin-bottom: 1rem;
   color: #888;
 `;
 
