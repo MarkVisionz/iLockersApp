@@ -28,11 +28,12 @@ const ProductsList = () => {
 
   const filteredItems = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.name.toLowerCase().includes(lowerCaseQuery) ||
-        item.price.toString().includes(lowerCaseQuery) ||
-        item._id.includes(lowerCaseQuery)
+    return items.filter((item) =>
+      [item.name, item.price, item.category, item.description, item._id]
+        .filter(Boolean)
+        .some((val) =>
+          val.toString().toLowerCase().includes(lowerCaseQuery)
+        )
     );
   }, [items, searchQuery]);
 
@@ -64,7 +65,6 @@ const ProductsList = () => {
 
   const confirmDelete = async () => {
     if (itemToDelete === "all") {
-      // Borrar todos en paralelo sin toast individuales
       await Promise.all(
         filteredItems.map((item) =>
           dispatch(productDelete({ id: item._id, silent: true }))
@@ -76,7 +76,6 @@ const ProductsList = () => {
     }
     setShowModal(false);
   };
-  
 
   const handleDeleteAll = () => {
     if (filteredItems.length === 0) {
@@ -97,11 +96,11 @@ const ProductsList = () => {
         setSortConfig={setSortConfig}
         navigate={navigate}
       />
-     {filteredItems.length > 0 && (
-  <DeleteAllButton onClick={handleDeleteAll}>
-    Borrar todos los productos
-  </DeleteAllButton>
-)}
+      {filteredItems.length > 0 && (
+        <DeleteAllButton onClick={handleDeleteAll}>
+          Borrar todos los productos
+        </DeleteAllButton>
+      )}
 
       <ProductContainer>
         {paginatedItems.length ? (
@@ -114,15 +113,17 @@ const ProductsList = () => {
             />
           ))
         ) : (
-          <NoProducts>No products available.</NoProducts>
+          <NoProducts>No hay productos disponibles.</NoProducts>
         )}
       </ProductContainer>
+
       <Pagination
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         totalNotes={filteredItems.length}
         itemsPerPage={itemsPerPage}
       />
+
       <SimpleConfirmationModal
         showModal={showModal}
         handleClose={() => setShowModal(false)}
@@ -144,7 +145,7 @@ export default ProductsList;
 
 const Container = styled.div`
   width: 100%;
-  margin-top: 2rem;
+  margin-top: 1rem;
 `;
 
 const ProductContainer = styled.div`

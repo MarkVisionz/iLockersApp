@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider /*, OAuthProvider */ } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
 // 🔒 Apple login future-ready (requiere cuenta Apple Developer)
 // const appleProvider = new OAuthProvider("apple.com");
@@ -17,8 +18,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 const facebookProvider = new FacebookAuthProvider();
 
 // export { auth, googleProvider, facebookProvider, appleProvider }; // ← Habilita esto cuando tengas Apple Dev
-export { auth, googleProvider, facebookProvider };
+export { auth, googleProvider, facebookProvider, storage };

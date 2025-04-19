@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { FaArrowUp, FaArrowDown } from "react-icons/fa";
 import { IoSearch } from "react-icons/io5";
+import { motion, AnimatePresence } from "framer-motion";
+import useMediaQuery from "../../../../../utils/useMediaQuery";
 
 const ProductFilters = ({
   searchQuery,
@@ -9,7 +11,11 @@ const ProductFilters = ({
   sortConfig,
   setSortConfig,
   navigate,
+  hideCreateButton = false,
 }) => {
+  const isMobile = useMediaQuery("(max-width: 600px)");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   const handleSortChange = (e) => {
     setSortConfig((prevSortField) => ({
       ...prevSortField,
@@ -24,48 +30,113 @@ const ProductFilters = ({
     }));
   };
 
+  const toggleFilters = () => {
+    setShowMobileFilters((prev) => !prev);
+  };
+
   return (
     <FiltersContainer>
-      {/* Sort Options */}
-      <FilterItem>
-        <Label>Sort by:</Label>
-        <SortWrapper>
-          <SortSelect onChange={handleSortChange} value={sortConfig.field}>
-            <option value="">Sort by</option>
-            <option value="name">Name</option>
-            <option value="weight">Weight</option>
-            <option value="price">Price</option>
-            <option value="sold">Most Sold</option>
-          </SortSelect>
-          <SortButton onClick={toggleSortOrder}>
-            {sortConfig.direction === "ascending" ? (
-              <FaArrowUp />
-            ) : (
-              <FaArrowDown />
-            )}
-          </SortButton>
-        </SortWrapper>
-      </FilterItem>
-
-      {/* Search Input */}
-      <FilterItem>
-        <Label>Search:</Label>
+      {/* Search Bar - Always visible */}
+      <SearchFilterItem>
         <SearchWrapper>
-          <SearchIcon />
+          <SearchIcon aria-hidden="true" />
           <SearchInput
             type="text"
-            placeholder="Search by name, price, or ID"
+            placeholder="Nombre, precio, categoría o ID"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Buscar productos"
           />
-          {/* Create Button */}
-          <PrimaryButton
-            onClick={() => navigate("/admin/products/create-product")}
-          >
-            Create
-          </PrimaryButton>
         </SearchWrapper>
-      </FilterItem>
+
+        {isMobile && (
+          <ToggleFiltersButton
+            onClick={toggleFilters}
+            aria-expanded={showMobileFilters}
+            aria-controls="mobile-filters"
+          >
+            {showMobileFilters ? "Ocultar filtros" : "Mostrar filtros"}
+          </ToggleFiltersButton>
+        )}
+
+        {!hideCreateButton && (
+          <CreateButton
+            onClick={() => navigate("/admin/products/create-product")}
+            aria-label="Crear nuevo producto"
+          >
+            Crear
+          </CreateButton>
+        )}
+      </SearchFilterItem>
+
+      {/* Other filters - Animated for mobile */}
+      <AnimatePresence>
+        {(!isMobile || showMobileFilters) && (
+          <MotionFiltersWrapper
+            id="mobile-filters"
+            key="filters"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
+            <FiltersGrid>
+              {/* Category filter */}
+              <FilterItem>
+                <Label htmlFor="category-select">Categoría:</Label>
+                <SortSelect
+                  id="category-select"
+                  onChange={(e) =>
+                    setSearchQuery(
+                      e.target.value === "all" ? "" : e.target.value
+                    )
+                  }
+                  value={searchQuery === "" ? "all" : searchQuery}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="all">Todas</option>
+                  <option value="ropa común">Ropa común</option>
+                  <option value="ropa de cama">Ropa de cama</option>
+                </SortSelect>
+              </FilterItem>
+
+              {/* Sort filter */}
+              <FilterItem>
+                <Label htmlFor="sort-select">Ordenar por:</Label>
+                <SortWrapper>
+                  <SortSelect
+                    id="sort-select"
+                    onChange={handleSortChange}
+                    value={sortConfig.field}
+                    aria-label="Ordenar productos por"
+                  >
+                    <option value="">Ordenar por</option>
+                    <option value="name">Nombre</option>
+                    <option value="weight">Peso</option>
+                    <option value="price">Precio</option>
+                    <option value="sold">Más vendidos</option>
+                    <option value="category">Categoría</option>
+                  </SortSelect>
+                  <SortButton
+                    onClick={toggleSortOrder}
+                    aria-label={`Orden ${
+                      sortConfig.direction === "ascending"
+                        ? "ascendente"
+                        : "descendente"
+                    }`}
+                  >
+                    {sortConfig.direction === "ascending" ? (
+                      <FaArrowUp />
+                    ) : (
+                      <FaArrowDown />
+                    )}
+                  </SortButton>
+                </SortWrapper>
+              </FilterItem>
+            </FiltersGrid>
+          </MotionFiltersWrapper>
+        )}
+      </AnimatePresence>
     </FiltersContainer>
   );
 };
@@ -75,89 +146,92 @@ export default ProductFilters;
 // Styled Components
 const FiltersContainer = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
   background-color: #f8f9fa;
-  padding: 1rem 1.5rem;
+  padding: 1rem;
   border-radius: 12px;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
 
-  @media (max-width: 768px) {
+  @media (min-width: 601px) {
+    padding: 1.5rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+`;
+
+const SearchFilterItem = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  @media (min-width: 601px) {
+    flex: 1 1 300px;
+    max-width: auto;
+    flex-direction: row;
+    align-items: center;
+  }
+`;
+
+const MotionFiltersWrapper = styled(motion.div)`
+  width: 100%;
+  overflow: hidden;
+`;
+
+const FiltersGrid = styled.div`
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+
+  @media (min-width: 601px) {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    align-items: center;
     gap: 1.5rem;
+  }
+`;
+
+const FilterItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+
+  @media (min-width: 601px) {
+    flex: 1 1 200px;
   }
 `;
 
 const Label = styled.label`
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 600;
   color: #333;
-`;
-
-const FilterItem = styled.div`
-  flex: 1 1 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-
-  @media (max-width: 600px) {
-    width: 100%;
-  }
 `;
 
 const SortWrapper = styled.div`
   display: flex;
-  align-items: center;
   gap: 0.5rem;
-
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.8rem;
-  }
-`;
-
-const SearchWrapper = styled.div`
-  position: relative;
   width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-`;
-
-const SearchIcon = styled(IoSearch)`
-  position: absolute;
-  top: 50%;
-  left: 0.8rem;
-  transform: translateY(-50%);
-  font-size: 1.2rem;
-  color: #aaa;
-
-  @media (max-width: 600px) {
-    font-size: 1rem;
-  }
 `;
 
 const SortSelect = styled.select`
   padding: 0.5rem 1rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #333;
   cursor: pointer;
   flex: 1;
   transition: border-color 0.3s ease;
+  width: 100%;
 
   &:focus {
     border-color: #007bff;
     outline: none;
-  }
-
-  @media (max-width: 600px) {
-    width: 100%;
-    font-size: 0.9rem;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
 `;
 
@@ -166,63 +240,92 @@ const SortButton = styled.button`
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 0.5rem 0.8rem;
+  padding: 0.5rem;
   cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s ease;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
 
   &:hover {
     background-color: #0056b3;
   }
 
-  @media (max-width: 600px) {
-    width: 100%;
-    font-size: 0.9rem;
-    padding: 0.5rem;
+  &:focus {
+    outline: 2px solid #0056b3;
+    outline-offset: 2px;
   }
 `;
 
+const SearchWrapper = styled.div`
+  position: relative;
+  width: 100%;
+  flex: 1;
+`;
+
 const SearchInput = styled.input`
-  padding: 0.5rem 1rem;
-  padding-left: 2.5rem; /* To account for the icon */
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
   width: 100%;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #333;
-  transition: border-color 0.3s ease;
+  transition: all 0.3s ease;
 
   &:focus {
     border-color: #007bff;
     outline: none;
-  }
-
-  @media (max-width: 600px) {
-    font-size: 0.9rem;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
 `;
 
-const PrimaryButton = styled.button`
-  background-color: #007bff;
+const SearchIcon = styled(IoSearch)`
+  position: absolute;
+  top: 50%;
+  left: 0.8rem;
+  transform: translateY(-50%);
+  font-size: 1rem;
+  color: #aaa;
+`;
+
+const ToggleFiltersButton = styled.button`
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  background: #007bff;
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  width: 100%;
+  transition: all 0.3s ease;
 
   &:hover {
     background-color: #0056b3;
   }
 
-  &:focus {
-    outline: none;
+  @media (min-width: 601px) {
+    display: none;
+  }
+`;
+
+const CreateButton = styled.button`
+  background:#0056b3;
+  color: white;
+  border: none;
+  padding: 0.5rem 3rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+
+  &:hover {
+    background-color: #007bff;
   }
 
   @media (max-width: 600px) {
     width: 100%;
-    font-size: 0.9rem;
-    padding: 0.5rem;
   }
 `;

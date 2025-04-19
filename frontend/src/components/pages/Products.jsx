@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from "react-router-dom";
-import { AdminHeaders, PrimaryButton } from "./CommonStyled";
+import { AdminHeaders } from "../admin/CommonStyled";
 
 const Products = () => {
   const navigate = useNavigate();

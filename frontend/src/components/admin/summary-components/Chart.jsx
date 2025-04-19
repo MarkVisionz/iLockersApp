@@ -1,4 +1,3 @@
-// components/summary-components/Chart.jsx
 import { useEffect, useMemo } from "react";
 import styled from "styled-components";
 import {
@@ -12,8 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchWeekSales, updateStatsFromSocket } from "../../../features/ordersSlice";
-import socket from "../../../features/socket";
+import { fetchWeekSales } from "../../../features/ordersSlice";
 import { LoadingSpinner } from "../../LoadingAndError";
 
 const Chart = () => {
@@ -35,18 +33,6 @@ const Chart = () => {
 
   useEffect(() => {
     dispatch(fetchWeekSales());
-
-    const handleStatsUpdate = (payload) => {
-      if (payload?.type === "weekly") {
-        dispatch(updateStatsFromSocket(payload));
-      }
-    };
-
-    socket.on("statsUpdated", handleStatsUpdate);
-
-    return () => {
-      socket.off("statsUpdated", handleStatsUpdate);
-    };
   }, [dispatch]);
 
   return (

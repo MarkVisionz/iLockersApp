@@ -85,11 +85,6 @@ export const productDelete = createAsyncThunk(
         setHeaders()
       );
 
-      // Solo mostrar toast si no es eliminación silenciosa
-      if (!silent) {
-        toast.error("Producto eliminado");
-      }
-
       return response.data;
     } catch (error) {
       console.log(error);
@@ -101,14 +96,27 @@ export const productDelete = createAsyncThunk(
   }
 );
 
-
 const productSlice = createSlice({
   name: "products",
   initialState,
-  reducers: {},
+  reducers: {
+    addProductFromSocket: (state, action) => {
+      state.items.push(action.payload);
+    },
+    updateProductFromSocket: (state, action) => {
+      state.items = state.items.map((item) =>
+        item._id === action.payload._id ? action.payload : item
+      );
+    },
+    deleteProductFromSocket: (state, action) => {
+      state.items = state.items.filter((item) => item._id !== action.payload);
+    },
+    addMultipleProductsFromSocket: (state, action) => {
+      state.items = [...state.items, ...action.payload];
+    },
+  },
   extraReducers: (builder) => {
     builder
-      /////////// PRODUCTS FETCH
       .addCase(productsFetch.pending, (state) => {
         state.status = "pending";
       })
@@ -119,8 +127,6 @@ const productSlice = createSlice({
       .addCase(productsFetch.rejected, (state) => {
         state.status = "rejected";
       })
-
-      /////////// PRODUCTS CREATE
       .addCase(productsCreate.pending, (state) => {
         state.createStatus = "pending";
       })
@@ -132,8 +138,6 @@ const productSlice = createSlice({
       .addCase(productsCreate.rejected, (state) => {
         state.createStatus = "rejected";
       })
-
-      /////////// BULK CREATE
       .addCase(bulkCreateProducts.fulfilled, (state, action) => {
         state.items = [...state.items, ...action.payload];
         toast.success("Productos cargados exitosamente");
@@ -141,8 +145,6 @@ const productSlice = createSlice({
       .addCase(bulkCreateProducts.rejected, (state, action) => {
         toast.error(action.payload || "Error al cargar productos en masa");
       })
-
-      /////////// PRODUCTS DELETE
       .addCase(productDelete.pending, (state) => {
         state.deleteStatus = "pending";
       })
@@ -153,13 +155,11 @@ const productSlice = createSlice({
         state.deleteStatus = "success";
         if (!action.meta.arg?.silent) {
           toast.error("Product Deleted");
-        }        
+        }
       })
       .addCase(productDelete.rejected, (state) => {
         state.deleteStatus = "rejected";
       })
-
-      /////////// PRODUCTS EDIT
       .addCase(productsEdit.pending, (state) => {
         state.editStatus = "pending";
       })
@@ -176,5 +176,12 @@ const productSlice = createSlice({
       });
   },
 });
+
+export const {
+  addProductFromSocket,
+  updateProductFromSocket,
+  deleteProductFromSocket,
+  addMultipleProductsFromSocket,
+} = productSlice.actions;
 
 export default productSlice.reducer;

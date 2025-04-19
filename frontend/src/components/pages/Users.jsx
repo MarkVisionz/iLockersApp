@@ -1,4 +1,4 @@
-import UsersList from "./list/UsersList";
+import UsersList from "../admin/list/UsersList";
 
 const Users = () => {
   return (

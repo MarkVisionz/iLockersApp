@@ -1,5 +1,11 @@
 import { useDispatch, useSelector } from "react-redux";
-import { addToCart, clearCart, decreaseCart, removeFromCart, getTotals } from "../features/cartSlice";
+import {
+  addToCart,
+  clearCart,
+  decreaseCart,
+  removeFromCart,
+  getTotals,
+} from "../../features/cartSlice";
 import styled from "styled-components";
 import {
   AiOutlinePlus,
@@ -10,9 +16,12 @@ import {
   AiOutlineClose,
 } from "react-icons/ai";
 import { useEffect, useState } from "react";
-import PayButton from "./PayButton";
+import PayButton from "../PayButton";
 import { useNavigate } from "react-router-dom";
-import { LoadingSpinner, ErrorMessage } from "./LoadingAndError";
+import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
+import Pagination from "../admin/list/SummaryHelpers/pagination";
+import { motion, AnimatePresence } from "framer-motion";
+import ProductFilters from "../admin/list/ListHelpers/ProductHelpers/ProductFilter";
 
 const Cart = () => {
   const { items: products, status } = useSelector((state) => state.products);
@@ -23,6 +32,13 @@ const Cart = () => {
 
   const [quantities, setQuantities] = useState({});
   const [cartVisible, setCartVisible] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortConfig, setSortConfig] = useState({
+    field: "",
+    direction: "ascending",
+  });
+  const itemsPerPage = 6;
 
   useEffect(() => {
     dispatch(getTotals());
@@ -39,7 +55,8 @@ const Cart = () => {
   const handleClickQuantity = (productId, type) => {
     setQuantities((prev) => {
       const current = prev[productId] || 1;
-      const newQty = type === "increase" ? current + 1 : Math.max(1, current - 1);
+      const newQty =
+        type === "increase" ? current + 1 : Math.max(1, current - 1);
       return { ...prev, [productId]: newQty };
     });
   };
@@ -57,12 +74,48 @@ const Cart = () => {
   const handleDecrease = (item) => dispatch(decreaseCart(item));
   const handleClearCart = () => dispatch(clearCart());
 
+  const filteredProducts = products
+    .filter((product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      const { field, direction } = sortConfig;
+      if (!field) return 0;
+
+      let aValue = a[field];
+      let bValue = b[field];
+
+      if (typeof aValue === "string") aValue = aValue.toLowerCase();
+      if (typeof bValue === "string") bValue = bValue.toLowerCase();
+
+      if (aValue < bValue) return direction === "ascending" ? -1 : 1;
+      if (aValue > bValue) return direction === "ascending" ? 1 : -1;
+      return 0;
+    });
+
+  const totalFiltered = filteredProducts.length;
+  const paginatedProducts = filteredProducts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <HomeWrapper>
       <Header>
         <h2>Explora nuestros productos</h2>
         <p>Agrega tu ropa sin salir de casa</p>
       </Header>
+
+      <DesktopFiltersWrapper>
+        <ProductFilters
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          sortConfig={sortConfig}
+          setSortConfig={setSortConfig}
+          navigate={navigate}
+          hideCreateButton={true}
+        />
+      </DesktopFiltersWrapper>
 
       <ResponsiveWrapper>
         <ToggleButton onClick={() => setCartVisible(!cartVisible)}>
@@ -102,7 +155,9 @@ const Cart = () => {
                 {auth._id ? (
                   <PayButton cartItems={cart.cartItems} />
                 ) : (
-                  <LoginBtn onClick={() => navigate("/login")}>Inicia sesión para pagar</LoginBtn>
+                  <LoginBtn onClick={() => navigate("/login")}>
+                    Inicia sesión para pagar
+                  </LoginBtn>
                 )}
                 <ClearCartBtn onClick={handleClearCart}>
                   <AiOutlineDelete /> Vaciar carrito
@@ -112,37 +167,70 @@ const Cart = () => {
           </CartSidebar>
         )}
 
+        <MobileFiltersWrapper>
+          <ProductFilters
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            sortConfig={sortConfig}
+            setSortConfig={setSortConfig}
+            navigate={navigate}
+            hideCreateButton={true}
+          />
+        </MobileFiltersWrapper>
+
         <Grid>
           {status === "success" ? (
-            products.map((product) => (
-              <Card key={product._id}>
-                <ImageWrapper>
-                  <img src={product.image?.url} alt={product.name} />
-                </ImageWrapper>
-                <Info>
-                  <Name>{product.name}</Name>
-                  <Weight>Peso Unitario: {product.weight}g</Weight>
-                  <Price>Precio: $ {product.price.toFixed(2)}</Price>
-                  <QuantityControls>
-                    <QtyButton onClick={() => handleClickQuantity(product._id, "decrease")}>
-                      <AiOutlineMinus />
-                    </QtyButton>
-                    <QtyInput
-                      type="number"
-                      min="1"
-                      value={quantities[product._id] || 1}
-                      onChange={(e) => handleManualQuantityChange(product._id, e.target.value)}
-                    />
-                    <QtyButton onClick={() => handleClickQuantity(product._id, "increase")}>
-                      <AiOutlinePlus />
-                    </QtyButton>
-                  </QuantityControls>
-                  <AddButton onClick={() => handleAddToCart(product)}>
-                    Agregar al carrito
-                  </AddButton>
-                </Info>
-              </Card>
-            ))
+            <AnimatePresence mode="wait">
+              {paginatedProducts.map((product) => (
+                <motion.div
+                  key={product._id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <Card>
+                    <ImageWrapper>
+                      <img src={product.image?.url} alt={product.name} />
+                    </ImageWrapper>
+                    <Info>
+                      <Name>{product.name}</Name>
+                      <Weight>Peso Unitario: {product.weight}g</Weight>
+                      <Price>Precio: $ {product.price.toFixed(2)}</Price>
+                      <QuantityControls>
+                        <QtyButton
+                          onClick={() =>
+                            handleClickQuantity(product._id, "decrease")
+                          }
+                        >
+                          <AiOutlineMinus />
+                        </QtyButton>
+                        <QtyInput
+                          type="number"
+                          min="1"
+                          value={quantities[product._id] || 1}
+                          onChange={(e) =>
+                            handleManualQuantityChange(
+                              product._id,
+                              e.target.value
+                            )
+                          }
+                        />
+                        <QtyButton
+                          onClick={() =>
+                            handleClickQuantity(product._id, "increase")
+                          }
+                        >
+                          <AiOutlinePlus />
+                        </QtyButton>
+                      </QuantityControls>
+                      <AddButton onClick={() => handleAddToCart(product)}>
+                        Agregar al carrito
+                      </AddButton>
+                    </Info>
+                  </Card>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           ) : status === "pending" ? (
             <LoadingSpinner message={"Cargando productos..."}></LoadingSpinner>
           ) : (
@@ -150,17 +238,25 @@ const Cart = () => {
           )}
         </Grid>
       </ResponsiveWrapper>
+
+      {totalFiltered > itemsPerPage && (
+        <Pagination
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalNotes={totalFiltered}
+          itemsPerPage={itemsPerPage}
+        />
+      )}
     </HomeWrapper>
   );
 };
 
 export default Cart;
 
-// COMPONENTES DE ESTILO
-
 const HomeWrapper = styled.div`
   padding: 2rem;
   background-color: #f4f6f8;
+  
 `;
 
 const Header = styled.div`
@@ -421,3 +517,22 @@ const ToggleButton = styled.button`
     display: none;
   }
 `;
+
+const DesktopFiltersWrapper = styled.div`
+  display: block;
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const MobileFiltersWrapper = styled.div`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+  }
+`;
+

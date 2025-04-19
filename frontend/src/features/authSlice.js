@@ -200,6 +200,16 @@ const authSlice = createSlice({
       state.loginError = null;
       state.registerError = null;
     },
+    loginUserSuccess(state, action) {
+      const user = jwtDecode(action.payload);
+      Object.assign(state, {
+        ...user,
+        token: action.payload,
+        loginStatus: "success",
+        loginError: null,
+      });
+    }
+    
   },
   extraReducers: (builder) => {
     builder
@@ -265,6 +275,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { loadUser, logoutUser, clearVerification, setVerificationEmail, resetAuthErrors } =
+export const { loadUser, logoutUser, clearVerification, setVerificationEmail, resetAuthErrors, loginUserSuccess } =
   authSlice.actions;
 export default authSlice.reducer;

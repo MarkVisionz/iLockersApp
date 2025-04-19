@@ -1,153 +1,178 @@
-// src/components/Auth/ResetPassword.jsx
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
-import { auth } from "../../features/firebase-config";
+import { auth as firebaseAuth } from "../../features/firebase-config";
+import axios from "axios";
+import { url, setHeaders } from "../../features/api";
+import { toast } from "react-toastify";
 import styled from "styled-components";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ErrorMessage } from "../LoadingAndError";
 
 const ResetPassword = () => {
-  const [searchParams] = useSearchParams();
-  const [verified, setVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
+  const [oobCode, setOobCode] = useState("");
   const navigate = useNavigate();
-
-  const oobCode = searchParams.get("oobCode");
+  const location = useLocation();
 
   useEffect(() => {
-    if (!oobCode) {
-      setError("Código inválido o expirado.");
+    const params = new URLSearchParams(location.search);
+    const code = params.get("oobCode");
+    if (code) {
+      setOobCode(code);
+      // Verificar el código
+      verifyPasswordResetCode(firebaseAuth, code)
+        .then((email) => {
+          console.log("Código de restablecimiento válido para:", email);
+        })
+        .catch((err) => {
+          console.error("Error al verificar código:", err);
+          setError("Enlace inválido o expirado");
+        });
+    } else {
+      setError("No se proporcionó un código de restablecimiento");
+    }
+  }, [location.search]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      setLoading(false);
       return;
     }
 
-    // Verificar que el código es válido
-    verifyPasswordResetCode(auth, oobCode)
-      .then((email) => {
-        setEmail(email);
-        setVerified(true);
-      })
-      .catch(() => {
-        setError("El enlace ha expirado o es inválido.");
-      });
-  }, [oobCode]);
-
-  const handleReset = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (!newPassword || newPassword.length < 6) {
-      return setError("La contraseña debe tener al menos 6 caracteres.");
+    if (newPassword.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
+      setLoading(false);
+      return;
     }
 
-    setLoading(true);
     try {
-      await confirmPasswordReset(auth, oobCode, newPassword);
-      setSuccess(true);
-      setTimeout(() => navigate("/login"), 4000);
-    } catch (err) {
-      setError("No se pudo cambiar la contraseña. Intenta de nuevo.");
-      console.error("❌ Error confirmando reset:", err);
+      // Aplicar el restablecimiento en Firebase
+      await confirmPasswordReset(firebaseAuth, oobCode, newPassword);
+      console.log("Contraseña restablecida en Firebase");
+
+      // Obtener el usuario actual (debería estar autenticado tras el restablecimiento)
+      const currentUser = firebaseAuth.currentUser;
+      if (!currentUser) {
+        throw new Error("No se pudo autenticar al usuario tras el restablecimiento");
+      }
+
+      const idToken = await currentUser.getIdToken(true);
+      console.log("Token obtenido:", idToken.slice(0, 10) + "...");
+
+      // Actualizar authProvider en el backend
+      const res = await axios.put(
+        `${url}/users/${currentUser.uid}`,
+        {
+          authProvider: "password",
+          fromResetFlow: true,
+        },
+        {
+          headers: {
+            ...setHeaders().headers,
+            Authorization: `Bearer ${idToken}`,
+          },
+        }
+      );
+
+      if (res.status === 200 && res.data.success) {
+        console.log("Backend actualizado: authProvider = password");
+        toast.success("¡Contraseña establecida! Inicia sesión con tu nueva contraseña.");
+        navigate("/login");
+      } else {
+        throw new Error(res.data.message || "Error al actualizar el backend");
+      }
+    } catch (error) {
+      console.error("Error al restablecer contraseña:", error);
+      setError(error.message || "Error al establecer la contraseña");
+      toast.error(error.message || "Error al establecer la contraseña");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Wrapper
-      as={motion.div}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8 }}
-    >
-      <h2>🔐 Nueva contraseña</h2>
-      {!verified && !error && <p>Verificando enlace...</p>}
-
-      {error && <ErrorMessage message={error} />}
-
-      {verified && !success && (
-        <form onSubmit={handleReset}>
-          <Label>Correo: {email}</Label>
-          <Input
+    <ResetContainer>
+      <h2>Establecer nueva contraseña</h2>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <ResetForm onSubmit={handleSubmit}>
+        <label>
+          Nueva contraseña
+          <input
             type="password"
-            placeholder="Nueva contraseña"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={6}
           />
-          <Button type="submit" disabled={loading}>
-            {loading ? "Cambiando..." : "Cambiar contraseña"}
-          </Button>
-        </form>
-      )}
-
-      {success && (
-        <SuccessMessage>
-          ✅ Contraseña actualizada correctamente. Serás redirigido al login.
-        </SuccessMessage>
-      )}
-    </Wrapper>
+        </label>
+        <label>
+          Confirmar contraseña
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+        </label>
+        <button type="submit" disabled={loading || !oobCode}>
+          {loading ? "Procesando..." : "Establecer contraseña"}
+        </button>
+      </ResetForm>
+    </ResetContainer>
   );
 };
 
 export default ResetPassword;
 
-// Estilos
-const Wrapper = styled.div`
+const ResetContainer = styled.div`
   max-width: 400px;
-  margin: 5rem auto;
+  margin: 2rem auto;
   padding: 2rem;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.1);
   text-align: center;
+`;
 
-  @media (max-width: 480px) {
-    margin: 2rem 1rem;
-    padding: 1.5rem;
+const ResetForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  label {
+    font-weight: bold;
+    text-align: left;
   }
-`;
 
-const Label = styled.p`
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-  color: #333;
-`;
-
-const Input = styled.input`
-  width: 100%;
-  padding: 0.8rem;
-  margin: 1rem 0;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
-`;
-
-const Button = styled.button`
-  width: 100%;
-  padding: 0.9rem;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.3s;
-
-  &:hover {
-    background: #0069d9;
+  input {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
   }
-`;
 
-const SuccessMessage = styled.div`
-  margin-top: 2rem;
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-  padding: 1rem;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  button {
+    background: #007bff;
+    color: white;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+
+    &:hover {
+      background: #0056b3;
+    }
+
+    &:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+  }
 `;

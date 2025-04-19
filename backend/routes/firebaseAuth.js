@@ -1,6 +1,6 @@
 const express = require("express");
 const admin = require("firebase-admin");
-const User = require("../models/user"); // ✅ Asegúrate que sea default export
+const User = require("../models/user");
 const genAuthToken = require("../utils/genAuthToken");
 const cors = require("cors");
 
@@ -17,7 +17,7 @@ if (!admin.apps.length) {
 
 // 🔐 LOGIN con Firebase
 router.post("/firebase-login", async (req, res) => {
-  console.log("Iniciando autenticación Firebase");
+  console.log("Iniciando autenticación Firebase:", req.body); // Log temporal
 
   try {
     const { token, name: userName } = req.body;
@@ -28,40 +28,55 @@ router.post("/firebase-login", async (req, res) => {
 
     const decoded = await admin.auth().verifyIdToken(token, true);
     const { email, email_verified, uid } = decoded;
+    const authProvider = decoded.firebase?.sign_in_provider || "password";
 
-    if (!decoded.email_verified && decoded.firebase?.sign_in_provider !== "facebook.com") {
-      console.error("Email no verificado para:", decoded.email);
+    if (!email_verified && authProvider !== "facebook.com") {
+      console.log("Email no verificado:", email);
       return res.status(403).json({
         message: "Por favor verifica tu email antes de continuar",
-        email: decoded.email,
+        email,
       });
     }
-    
 
     let user = await User.findOne({ email });
 
     if (!user) {
       const name = userName || decoded.name || email.split("@")[0];
-
       user = new User({
         name,
         email,
-        password: "firebase_oauth", // clave para detectar login social
+        password: "firebase_oauth",
         isAdmin: false,
         isVerified: true,
+        authProvider,
       });
+      await user.save();
+      console.log("✅ Nuevo usuario creado:", email, "Proveedor:", authProvider);
+    } else {
+      if (user.authProvider !== authProvider) {
+        if (user.authProvider !== "password" && authProvider === "password") {
+          console.log(
+            `🛠️ Actualizando authProvider de ${email} a "password" (flujo de reset)`
+          );
+          user.authProvider = "password";
+        } else {
+          return res.status(400).json({
+            message: `Este correo ya está registrado con otro método de autenticación (${user.authProvider})`,
+          });
+        }
+      }
 
-      await user.save();
-      console.log("✅ Nuevo usuario creado:", email);
-    } else if (!user.name || user.name.trim().length === 0) {
-      user.name = userName || decoded.name || email.split("@")[0];
-      await user.save();
+      if (!user.name || user.name.trim().length === 0) {
+        user.name = userName || decoded.name || email.split("@")[0];
+        await user.save();
+      }
     }
 
     const jwtToken = genAuthToken({
       _id: user._id,
       email: user.email,
       isAdmin: user.isAdmin,
+      authProvider: user.authProvider,
     });
 
     res.status(200).json({
@@ -71,19 +86,25 @@ router.post("/firebase-login", async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.isAdmin ? "admin" : "user",
+        authProvider: user.authProvider,
       },
     });
   } catch (error) {
-    console.error("❌ Error en firebase-login:", error.message);
+    console.error("❌ Error en firebase-login:", {
+      message: error.message,
+      code: error.code,
+    });
     res.status(500).json({
-      message: "Error interno del servidor durante el login con Firebase",
-      details: error.message,
+      message: "Error al procesar la autenticación",
+      details: error.message || "Error desconocido",
     });
   }
 });
 
-// ✅ REGISTRO vía Firebase (finaliza después de verificación)
+// ✅ REGISTRO vía Firebase
 router.post("/firebase-register", async (req, res) => {
+  console.log("Iniciando registro Firebase:", req.body); // Log temporal
+
   try {
     const { email, name, password } = req.body;
 
@@ -91,17 +112,17 @@ router.post("/firebase-register", async (req, res) => {
       return res.status(400).json({ message: "Faltan campos requeridos" });
     }
 
-    let user = await User.findOne({ email });
-
-    if (user) {
-      return res.status(400).json({ message: "El usuario ya existe" });
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "El correo ya está registrado" });
     }
 
-    user = new User({
+    const user = new User({
       email,
       name,
       password,
       isVerified: true,
+      authProvider: "password",
     });
 
     await user.save();
@@ -110,6 +131,7 @@ router.post("/firebase-register", async (req, res) => {
       _id: user._id,
       email: user.email,
       isAdmin: user.isAdmin,
+      authProvider: user.authProvider,
     });
 
     res.status(201).json({
@@ -118,11 +140,18 @@ router.post("/firebase-register", async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        authProvider: user.authProvider,
       },
     });
   } catch (error) {
-    console.error("❌ Error en firebase-register:", error.message);
-    res.status(500).json({ message: "Error al registrar usuario" });
+    console.error("❌ Error en firebase-register:", {
+      message: error.message,
+      code: error.code,
+    });
+    res.status(500).json({
+      message: "Error al registrar usuario",
+      details: error.message || "Error desconocido",
+    });
   }
 });
 

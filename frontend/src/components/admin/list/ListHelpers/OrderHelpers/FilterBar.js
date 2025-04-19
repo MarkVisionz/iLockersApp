@@ -1,8 +1,9 @@
-// FilterBar.js
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import { FaArrowUp, FaArrowDown } from "react-icons/fa";
 import { IoSearch } from "react-icons/io5";
+import { motion, AnimatePresence } from "framer-motion";
+import useMediaQuery from "../../../../../utils/useMediaQuery";
 
 const FilterBar = ({
   searchQuery,
@@ -12,6 +13,9 @@ const FilterBar = ({
   onlyShow,
   setOnlyShow,
 }) => {
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
   const handleSortChange = (e) => {
     setSortField((prevSortField) => ({
       ...prevSortField,
@@ -34,53 +38,97 @@ const FilterBar = ({
     setSearchQuery(e.target.value);
   };
 
+  const toggleFilters = () => {
+    setShowMobileFilters((prev) => !prev);
+  };
+
   return (
     <FiltersContainer>
-
-      {/* Search Bar */}
-      <FilterItem>
-        <Label>Search:</Label>
+      {/* Search Bar - Siempre visible */}
+      <SearchFilterItem>
         <SearchWrapper>
-          <SearchIcon />
+          <SearchIcon aria-hidden="true" />
           <SearchInput
             type="text"
             placeholder="Search by name or ID"
             value={searchQuery}
             onChange={handleSearchChange}
+            aria-label="Search by name or ID"
           />
         </SearchWrapper>
-      </FilterItem>
 
-      {/* Show Filter */}
-      <FilterItem>
-        <Label>Show:</Label>
-        <ShowSelect onChange={handleShowChange} value={onlyShow}>
-          <option value="">All</option>
-          <option value="pending">Pending</option>
-          <option value="dispatched">Dispatched</option>
-          <option value="delivered">Delivered</option>
-        </ShowSelect>
-      </FilterItem>
-      
-      {/* Sort Selector */}
-      <FilterItem>
-        <Label>Sort by:</Label>
-        <SortWrapper>
-          <SortSelect onChange={handleSortChange} value={sortField.field}>
-            <option value="">Select</option>
-            <option value="date">Date</option>
-            <option value="name">Name</option>
-            <option value="status">Status</option>
-          </SortSelect>
-          <SortButton onClick={toggleSortOrder}>
-            {sortField.direction === "ascending" ? (
-              <FaArrowUp />
-            ) : (
-              <FaArrowDown />
-            )}
-          </SortButton>
-        </SortWrapper>
-      </FilterItem>
+        {isMobile && (
+          <ToggleFiltersButton
+            onClick={toggleFilters}
+            aria-expanded={showMobileFilters}
+            aria-controls="mobile-filters"
+          >
+            {showMobileFilters ? "Hide filters" : "Show filters"}
+          </ToggleFiltersButton>
+        )}
+      </SearchFilterItem>
+
+      {/* Otros filtros - Animados para móviles */}
+      <AnimatePresence>
+        {(!isMobile || showMobileFilters) && (
+          <MotionFiltersWrapper
+            id="mobile-filters"
+            key="filters"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
+            <FiltersGrid>
+              {/* Show Filter */}
+              <FilterItem>
+                <Label htmlFor="filter-select">Filter:</Label>
+                <ShowSelect
+                  id="filter-select"
+                  onChange={handleShowChange}
+                  value={onlyShow}
+                  aria-label="Filter items"
+                >
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="dispatched">Dispatched</option>
+                  <option value="delivered">Delivered</option>
+                </ShowSelect>
+              </FilterItem>
+
+              {/* Sort Selector */}
+              <FilterItem>
+                <Label htmlFor="sort-select">Sort by:</Label>
+                <SortWrapper>
+                  <SortSelect
+                    id="sort-select"
+                    onChange={handleSortChange}
+                    value={sortField.field}
+                    aria-label="Sort items by"
+                  >
+                    <option value="">Select</option>
+                    <option value="date">Date</option>
+                    <option value="name">Name</option>
+                    <option value="status">Status</option>
+                  </SortSelect>
+                  <SortButton
+                    onClick={toggleSortOrder}
+                    aria-label={`Sort ${
+                      sortField.direction === "ascending" ? "descending" : "ascending"
+                    }`}
+                  >
+                    {sortField.direction === "ascending" ? (
+                      <FaArrowUp />
+                    ) : (
+                      <FaArrowDown />
+                    )}
+                  </SortButton>
+                </SortWrapper>
+              </FilterItem>
+            </FiltersGrid>
+          </MotionFiltersWrapper>
+        )}
+      </AnimatePresence>
     </FiltersContainer>
   );
 };
@@ -90,135 +138,82 @@ export default FilterBar;
 // Styled Components
 const FiltersContainer = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
+  flex-direction: column;
+  gap: 1rem;
   margin-bottom: 2rem;
-  justify-content: space-between;
-  align-items: center;
   background-color: #f8f9fa;
-  padding: 1rem 1.5rem;
+  padding: 1rem;
   border-radius: 12px;
   box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
 
-  @media (max-width: 768px) {
+  @media (min-width: 601px) {
+    padding: 1.5rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+`;
+
+const SearchFilterItem = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const MotionFiltersWrapper = styled(motion.div)`
+  width: 100%;
+  overflow: hidden;
+`;
+
+const FiltersGrid = styled.div`
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+
+  @media (min-width: 769px) {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    align-items: center;
     gap: 1.5rem;
   }
 `;
 
-const SearchWrapper = styled.div`
-  position: relative;
-  width: 100%;
-`;
-
 const FilterItem = styled.div`
-  flex: 1 1 200px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
 
-  @media (max-width: 600px) {
-    width: 100%;
+  @media (min-width: 769px) {
+    flex: 1 1 200px;
   }
 `;
 
 const Label = styled.label`
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 600;
   color: #333;
 `;
 
-const SortWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.8rem;
-  }
-`;
-
-const SortSelect = styled.select`
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 1rem;
-  color: #333;
-  cursor: pointer;
+const SearchWrapper = styled.div`
+  position: relative;
+  width: 100%;
   flex: 1;
-  transition: border-color 0.3s ease;
-
-  &:focus {
-    border-color: #007bff;
-    outline: none;
-  }
-
-  @media (max-width: 600px) {
-    width: 100%;
-    font-size: 0.9rem;
-  }
-`;
-
-const SortButton = styled.button`
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 0.5rem 0.8rem;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s ease;
-
-  &:hover {
-    background-color: #0056b3;
-  }
-
-  @media (max-width: 600px) {
-    width: 100%;
-    font-size: 0.9rem;
-    padding: 0.5rem;
-  }
-`;
-
-const ShowSelect = styled.select`
-  padding: 0.5rem 1rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 1rem;
-  color: #333;
-  cursor: pointer;
-  flex: 1;
-  transition: border-color 0.3s ease;
-
-  &:focus {
-    border-color: #007bff;
-    outline: none;
-  }
-
-  @media (max-width: 600px) {
-    width: 100%;
-    font-size: 0.9rem;
-  }
 `;
 
 const SearchInput = styled.input`
-  padding: 0.5rem 1rem;
-  padding-left: 2.5rem; /* To account for the icon */
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
   width: 100%;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #333;
-  transition: border-color 0.3s ease;
+  transition: all 0.3s ease;
 
   &:focus {
     border-color: #007bff;
     outline: none;
-  }
-
-  @media (max-width: 600px) {
-    font-size: 0.9rem;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
 `;
 
@@ -227,10 +222,70 @@ const SearchIcon = styled(IoSearch)`
   top: 50%;
   left: 0.8rem;
   transform: translateY(-50%);
-  font-size: 1.2rem;
+  font-size: 1rem;
   color: #aaa;
+`;
 
-  @media (max-width: 600px) {
-    font-size: 1rem;
+const ShowSelect = styled.select`
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #333;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.3s ease;
+
+  &:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+`;
+
+const SortWrapper = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+`;
+
+const SortSelect = styled(ShowSelect)``;
+
+const SortButton = styled.button`
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+
+  &:hover {
+    background-color: #0056b3;
+  }
+`;
+
+const ToggleFiltersButton = styled.button`
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #0056b3;
+  }
+
+  @media (min-width: 601px) {
+    display: none;
   }
 `;

@@ -1,7 +1,6 @@
 import styled from "styled-components";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { notesCreate, notesEdit, notesDelete } from "../../../features/notesSlice";
 import { getPeriodDates } from "./Helpers/dateUtils";
 import PeriodSection from "./Helpers/PeriodSection";
 import * as XLSX from "xlsx";
@@ -9,7 +8,6 @@ import { useNavigate } from "react-router-dom";
 import { LoadingSpinner } from "../../LoadingAndError";
 import moment from "moment";
 import { toast } from "react-toastify";
-import socket from "../../../features/socket";
 import "react-toastify/dist/ReactToastify.css";
 
 const Transactions = () => {
@@ -17,33 +15,16 @@ const Transactions = () => {
   const dispatch = useDispatch();
   const notes = useSelector((state) => state.notes.items);
   const isLoading = useSelector((state) => state.notes.status) === "pending";
-  const error = useSelector((state) => state.notes.status) === "rejected" ? "Error al cargar las notas" : null;
+  const error =
+    useSelector((state) => state.notes.status) === "rejected"
+      ? "Error al cargar las notas"
+      : null;
 
   const [reportStartDate, setReportStartDate] = useState("");
   const [reportEndDate, setReportEndDate] = useState("");
   const [exportSelectedPeriod, setExportSelectedPeriod] = useState("daily");
   const [showExportSection, setShowExportSection] = useState(false);
   const [periodSelected, setPeriodSelected] = useState("daily");
-
-  useEffect(() => {
-    socket.on("noteCreated", (newNote) => {
-      dispatch(notesCreate.fulfilled(newNote));
-    });
-
-    socket.on("noteUpdated", (updatedNote) => {
-      dispatch(notesEdit.fulfilled(updatedNote));
-    });
-
-    socket.on("noteDeleted", (deletedNote) => {
-      dispatch(notesDelete.fulfilled(deletedNote));
-    });
-
-    return () => {
-      socket.off("noteCreated");
-      socket.off("noteUpdated");
-      socket.off("noteDeleted");
-    };
-  }, [dispatch]);
 
   const { startDate: exportStartDate, endDate: exportEndDate } = useMemo(
     () => getPeriodDates(exportSelectedPeriod, reportStartDate, reportEndDate),
@@ -174,9 +155,7 @@ const Transactions = () => {
         !endDateMoment.isValid() ||
         startDateMoment.isAfter(endDateMoment)
       ) {
-        toast.error(
-          "Las fechas seleccionadas no son válidas. Asegúrate de que la fecha de inicio sea anterior a la fecha de fin."
-        );
+        toast.error("Las fechas seleccionadas no son válidas.");
         return;
       }
     }
@@ -195,7 +174,6 @@ const Transactions = () => {
         <ErrorMessage>{error}</ErrorMessage>
       </StyledTransactions>
     );
-
 
   return (
     <StyledTransactions>

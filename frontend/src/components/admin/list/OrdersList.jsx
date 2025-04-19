@@ -3,7 +3,11 @@ import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { ordersFetch, ordersEdit, ordersDelete } from "../../../features/ordersSlice";
+import {
+  ordersFetch,
+  ordersEdit,
+  ordersDelete,
+} from "../../../features/ordersSlice";
 import FilterBar from "./ListHelpers/OrderHelpers/FilterBar";
 import OrderCard from "./ListHelpers/OrderHelpers/OrderCard";
 import Pagination from "./SummaryHelpers/pagination";
@@ -12,21 +16,28 @@ import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
 const OrdersList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { list = [], loading, error } = useSelector((state) => state.orders);
+  const {
+    list = [],
+    loading,
+    error,
+    status,
+  } = useSelector((state) => state.orders);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortField, setSortField] = useState('');
-  const [onlyShow, setOnlyShow] = useState('');
+  const [sortField, setSortField] = useState("");
+  const [onlyShow, setOnlyShow] = useState("");
   const itemsPerPage = 4;
 
   useEffect(() => {
-    dispatch(ordersFetch());
-  }, [dispatch]);
+    if (status !== "succeeded") {
+      dispatch(ordersFetch());
+    }
+  }, [dispatch, status]);
 
   useEffect(() => {
-    let filtered = list.filter(order => {
+    let filtered = list.filter((order) => {
       const name = order?.shipping?.name || order?.customer_name || "";
       const total = order?.total?.toString() || "";
       const id = order?._id || "";
@@ -39,29 +50,34 @@ const OrdersList = () => {
     });
 
     if (onlyShow) {
-      if (onlyShow === 'day') {
-        filtered = filtered.filter(order =>
-          moment(order?.createdAt).isSame(moment(), 'day')
+      if (onlyShow === "day") {
+        filtered = filtered.filter((order) =>
+          moment(order?.createdAt).isSame(moment(), "day")
         );
       } else {
-        filtered = filtered.filter(order =>
-          order?.delivery_status === onlyShow
+        filtered = filtered.filter(
+          (order) => order?.delivery_status === onlyShow
         );
       }
     }
 
     if (sortField.field) {
       filtered = filtered.sort((a, b) => {
-        const isAscending = sortField.direction === 'ascending' ? 1 : -1;
+        const isAscending = sortField.direction === "ascending" ? 1 : -1;
 
-        if (sortField.field === 'date') {
-          return (new Date(a?.createdAt) - new Date(b?.createdAt)) * isAscending;
-        } else if (sortField.field === 'name') {
+        if (sortField.field === "date") {
+          return (
+            (new Date(a?.createdAt) - new Date(b?.createdAt)) * isAscending
+          );
+        } else if (sortField.field === "name") {
           const nameA = a?.shipping?.name || a?.customer_name || "";
           const nameB = b?.shipping?.name || b?.customer_name || "";
           return nameA.localeCompare(nameB) * isAscending;
-        } else if (sortField.field === 'status') {
-          return (a?.delivery_status || "").localeCompare(b?.delivery_status || "") * isAscending;
+        } else if (sortField.field === "status") {
+          return (
+            (a?.delivery_status || "").localeCompare(b?.delivery_status || "") *
+            isAscending
+          );
         }
 
         return 0;

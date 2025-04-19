@@ -83,6 +83,9 @@ const Dashboard = () => {
           <StyledNavLink to="/admin/notes-summary" onClick={handleLinkClick}>
             <FaTachometerAlt /> Local Laundry
           </StyledNavLink>
+          <StyledNavLink to="/admin/services" onClick={handleLinkClick}>
+            <FaTachometerAlt /> Laundry Services
+          </StyledNavLink>
         </SideNav>
 
         {/* Contenido Principal */}

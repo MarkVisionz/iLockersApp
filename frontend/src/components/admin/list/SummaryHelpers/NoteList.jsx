@@ -1,44 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
 import moment from "moment";
 import axios from "axios";
 import { url, setHeaders } from "../../../../features/api";
 import PasswordConfirmationModal from "../../../PasswordConfirmationModal";
-import { io } from "socket.io-client";
-import { useDispatch } from "react-redux";
-import {
-  notesCreate,
-  notesEdit,
-  notesDelete,
-} from "../../../../features/notesSlice";
-
-const socket = io(url);
 
 const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
   const [showModal, setShowModal] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const dispatch = useDispatch();
-
-  useEffect(() => {
-    socket.on("noteCreated", (newNote) => {
-      dispatch(notesCreate.fulfilled(newNote));
-    });
-
-    socket.on("noteUpdated", (updatedNote) => {
-      dispatch(notesEdit.fulfilled(updatedNote));
-    });
-
-    socket.on("noteDeleted", (deletedNote) => {
-      dispatch(notesDelete.fulfilled(deletedNote));
-    });
-
-    return () => {
-      socket.off("noteCreated");
-      socket.off("noteUpdated");
-      socket.off("noteDeleted");
-    };
-  }, [dispatch]);
 
   const handleWhatsAppMessage = (note, tipo) => {
     if (!note.phoneNumber) {
@@ -159,7 +129,7 @@ const renderStatus = (status) => {
   }
 };
 
-// Styled Components
+// Styled Components (sin cambios)
 const NoteContainer = styled.div`
   display: flex;
   flex-direction: column;

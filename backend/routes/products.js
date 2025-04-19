@@ -1,165 +1,140 @@
 const { Product } = require("../models/product");
 const { auth, isUser, isAdmin } = require("../middleware/auth");
 const cloudinary = require("../utils/cloudinary");
-
 const express = require("express");
 
 const router = express.Router();
 
-// CREATE A PRODUCT
-
+// 🟢 CREATE A PRODUCT
 router.post("/", isAdmin, async (req, res) => {
-  const { name, weight, price, image } = req.body;
+  const { name, weight, price, image, category, description } = req.body;
 
   try {
+    let imageUpload = null;
+
     if (image) {
-      const uploadRes = await cloudinary.uploader.upload(image, {
+      imageUpload = await cloudinary.uploader.upload(image, {
         upload_preset: "onlineLaundry",
       });
-
-      if (uploadRes) {
-        const product = new Product({
-          name,
-          weight,
-          price,
-          image: uploadRes,
-        });
-
-        const savedProduct = await product.save();
-
-        res.status(200).send(savedProduct);
-      }
     }
+
+    const product = new Product({
+      name,
+      weight,
+      price,
+      category,
+      description,
+      image: imageUpload || undefined, // solo si existe
+    });
+
+    const savedProduct = await product.save();
+
+    req.io.emit("productCreated", savedProduct);
+
+    res.status(201).send(savedProduct);
   } catch (error) {
     console.log(error);
-    res.status(500).send(error);
+    res.status(500).send("Error al crear el producto");
   }
 });
 
-// DELETE
-
+// 🗑️ DELETE PRODUCT
 router.delete("/:id", isAdmin, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).send("Producto no encontrado");
 
-    if (!product) return res.status(404).send("Product not found...");
-
-    if (product.image.public_id) {
-      const destroyResponse = await cloudinary.uploader.destroy(
-        product.image.public_id
-      );
-
-      if (destroyResponse) {
-        const deletedProduct = await Product.findByIdAndDelete(req.params.id);
-
-        res.status(200).send(deletedProduct);
-      }
-    } else {
-      console.log("Action terminated. Failed to deleted product image...");
+    if (product.image?.public_id) {
+      await cloudinary.uploader.destroy(product.image.public_id);
     }
+
+    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+
+    req.io.emit("productDeleted", deletedProduct);
+
+    res.status(200).send(deletedProduct);
   } catch (error) {
     res.status(500).send(error);
   }
 });
 
-// EDIT PRODUCT
-
+// ✏️ EDIT PRODUCT
 router.put("/:id", isAdmin, async (req, res) => {
-  console.log(req.body.productImg);
-  if (req.body.productImg) {
-    try {
-      const destroyResponse = await cloudinary.uploader.destroy(
-        req.body.product.image.public_id
-      );
+  const { product, productImg } = req.body;
 
-      if (destroyResponse) {
-        const uploadedResponse = await cloudinary.uploader.upload(
-          req.body.productImg,
-          {
-            upload_preset: "online-shop",
-          }
-        );
+  try {
+    let updatedImage = product.image;
 
-        if (uploadedResponse) {
-          const updatedProduct = await Product.findByIdAndUpdate(
-            req.params.id,
-            {
-              $set: {
-                ...req.body.product,
-                image: uploadedResponse,
-              },
-            },
-            { new: true }
-          );
-
-          res.status(200).send(updatedProduct);
-        }
+    if (productImg) {
+      if (product.image?.public_id) {
+        await cloudinary.uploader.destroy(product.image.public_id);
       }
-    } catch (err) {
-      res.status(500).send(error);
+
+      const uploaded = await cloudinary.uploader.upload(productImg, {
+        upload_preset: "onlineLaundry",
+      });
+      updatedImage = uploaded;
     }
-  } else {
-    try {
-      const updatedProduct = await Product.findByIdAndUpdate(
-        req.params.id,
-        {
-          $set: req.body.product,
+
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          ...product,
+          image: updatedImage,
         },
-        { new: true }
-      );
-      res.status(200).send(updatedProduct);
-    } catch (err) {
-      res.status(500).send(err);
-    }
+      },
+      { new: true }
+    );
+
+    req.io.emit("productUpdated", updatedProduct);
+
+    res.status(200).send(updatedProduct);
+  } catch (error) {
+    res.status(500).send("Error al actualizar el producto");
   }
 });
 
-// GET ALL PRODUCTS
-
+// 🔍 GET ALL PRODUCTS
 router.get("/", async (req, res) => {
   try {
     const products = await Product.find();
     res.status(200).send(products);
   } catch (error) {
-    console.log(error);
     res.status(500).send(error);
   }
 });
 
-// GET PRODUCT
-
+// 🔍 GET ONE PRODUCT
 router.get("/find/:id", async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).send("Producto no encontrado");
     res.status(200).send(product);
   } catch (error) {
     res.status(500).send(error);
   }
 });
 
-// ADD PRODUCT IMAGE TO LINE ITEMS
+// 📦 ADD PRODUCT IMAGE TO LINE ITEMS
 router.post("/add-product-image-to-line-items", async (req, res) => {
   try {
     const product = await Product.findById(req.body.productId);
+    if (!product) return res.status(404).send("Producto no encontrado");
 
-    if (!product) return res.status(404).send("Product not found...");
-
-    // Obtener la URL de la imagen del producto
-    const imageURL = product.image.url;
-
-    res.status(200).send(imageURL);
+    res.status(200).send(product.image?.url || null);
   } catch (error) {
     res.status(500).send(error);
   }
 });
 
-// BULK UPLOAD WITH DEFAULT IMAGE IF NOT PROVIDED
+// 📥 BULK UPLOAD
 router.post("/bulk", isAdmin, async (req, res) => {
   try {
     const { products } = req.body;
 
     if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).send("No products provided.");
+      return res.status(400).send("No se recibieron productos.");
     }
 
     const uploadedProducts = [];
@@ -169,21 +144,20 @@ router.post("/bulk", isAdmin, async (req, res) => {
     };
 
     for (const product of products) {
-      const { name, weight, price, image } = product;
+      const { name, weight, price, category, description, image } = product;
 
-      if (!name || !weight || !price) continue;
+      if (!name || !weight || !price || !category) continue;
 
       let imageToUse = defaultImage;
 
-      // Si se provee una imagen válida, subirla
-      if (image?.url && image.url.startsWith("data:image")) {
+      if (image?.url?.startsWith("data:image")) {
         try {
           const uploadRes = await cloudinary.uploader.upload(image.url, {
             upload_preset: "onlineLaundry",
           });
           imageToUse = uploadRes;
-        } catch (uploadErr) {
-          console.warn("Error al subir imagen, se usará la imagen por defecto.");
+        } catch (err) {
+          console.warn("❗ Error al subir imagen. Usando imagen por defecto.");
         }
       }
 
@@ -191,21 +165,23 @@ router.post("/bulk", isAdmin, async (req, res) => {
         name,
         weight,
         price,
+        category,
+        description,
         image: imageToUse,
       });
 
-      const savedProduct = await newProduct.save();
-      uploadedProducts.push(savedProduct);
+      const saved = await newProduct.save();
+      uploadedProducts.push(saved);
     }
 
     res.status(201).send(uploadedProducts);
+
+    req.io.emit("productsBulkCreated", uploadedProducts);
+
   } catch (error) {
-    console.error("Error en /products/bulk:", error);
-    res.status(500).send("Error al subir productos en masa.");
+    console.error("❌ Error en carga masiva:", error);
+    res.status(500).send("Error al cargar productos en masa.");
   }
 });
-
-
-
 
 module.exports = router;

@@ -1,18 +1,42 @@
-// UserProfileTimeline.js
-import React from "react";
+import React, { useMemo } from "react";
 import styled, { keyframes } from "styled-components";
 import { BsClock, BsTruck, BsCheckCircle } from "react-icons/bs";
 
 const TimelineView = ({ order }) => {
-  const statusSteps = [
-    { label: "Pending", icon: <BsClock /> },
-    { label: "Dispatched", icon: <BsTruck /> },
-    { label: "Delivered", icon: <BsCheckCircle /> },
-  ];
-
-  const currentStatusIndex = statusSteps.findIndex(
-    (step) => step.label.toLowerCase() === order.delivery_status
+  const statusSteps = useMemo(
+    () => [
+      { label: "Pending", icon: <BsClock />, value: "pending" },
+      { label: "Dispatched", icon: <BsTruck />, value: "dispatched" },
+      { label: "Delivered", icon: <BsCheckCircle />, value: "delivered" },
+    ],
+    []
   );
+
+  const currentStatusIndex = useMemo(() => {
+    const index = statusSteps.findIndex(
+      (step) => step.value === order?.delivery_status?.toLowerCase()
+    );
+    return index === -1 ? 0 : index; // Fallback a "Pending" si el estado no coincide
+  }, [order?.delivery_status, statusSteps]);
+
+  const getColor = useMemo(
+    () => (active, status) => {
+      if (!active) return "#ccc";
+      switch (status?.toLowerCase()) {
+        case "delivered":
+          return "#28a745";
+        case "dispatched":
+          return "#007bff";
+        default:
+          return "#fcbf1e";
+      }
+    },
+    []
+  );
+
+  if (!order) {
+    return <DeliveryNote>Orden no disponible</DeliveryNote>;
+  }
 
   return (
     <>
@@ -37,24 +61,20 @@ const TimelineView = ({ order }) => {
           </Step>
         ))}
       </TimelineContainer>
-      {order.delivery_status === "delivered" && (
+      {order.delivery_status?.toLowerCase() === "delivered" && (
         <DeliveryNote>
-          Tu orden ha sido entregada el día {new Date(order.updatedAt).toLocaleDateString()} a las {new Date(order.updatedAt).toLocaleTimeString()}
+          Tu orden ha sido entregada el día{" "}
+          {new Date(order.updatedAt).toLocaleDateString()} a las{" "}
+          {new Date(order.updatedAt).toLocaleTimeString()}
         </DeliveryNote>
       )}
     </>
   );
 };
 
-const getColor = (active, status) => {
-  if (!active) return "#ccc";
-  if (status === "delivered") return "#28a745";
-  if (status === "dispatched") return "#007bff";
-  return "#fcbf1e";
-};
-
 export default TimelineView;
 
+// Estilos
 const TimelineContainer = styled.div`
   display: flex;
   justify-content: space-between;

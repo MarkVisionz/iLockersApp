@@ -1,4 +1,3 @@
-// src/components/Auth/GoogleLoginButton.jsx
 import { signInWithPopup, sendEmailVerification } from "firebase/auth";
 import {
   auth as authFirebase,
@@ -6,31 +5,26 @@ import {
 } from "../../features/firebase-config";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { loginWithToken } from "../../features/authSlice"; // ✅ Thunk unificado
+import { loginWithToken } from "../../features/authSlice";
 import { loginWithFirebaseToken } from "../../services/authApiService";
 import { FcGoogle } from "react-icons/fc";
 import { useState } from "react";
 import styled from "styled-components";
 import { launchConfetti } from "../../utils/confetti";
-
+import { toast } from "react-toastify";
 
 const GoogleLoginButton = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [localStatus, setLocalStatus] = useState({
-    loading: false,
-    error: null,
-  });
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
-    setLocalStatus({ loading: true, error: null });
+    setLoading(true);
 
     try {
-      // 1. Autenticación con Google
       const result = await signInWithPopup(authFirebase, googleProvider);
       const user = result.user;
 
-      // 2. Verificación de email
       if (!user.emailVerified) {
         await sendEmailVerification(user);
         throw {
@@ -39,10 +33,7 @@ const GoogleLoginButton = () => {
         };
       }
 
-      // 3. Obtener token de Firebase
       const token = await user.getIdToken(true);
-
-      // 4. Llamada a backend y dispatch a Redux
       const res = await loginWithFirebaseToken(
         token,
         user.displayName || user.email.split("@")[0]
@@ -50,15 +41,16 @@ const GoogleLoginButton = () => {
 
       await dispatch(loginWithToken({ token: res.token })).unwrap();
 
-      // 5. Redirigir
       navigate("/cart");
       launchConfetti();
     } catch (error) {
       console.error("❌ Error en login Google:", error);
-      setLocalStatus({
-        loading: false,
-        error: error.message || "Error al autenticar con Google",
+      toast.error(error.message || "Error al autenticar con Google", {
+        position: "top-right",
+        autoClose: 5000,
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -66,14 +58,11 @@ const GoogleLoginButton = () => {
     <GoogleButton
       type="button"
       onClick={handleGoogleLogin}
-      disabled={localStatus.loading}
-      aria-busy={localStatus.loading}
+      disabled={loading}
+      aria-busy={loading}
     >
       <FcGoogle size={24} />
-      {localStatus.loading ? "Cargando..." : "Continuar con Google"}
-      {localStatus.error && (
-        <span className="sr-only">Error: {localStatus.error}</span>
-      )}
+      {loading ? "Cargando..." : "Continuar con Google"}
     </GoogleButton>
   );
 };

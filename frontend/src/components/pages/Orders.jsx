@@ -1,4 +1,4 @@
-import OrdersList from "./list/OrdersList";
+import OrdersList from "../admin/list/OrdersList";
 
 const Orders = () => {
   return (

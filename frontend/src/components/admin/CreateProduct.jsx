@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
-import { PrimaryButton } from "./CommonStyled";
+import { motion } from "framer-motion";
 import {
   productsCreate,
   bulkCreateProducts,
@@ -10,6 +10,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import { FloatingInput, FloatingFileInput } from "./CommonStyled";
 
 const DEFAULT_IMAGE_URL =
   "https://res.cloudinary.com/mkocloud/image/upload/v1743619497/lavadora_kkmvss.png";
@@ -23,8 +24,11 @@ const CreateProduct = () => {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [weight, setWeight] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
   const [bulkProducts, setBulkProducts] = useState([]);
   const [fileKey, setFileKey] = useState(Date.now());
+  const [excelUploaded, setExcelUploaded] = useState(false);
 
   const handleProductImageUpload = (e) => {
     const file = e.target.files[0];
@@ -50,12 +54,16 @@ const CreateProduct = () => {
         name,
         price,
         weight,
+        category,
+        description,
         image: productImg || { url: DEFAULT_IMAGE_URL },
       })
     );
     setName("");
     setPrice("");
     setWeight("");
+    setCategory("ropa común");
+    setDescription("");
     setProductImg("");
   };
 
@@ -66,11 +74,19 @@ const CreateProduct = () => {
       .then(() => {
         setBulkProducts([]);
         setFileKey(Date.now());
+        setExcelUploaded(false);
       })
       .catch((err) => {
         console.error("Error en carga masiva:", err);
         toast.error("❌ Error al subir productos en masa");
       });
+  };
+
+  const handleCancelUpload = () => {
+    setBulkProducts([]);
+    setFileKey(Date.now());
+    setExcelUploaded(false);
+    toast.info("Carga de archivo cancelada.");
   };
 
   const handleBulkCSVUpload = (e) => {
@@ -83,6 +99,8 @@ const CreateProduct = () => {
           name: item.name,
           price: parseFloat(item.price),
           weight: item.weight,
+          category: item.category || "ropa común",
+          description: item.description || "",
           image: { url: item.image || DEFAULT_IMAGE_URL },
         }));
         setBulkProducts(formatted);
@@ -95,6 +113,7 @@ const CreateProduct = () => {
 
   const handleExcelUpload = (e) => {
     const file = e.target.files[0];
+    setExcelUploaded(!!file);
     const reader = new FileReader();
 
     reader.onload = (event) => {
@@ -107,6 +126,8 @@ const CreateProduct = () => {
         name: item.name,
         price: parseFloat(item.price),
         weight: item.weight,
+        category: item.category || "ropa común",
+        description: item.description || "",
         image: { url: item.image || DEFAULT_IMAGE_URL },
       }));
 
@@ -120,75 +141,118 @@ const CreateProduct = () => {
   };
 
   return (
-    <StyledCreateProduct>
+    <AnimatedContainer>
       <FormContainer>
         <h3>Create a Product</h3>
         <StyledForm onSubmit={handleSubmit}>
-          <InputLabel htmlFor="imgUpload">Upload Image</InputLabel>
-          <FileInput
-            id="imgUpload"
-            accept="image/*"
-            type="file"
-            onChange={handleProductImageUpload}
-            required
-          />
-          <InputLabel htmlFor="name">Name</InputLabel>
-          <TextInput
-            id="name"
-            type="text"
-            placeholder="Product Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <InputLabel htmlFor="price">Price</InputLabel>
-          <TextInput
-            id="price"
-            type="number"
-            placeholder="Product Price"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            required
-          />
-          <InputLabel htmlFor="weight">Weight (g)</InputLabel>
-          <TextInput
-            id="weight"
-            type="number"
-            placeholder="Product Weight"
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            required
-          />
-          <SubmitButton>
+          <FloatingFileInput isFilled={!!productImg}>
+            <input
+              id="imgUpload"
+              type="file"
+              accept="image/*"
+              onChange={handleProductImageUpload}
+            />
+            <label htmlFor="imgUpload">Upload Image</label>
+          </FloatingFileInput>
+
+          <FloatingInput>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+            <label className={name ? "filled" : ""}>Name</label>
+          </FloatingInput>
+
+          <FloatingInput>
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+            />
+            <label className={price ? "filled" : ""}>Price</label>
+          </FloatingInput>
+
+          <FloatingInput>
+            <input
+              type="number"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              required
+            />
+            <label className={weight ? "filled" : ""}>Weight (g)</label>
+          </FloatingInput>
+
+          <FloatingInput>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              required
+            >
+              <option value="" disabled hidden></option>
+              <option value="ropa común">Ropa común</option>
+              <option value="ropa de cama">Ropa de cama</option>
+            </select>
+            <label className={category ? "filled" : ""}>Category</label>
+          </FloatingInput>
+
+          <FloatingInput>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder=""
+              rows={3}
+            />
+            <label className={description ? "filled" : ""}>Descripción</label>
+          </FloatingInput>
+
+          <AnimatedButton type="submit">
             {createStatus === "pending" ? "Submitting..." : "Submit"}
-          </SubmitButton>
+          </AnimatedButton>
         </StyledForm>
 
         <Divider />
 
         <h4>Subida masiva (CSV o Excel)</h4>
         <BulkUploadGroup>
-          <FileInput
-            key={fileKey + "-csv"}
-            type="file"
-            accept=".csv"
-            onChange={handleBulkCSVUpload}
-          />
-          <FileInput
-            key={fileKey + "-excel"}
-            type="file"
-            accept=".xlsx"
-            onChange={handleExcelUpload}
-          />
-          <SubmitButton
-            type="button"
-            onClick={uploadBulkProducts}
-            disabled={!bulkProducts.length}
-          >
-            Subir productos
-          </SubmitButton>
+          <FloatingFileInput isFilled={excelUploaded}>
+            <input
+              key={fileKey + "-excel"}
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(e) =>
+                e.target.files[0].name.endsWith(".csv")
+                  ? handleBulkCSVUpload(e)
+                  : handleExcelUpload(e)
+              }
+            />
+            <label htmlFor="excelUpload">Subir Excel o CSV</label>
+          </FloatingFileInput>
+
+          <ButtonGroup>
+            <AnimatedButton
+              type="button"
+              onClick={uploadBulkProducts}
+              disabled={!bulkProducts.length}
+            >
+              Subir productos
+            </AnimatedButton>
+
+            <CancelButton
+              type="button"
+              onClick={handleCancelUpload}
+              disabled={!bulkProducts.length}
+            >
+              Cancelar
+            </CancelButton>
+          </ButtonGroup>
         </BulkUploadGroup>
-        <SmallText>Formato: name,price,weight,image</SmallText>
+
+        <SmallText>
+          Formato: name,price,weight,category,description,image
+        </SmallText>
 
         {bulkProducts.length > 0 && (
           <PreviewBox>
@@ -196,7 +260,7 @@ const CreateProduct = () => {
             <ul>
               {bulkProducts.slice(0, 5).map((product, idx) => (
                 <li key={idx}>
-                  {product.name} - ${product.price} - {product.weight}g
+                  {product.name} - ${product.price} - {product.weight}g - {product.category}
                 </li>
               ))}
               {bulkProducts.length > 5 && (
@@ -207,7 +271,6 @@ const CreateProduct = () => {
         )}
 
         <BackButton onClick={() => navigate("/admin/products")}>
-          {" "}
           ← Volver a productos
         </BackButton>
       </FormContainer>
@@ -219,15 +282,14 @@ const CreateProduct = () => {
           <PlaceholderText>Image preview will appear here</PlaceholderText>
         )}
       </ImagePreview>
-    </StyledCreateProduct>
+    </AnimatedContainer>
   );
 };
 
 export default CreateProduct;
 
-// Styled Components debajo... (sin cambios)
 
-const StyledCreateProduct = styled.div`
+const AnimatedContainer = styled(motion.div)`
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -238,7 +300,24 @@ const StyledCreateProduct = styled.div`
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
-const FormContainer = styled.div`
+const AnimatedButton = styled(motion.button)`
+  margin-top: 1.5rem;
+  background-color: #007bff;
+  color: white;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 0.75rem 1.2rem;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #0056b3;
+  }
+`;
+
+const FormContainer = styled(motion.div)`
   flex: 1;
   max-width: 500px;
   min-width: 300px;
@@ -260,44 +339,6 @@ const StyledForm = styled.form`
   flex-direction: column;
 `;
 
-const InputLabel = styled.label`
-  margin-bottom: 0.5rem;
-  color: #555;
-  font-weight: bold;
-`;
-
-const FileInput = styled.input`
-  padding: 0.5rem;
-  margin-bottom: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
-
-  &:focus {
-    border-color: #007bff;
-    outline: none;
-  }
-`;
-
-const TextInput = styled.input`
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
-
-  &:focus {
-    border-color: #007bff;
-    outline: none;
-  }
-`;
-
-const SubmitButton = styled(PrimaryButton)`
-  padding: 0.75rem;
-  font-size: 1rem;
-  border-radius: 4px;
-`;
-
 const Divider = styled.hr`
   margin: 2rem 0;
 `;
@@ -307,7 +348,7 @@ const SmallText = styled.p`
   color: #666;
 `;
 
-const ImagePreview = styled.div`
+const ImagePreview = styled(motion.div)`
   flex: 1;
   max-width: 500px;
   min-width: 300px;
@@ -329,7 +370,6 @@ const ImagePreview = styled.div`
     border-radius: 4px;
   }
 `;
-
 
 const PlaceholderText = styled.p`
   color: #777;
@@ -373,3 +413,27 @@ const BulkUploadGroup = styled.div`
   margin-top: 1rem;
 `;
 
+
+const CancelButton = styled(motion.button)`
+  background-color: #6c757d;
+  color: white;
+  margin-top: 1.5rem;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 0.75rem 1.2rem;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #5a6268;
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+`;

@@ -7,121 +7,55 @@ const ConfirmationModal = ({
   handleClose,
   handleSubmit,
   name,
-  calculatedTotal,
-  countryCodes,
-  countryCode,
-  setCountryCode,
+  total,
   phoneNumber,
-  setPhoneNumber,
+  countryCode,
+  onPhoneChange,
+  onCountryCodeChange,
   loading,
-  submitError,
+  error,
   folio,
-  services,
-  date,
-  isPaid,
-  observations,
-  transformServices,
 }) => {
-  // Función para formatear el nombre del servicio
-  const formatServiceName = (serviceName) => {
-    return serviceName
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/([A-Z]{2,})([a-z])/g, "$1 $2")
-      .replace(/([a-z])([0-9])/g, "$1 $2")
-      .replace(/([0-9])([a-z])/g, "$1 $2")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/^\w/, (c) => c.toUpperCase());
-  };
-
-  // Función para generar el mensaje de WhatsApp
-  const generateWhatsAppMessage = (transformedServices) => {
-    const servicesDetails = Object.entries(transformedServices)
-      .flatMap(([service, details]) => {
-        if (details.quantity > 0) {
-          return [
-            `👋 ${formatServiceName(service)} - Cantidad: ${
-              details.quantity
-            }, Precio U: $${details.unitPrice} = $${
-              details.quantity * details.unitPrice
-            }`,
-          ];
-        } else if (typeof details === "object") {
-          return Object.entries(details)
-            .filter(([_, subDetails]) => subDetails.quantity > 0)
-            .map(
-              ([subType, subDetails]) =>
-                `\uD83D\uDECF️ ${formatServiceName(
-                  service
-                )} (${subType}) - Cantidad: ${
-                  subDetails.quantity
-                }, Precio U: $${subDetails.unitPrice} = $${
-                  subDetails.quantity * subDetails.unitPrice
-                }`
-            );
-        }
-        return [];
-      })
-      .join("\n");
-
-    return (
-      `😀 Hola, ${name}!\nAquí están los detalles de tu nota:\n\n` +
-      `\uD83D\uDCDC Folio: ${folio}\n` +
-      `\uD83D\uDED2 Servicios:\n${servicesDetails}\n` +
-      `\uD83D\uDCC5 Fecha: ${date}\n` +
-      `\uD83D\uDCB0 Total: $${calculatedTotal.toFixed(2)}\n` +
-      `\u2705 Pagado: ${isPaid ? "Sí" : "No"}\n` +
-      `\uD83D\uDDC2 Observaciones: ${observations}\n` +
-      `\uD83D\uDCDE Número Registrado: +${countryCode}${phoneNumber}\n\n` +
-      `Gracias por elegirnos!\n\n`
-    );
-  };
-
-  const openWhatsApp = (transformedServices) => {
-    const message = generateWhatsAppMessage(transformedServices);
-    const encodedMessage = encodeURIComponent(message);
-    const url = `https://wa.me/${countryCode}${phoneNumber}?text=${encodedMessage}`;
-    window.open(url, "_blank");
-  };
-
-  const handleConfirm = async () => {
-    const transformedServices = transformServices();
-    await handleSubmit();
-    openWhatsApp(transformedServices);
-  };
-
   if (!showModal) return null;
 
   return (
     <ModalOverlay>
       <ModalContent>
-        <Title>Hola!, ¿A qué número mandamos tu orden?</Title>
-        <InfoText>Nombre del Cliente: {name}</InfoText>
-        <InfoText>Total: ${calculatedTotal.toFixed(2)}</InfoText>
+        <Title>Confirmar Nota</Title>
+        <InfoText>
+          <strong>Cliente:</strong> {name}
+        </InfoText>
+        <InfoText>
+          <strong>Folio:</strong> {folio}
+        </InfoText>
+        <InfoText>
+          <strong>Total:</strong> ${total.toFixed(2)}
+        </InfoText>
 
         {loading ? (
           <LoadingSpinner message="Guardando..." />
         ) : (
           <>
-            <SelectCountry
-              value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
-            >
-              {countryCodes.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name} ({country.code})
-                </option>
-              ))}
-            </SelectCountry>
-            <StyledInput
-              type="tel"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="1234567890"
-            />
-            {submitError && <ErrorMessage message={submitError} />}
+            <PhoneContainer>
+              <SelectCountry
+                value={countryCode}
+                onChange={(e) => onCountryCodeChange(e.target.value)}
+              >
+                <option value="52">🇲🇽 +52</option>
+                <option value="1">🇺🇸 +1</option>
+              </SelectCountry>
+              <StyledInput
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => onPhoneChange(e.target.value)}
+                placeholder="Número de teléfono"
+              />
+            </PhoneContainer>
+
+            {error && <ErrorMessage message={error} />}
+
             <ButtonContainer>
-              <StyledButton onClick={handleConfirm}>Confirmar</StyledButton>
+              <ConfirmButton onClick={handleSubmit}>Confirmar</ConfirmButton>
               <CancelButton onClick={handleClose}>Cancelar</CancelButton>
             </ButtonContainer>
           </>
@@ -131,7 +65,7 @@ const ConfirmationModal = ({
   );
 };
 
-// Estilos
+// Estilos (usando tus estilos originales con pequeñas adaptaciones)
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -166,22 +100,53 @@ const InfoText = styled.p`
   color: #555;
   font-size: 1.1em;
   margin: 8px 0;
+  text-align: center;
 `;
 
-const StyledInput = styled.input`
-  width: 100%;
-  padding: 12px;
-  margin: 15px 0;
-  font-size: 1em;
+const PhoneContainer = styled.div`
+  display: flex;
+  gap: 10px; /* Espacio entre elementos */
+  margin: 20px 0;
+  align-items: center; /* Alinea verticalmente */
+`;
+
+const SelectCountry = styled.select`
+  padding: 10px;
   border: 2px solid #007bff;
   border-radius: 8px;
-  outline: none;
   color: #333;
-  text-align: center;
+  font-size: 1em;
+  outline: none;
+  cursor: pointer;
   transition: border-color 0.3s ease;
+  flex: 1; /* Ocupa espacio disponible */
+  max-width: 120px; /* Ancho máximo para el select */
 
   &:focus {
     border-color: #0056b3;
+  }
+`;
+
+const StyledInput = styled.input`
+  padding: 10px;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  font-size: 1em;
+  outline: none;
+  color: #333;
+  transition: border-color 0.3s ease;
+  flex: 3; /* Ocupa más espacio que el select */
+  min-width: 0; /* Permite que se reduzca */
+
+  &:focus {
+    border-color: #0056b3;
+  }
+
+  /* Estilos para placeholder */
+  &::placeholder {
+    color: #999;
+    text-align: left;
+    padding-left: 5px;
   }
 `;
 
@@ -191,7 +156,7 @@ const ButtonContainer = styled.div`
   margin-top: 20px;
 `;
 
-const StyledButton = styled.button`
+const ConfirmButton = styled.button`
   background: #007bff;
   color: white;
   font-size: 1em;
@@ -208,7 +173,7 @@ const StyledButton = styled.button`
   }
 `;
 
-const CancelButton = styled(StyledButton)`
+const CancelButton = styled(ConfirmButton)`
   background: #dc3545;
   margin-right: 0;
 
@@ -217,21 +182,5 @@ const CancelButton = styled(StyledButton)`
   }
 `;
 
-const SelectCountry = styled.select`
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 10px;
-  border: 2px solid #007bff;
-  border-radius: 8px;
-  color: #333;
-  font-size: 1em;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.3s ease;
-
-  &:focus {
-    border-color: #0056b3;
-  }
-`;
 
 export default ConfirmationModal;

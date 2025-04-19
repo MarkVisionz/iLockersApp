@@ -1,117 +1,169 @@
-import { useState } from 'react';
-import { validateEmail, validatePassword } from '../../../features/validators';
+import { useState } from "react";
+import { validateEmail } from "../../../features/validators";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth as firebaseAuth } from "../../../features/firebase-config";
+import axios from "axios";
+import { url } from "../../../features/api";
+import { loginUserSuccess } from "../../../features/authSlice";
 
-export const useLoginForm = () => {
+export const useLoginForm = (dispatch, navigate) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({ email: "", password: "", form: "" });
+  const [touched, setTouched] = useState({ email: false, password: false });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [remainingAttempts, setRemainingAttempts] = useState(null);
 
-  const [errors, setErrors] = useState({
-    email: "",
-    password: "",
-    form: ""
-  });
-
-  const [touched, setTouched] = useState({
-    email: false,
-    password: false
-  });
-
-  // ✅ Validación de campo único
-  const validateField = (name, value) => {
-    let error = "";
-
-    if (name === "email") {
-      if (!value.trim()) error = "El correo es requerido";
-      else if (!validateEmail(value)) error = "Correo inválido";
-    }
-
-    if (name === "password") {
-      if (!value) error = "La contraseña es requerida";
-      else if (value.length < 6) error = "Mínimo 6 caracteres";
-      else if (value.length > 50) error = "Máximo 50 caracteres";
-    }
-
-    setErrors(prev => ({ ...prev, [name]: error }));
-    return !error;
-  };
-
-  // ✅ Validación completa
   const validateForm = () => {
-    const validEmail = validateField("email", formData.email);
-    const validPass = validateField("password", formData.password);
-    return validEmail && validPass;
+    const newErrors = { email: "", password: "", form: "" };
+
+    if (!formData.email.trim()) {
+      newErrors.email = "El correo es requerido";
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = "Correo inválido";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "La contraseña es requerida";
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Mínimo 6 caracteres";
+    } else if (formData.password.length > 50) {
+      newErrors.password = "Máximo 50 caracteres";
+    }
+
+    setErrors(newErrors);
+    return !newErrors.email && !newErrors.password;
   };
 
-  // ✅ Cambios en inputs
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-
-    // Resetear errores si ya fue tocado o si hay error general
-    if (touched[name]) validateField(name, value);
-    if (errors.form) setErrors(prev => ({ ...prev, form: "" }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (touched[name]) {
+      validateForm();
+    }
+    if (errors.form) {
+      setErrors((prev) => ({ ...prev, form: "" }));
+    }
   };
 
-  // ✅ On blur (pierde foco)
   const handleBlur = (e) => {
-    const { name, value } = e.target;
-    setTouched(prev => ({ ...prev, [name]: true }));
-    validateField(name, value);
+    const { name } = e.target;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    validateForm();
   };
 
-  // ✅ Errores del backend
   const handleBackendError = (error) => {
     const res = error?.response?.data;
-    const msg = res?.message;
+    const msg = res?.message || "Error desconocido";
+    console.log("Backend error:", { error, res, msg }); // Log temporal para depuración
 
-    // Errores validados por Joi
-    if (Array.isArray(res?.errors)) {
-      res.errors.forEach(err => {
-        setErrors(prev => ({ ...prev, [err.field]: err.message }));
+    if (msg.includes("bloqueada")) {
+      setErrors({ email: "", password: "", form: msg });
+    } else if (msg.match(/ya est(á|a) registrado|otro m(é|e)todo|registrado.*método/i)) {
+      setErrors({
+        email: "",
+        password: "",
+        form: "Correo ya registrado con otro método de autenticación",
       });
-      return;
-    }
-
-    // Bloqueos o límites de intento
-    if (msg?.includes("bloqueada")) {
-      setErrors(prev => ({ ...prev, form: msg }));
-      return;
-    }
-
-    if (res?.remainingAttempts !== undefined) {
+    } else if (res?.remainingAttempts !== undefined) {
       setRemainingAttempts(res.remainingAttempts);
-      setErrors(prev => ({
-        ...prev,
+      setErrors({
+        email: "",
         password: "Contraseña incorrecta",
-        form: msg || "Intento fallido"
-      }));
-      return;
-    }
-
-    if (msg?.includes("Credenciales inválidas")) {
-      setErrors(prev => ({
-        ...prev,
+        form: msg || "Correo o contraseña incorrectos",
+      });
+    } else if (msg.includes("Credenciales inválidas")) {
+      setErrors({
+        email: "",
         password: "Contraseña incorrecta",
-        form: "Correo o contraseña incorrectos"
-      }));
-      return;
+        form: "Correo o contraseña incorrectos",
+      });
+    } else {
+      setErrors({
+        email: "",
+        password: "",
+        form: msg || "Error al conectar con el servidor",
+      });
     }
-
-    // Error genérico
-    setErrors(prev => ({
-      ...prev,
-      form: msg || "Error de conexión con el servidor"
-    }));
   };
 
-  // ✅ Reset del formulario
   const resetForm = () => {
     setFormData({ email: "", password: "" });
     setErrors({ email: "", password: "", form: "" });
     setTouched({ email: false, password: false });
     setRemainingAttempts(null);
+  };
+
+  const handleFirebaseLogin = async () => {
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      const userCredential = await signInWithEmailAndPassword(
+        firebaseAuth,
+        formData.email,
+        formData.password
+      );
+      const user = userCredential.user;
+      const token = await user.getIdToken(true);
+
+      const response = await axios.post(`${url}/auth/firebase-login`, {
+        token,
+        name: user.displayName || formData.email.split("@")[0],
+      });
+
+      localStorage.setItem("token", response.data.token);
+      dispatch(loginUserSuccess(response.data.token));
+      resetForm();
+      navigate("/cart");
+    } catch (error) {
+      console.log("Firebase error:", {
+        code: error.code,
+        message: error.message,
+        details: error,
+      }); // Log mejorado para depuración
+      switch (error.code) {
+        case "auth/user-not-found":
+          setErrors({
+            email: "",
+            password: "",
+            form: "Correo no registrado",
+          });
+          break;
+        case "auth/wrong-password":
+          setErrors({
+            email: "",
+            password: "Contraseña incorrecta",
+            form: "Correo o contraseña incorrectos",
+          });
+          break;
+        case "auth/invalid-email":
+          setErrors({
+            email: "Correo inválido",
+            password: "",
+            form: "El formato del correo es incorrecto",
+          });
+          break;
+        case "auth/too-many-requests":
+          setErrors({
+            email: "",
+            password: "",
+            form: "Demasiados intentos fallidos. Intenta de nuevo más tarde",
+          });
+          break;
+        case "auth/invalid-credential":
+          setErrors({
+            email: "",
+            password: "",
+            form: "Correo o contraseña incorrectos", // Más específico que "Credenciales inválidas"
+          });
+          break;
+        default:
+          handleBackendError(error);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return {
@@ -126,8 +178,7 @@ export const useLoginForm = () => {
     handleBlur,
     validateForm,
     handleBackendError,
-    setIsSubmitting,
     resetForm,
-    setFormData
+    handleFirebaseLogin,
   };
 };

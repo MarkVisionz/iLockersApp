@@ -1,129 +1,147 @@
-import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import styled from "styled-components";
+import { useEffect } from "react";
 import { usersFetch } from "../../../features/usersSlice";
-import { ordersFetch } from "../../../features/ordersSlice";
+import { FaUsers, FaTshirt, FaClipboardList, FaMoneyBillWave } from "react-icons/fa";
 
 const AllTimeData = () => {
   const dispatch = useDispatch();
 
-  useEffect(() => {
-    dispatch(usersFetch());
-    dispatch(ordersFetch());
-  }, [dispatch]);
+  const { list: users = [], status: usersStatus, error: usersError } = useSelector((state) => state.users);
+  const { list: orders = [], status: ordersStatus, error: ordersError } = useSelector((state) => state.orders);
+  const { items: products = [] } = useSelector((state) => state.products);
 
-  const {
-    list: users = [],
-    status: usersStatus,
-    error: usersError,
-  } = useSelector((state) => state.users);
+  const isLoading = usersStatus === "pending" || ordersStatus === "pending";
+  const isError = usersError || ordersError;
 
-  const {
-    list: orders = [],
-    status: ordersStatus,
-    error: ordersError,
-  } = useSelector((state) => state.orders);
-
-  const {
-    items: products = [],
-  } = useSelector((state) => state.products);
-
-  // Calcular ganancias totales
   const calculateEarnings = () => {
-    const totalEarnings = orders?.reduce((sum, order) => {
-      return sum + (order?.total || 0);
-    }, 0);
-
-    // Stripe devuelve en centavos (MXN) → dividir entre 100
+    const totalEarnings = orders?.reduce((sum, order) => sum + (order?.total || 0), 0);
     return (totalEarnings / 100).toLocaleString("es-MX", {
       style: "currency",
       currency: "MXN",
     });
   };
 
-  const isLoading = usersStatus === "pending" || ordersStatus === "pending";
-  const isError = usersError || ordersError;
+  useEffect(() => {
+    if (usersStatus !== "succeeded") dispatch(usersFetch());
+  }, [dispatch, usersStatus]);
 
   return (
     <Container>
-      <Title>Datos Acumulados</Title>
-      <Content>
+      <h3>Resumen Acumulado</h3>
+      <StatsGrid>
         {isLoading ? (
           <Loading>Cargando...</Loading>
         ) : isError ? (
           <Error>Error: {usersError || ordersError}</Error>
         ) : (
           <>
-            <Info>
-              <InfoTitle>Usuarios</InfoTitle>
-              <InfoData>{users?.length ?? 0}</InfoData>
-            </Info>
-            <Info>
-              <InfoTitle>Productos</InfoTitle>
-              <InfoData>{products?.length ?? 0}</InfoData>
-            </Info>
-            <Info>
-              <InfoTitle>Órdenes</InfoTitle>
-              <InfoData>{orders?.length ?? 0}</InfoData>
-            </Info>
-            <Info>
-              <InfoTitle>Ganancias</InfoTitle>
-              <InfoData>{calculateEarnings()}</InfoData>
-            </Info>
+            <StatCard>
+              <IconWrapper>
+                <FaUsers />
+              </IconWrapper>
+              <Data>
+                <Label>Usuarios</Label>
+                <Value>{users.length}</Value>
+              </Data>
+            </StatCard>
+            <StatCard>
+              <IconWrapper>
+                <FaTshirt />
+              </IconWrapper>
+              <Data>
+                <Label>Productos</Label>
+                <Value>{products.length}</Value>
+              </Data>
+            </StatCard>
+            <StatCard>
+              <IconWrapper>
+                <FaClipboardList />
+              </IconWrapper>
+              <Data>
+                <Label>Órdenes</Label>
+                <Value>{orders.length}</Value>
+              </Data>
+            </StatCard>
+            <StatCard>
+              <IconWrapper>
+                <FaMoneyBillWave />
+              </IconWrapper>
+              <Data>
+                <Label>Ganancias</Label>
+                <Value>{calculateEarnings()}</Value>
+              </Data>
+            </StatCard>
           </>
         )}
-      </Content>
+      </StatsGrid>
     </Container>
   );
 };
 
 export default AllTimeData;
 
-// Estilos
+// Styled components
 
 const Container = styled.div`
-  background-color: rgb(48, 51, 78);
-  color: rgba(234, 234, 255, 0.87);
-  margin-top: 1.5rem;
-  border-radius: 5px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  width: 100%;
+`;
+
+const StatsGrid = styled.div`
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 1rem;
+`;
+
+const StatCard = styled.div`
+  display: flex;
+  align-items: center;
   padding: 1rem;
-  font-size: 14px;
+  background: #f4f7ff;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(75, 112, 226, 0.1);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #e8edff;
+    transform: translateY(-2px);
+  }
 `;
 
-const Title = styled.h3`
-  margin-bottom: 1rem;
+const IconWrapper = styled.div`
+  font-size: 1.8rem;
+  color: #4b70e2;
+  margin-right: 1rem;
 `;
 
-const Content = styled.div`
+const Data = styled.div`
   display: flex;
   flex-direction: column;
 `;
 
-const Info = styled.div`
-  display: flex;
-  margin-top: 1rem;
-  padding: 0.5rem;
-  border-radius: 3px;
-  background: rgba(38, 198, 249, 0.12);
-  &:nth-child(even) {
-    background: rgba(102, 108, 255, 0.12);
-  }
+const Label = styled.span`
+  font-size: 0.9rem;
+  color: #777;
 `;
 
-const InfoTitle = styled.div`
-  flex: 1;
-`;
-
-const InfoData = styled.div`
-  flex: 1;
-  font-weight: 700;
+const Value = styled.span`
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #333;
 `;
 
 const Loading = styled.p`
-  margin-top: 1rem;
+  text-align: center;
+  margin: 1rem 0;
 `;
 
 const Error = styled.p`
-  margin-top: 1rem;
+  text-align: center;
   color: red;
+  font-weight: bold;
 `;

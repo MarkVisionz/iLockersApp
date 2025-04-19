@@ -1,30 +1,51 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
+import EditProduct from "../../../EditProduct";
 
 const ProductCard = ({ item, handleDelete, navigate }) => {
+  const [showEdit, setShowEdit] = useState(false);
+
   return (
-    <CardContainer onClick={() => navigate(`/product/${item._id}`)}>
-      <ProductInfo>
+    <CardContainer>
+      <ProductInfo onClick={() => navigate(`/product/${item._id}`)}>
         <ProductId>ID: {item._id}</ProductId>
         <ImageContainer>
-          <ProductImage src={item.image.url} alt={item.name} />
+          <ProductImage src={item.image?.url} alt={item.name} />
         </ImageContainer>
-        <ProductName>Name: {item.name}</ProductName>
-        <ProductWeight>Weight: {item.weight}g</ProductWeight>
-        <ProductPrice>Price: ${item.price.toLocaleString()}</ProductPrice>
-        <ProductSold>Sold: {item.sold}</ProductSold>
+        <ProductName>{item.name}</ProductName>
+        <ProductCategory>Categoría: {item.category}</ProductCategory>
+        <ProductDescription>{item.description || "Sin descripción"}</ProductDescription>
+        <ProductWeight>Peso: {item.weight}g</ProductWeight>
+        <ProductPrice>Precio: ${item.price.toLocaleString()}</ProductPrice>
+        <ProductSold>Vendidos: {item.sold}</ProductSold>
       </ProductInfo>
+
       <Actions>
-        <ActionButton onClick={(e) => { e.stopPropagation(); handleDelete(item._id); }} isDelete>
-          Delete
+        <ActionButton onClick={(e) => {
+          e.stopPropagation();
+          handleDelete(item._id);
+        }} isDelete>
+          Eliminar
         </ActionButton>
-        <ActionButton onClick={(e) => { e.stopPropagation(); navigate(`/admin/products/edit/${item._id}`); }}>
-          Edit
+
+        <ActionButton onClick={(e) => {
+          e.stopPropagation();
+          setShowEdit(true);
+        }}>
+          Editar
         </ActionButton>
-        <ActionView  onClick={(e) => { e.stopPropagation(); navigate(`/product/${item._id}`); }}>
-          View
+
+        <ActionView onClick={(e) => {
+          e.stopPropagation();
+          navigate(`/product/${item._id}`);
+        }}>
+          Ver
         </ActionView>
       </Actions>
+
+      {showEdit && (
+        <EditProduct prodId={item._id} onClose={() => setShowEdit(false)} />
+      )}
     </CardContainer>
   );
 };
@@ -64,8 +85,8 @@ const ProductId = styled.p`
 `;
 
 const ImageContainer = styled.div`
-  width: 100px; /* Aumentar el tamaño de la imagen */
-  height: 100px; /* Aumentar el tamaño de la imagen */
+  width: 100px;
+  height: 100px;
   overflow: hidden;
   margin-bottom: 0.5rem;
   display: flex;
@@ -76,12 +97,25 @@ const ImageContainer = styled.div`
 const ProductImage = styled.img`
   max-width: 100%;
   max-height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 `;
 
 const ProductName = styled.h3`
   margin: 0 0 0.5rem;
   font-size: 1.2rem;
+`;
+
+const ProductCategory = styled.p`
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  font-style: italic;
+  color: #555;
+`;
+
+const ProductDescription = styled.p`
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: #666;
 `;
 
 const ProductWeight = styled.p`
@@ -92,6 +126,7 @@ const ProductWeight = styled.p`
 const ProductPrice = styled.p`
   margin: 0 0 0.5rem;
   font-size: 1rem;
+  font-weight: bold;
 `;
 
 const ProductSold = styled.p`
@@ -113,7 +148,7 @@ const ActionButton = styled.button`
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.3s ease, transform 0.2s ease ;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
     background-color: ${({ isDelete }) => (isDelete ? '#c82333' : '#0056b3')};
@@ -126,11 +161,11 @@ const ActionButton = styled.button`
 `;
 
 const ActionView = styled.button`
- background-color: rgb(38, 198, 249);
+  background-color: rgb(38, 198, 249);
   color: white;
   border: none;
   padding: 0.5rem 1rem;
- border-radius: 4px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
   transition: background-color 0.3s ease, transform 0.2s ease;

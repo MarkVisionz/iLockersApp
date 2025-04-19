@@ -1,23 +1,42 @@
+import { useMemo } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
 import TimelineView from "./UserProfileTimeline";
 
 const UserOrdersCard = ({ order }) => {
+  const formattedDate = useMemo(
+    () =>
+      order?.createdAt
+        ? new Date(order.createdAt).toLocaleDateString("es-MX")
+        : "Fecha no disponible",
+    [order?.createdAt]
+  );
+
+  const formattedTotal = useMemo(
+    () =>
+      order?.total
+        ? (order.total / 100).toLocaleString("es-MX", {
+            style: "currency",
+            currency: "MXN",
+          })
+        : "Total no disponible",
+    [order?.total]
+  );
+
+  if (!order) {
+    return <OrderCardContainer>Orden no disponible</OrderCardContainer>;
+  }
+
   return (
     <OrderCardContainer>
       <OrderBox>
         <OrderDetails>
-          <OrderId>Order #{order._id}</OrderId>
-          <OrderCustomer>Name: {order.customer_name}</OrderCustomer>
-          <OrderDate>
-            Placed on: {new Date(order.createdAt).toLocaleDateString()}
-          </OrderDate>
-          <OrderTotal>
-            Total: {(order.total / 100).toLocaleString("es-MX", {
-              style: "currency",
-              currency: "MXN",
-            })}
-          </OrderTotal>
+          <OrderId>Order #{order._id || "ID no disponible"}</OrderId>
+          <OrderCustomer>
+            Name: {order.customer_name || "Cliente no especificado"}
+          </OrderCustomer>
+          <OrderDate>Placed on: {formattedDate}</OrderDate>
+          <OrderTotal>Total: {formattedTotal}</OrderTotal>
           <OrderStatus>{renderStatus(order.delivery_status)}</OrderStatus>
 
           <TimelineWrapper>
@@ -34,7 +53,8 @@ const UserOrdersCard = ({ order }) => {
 };
 
 const renderStatus = (status) => {
-  switch (status) {
+  const normalizedStatus = status?.toLowerCase();
+  switch (normalizedStatus) {
     case "pending":
       return <Pending>Pending</Pending>;
     case "dispatched":
@@ -42,11 +62,13 @@ const renderStatus = (status) => {
     case "delivered":
       return <Delivered>Delivered</Delivered>;
     case "cancelled":
-      return <Cancelled>Cancelled</Cancelled>
+      return <Cancelled>Cancelled</Cancelled>;
     default:
       return <span style={{ color: "red" }}>Unknown</span>;
   }
 };
+
+export default UserOrdersCard;
 
 // Styled Components
 const OrderCardContainer = styled.div`
@@ -121,9 +143,19 @@ const OrderStatus = styled.span`
 const TimelineWrapper = styled.div`
   width: 100%;
   margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Centra la línea de tiempo y la nota horizontalmente */
+  justify-content: center;
+
+  > div:first-child {
+    width: 100%; /* Asegura que TimelineView ocupe todo el ancho */
+    max-width: 500px; /* Limita el ancho máximo para mejor apariencia */
+  }
 
   @media (max-width: 768px) {
     overflow-x: auto;
+    align-items: flex-start; /* Evita desbordamiento en móviles */
   }
 `;
 
@@ -168,12 +200,10 @@ const Delivered = styled.span`
   padding: 0.3rem 0.5rem;
   border-radius: 3px;
 `;
+
 const Cancelled = styled.span`
-  color: rgb(220, 53, 69); 
-  background: rgba(220, 53, 69, 0.12); 
+  color: rgb(220, 53, 69);
+  background: rgba(220, 53, 69, 0.12);
   padding: 0.3rem 0.5rem;
   border-radius: 3px;
 `;
-
-
-export default UserOrdersCard;

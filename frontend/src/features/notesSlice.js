@@ -5,14 +5,22 @@ import { toast } from "react-toastify";
 
 const initialState = {
   items: [],
+  currentNote: null,
+  stats: {
+    notes: [],
+    income: [],
+  },
   status: null,
+  statsStatus: null,
+  fetchNoteStatus: null,
   createStatus: null,
   editStatus: null,
   deleteStatus: null,
+  error: null,
 };
 
-// ✅ Async Thunks
-export const notesFetch = createAsyncThunk("notes/notesFetch", async () => {
+// Async Thunks
+const notesFetch = createAsyncThunk("notes/notesFetch", async () => {
   try {
     const response = await axios.get(`${url}/notes`);
     return response.data;
@@ -22,7 +30,21 @@ export const notesFetch = createAsyncThunk("notes/notesFetch", async () => {
   }
 });
 
-export const notesCreate = createAsyncThunk(
+const fetchNoteById = createAsyncThunk(
+  "notes/fetchNoteById",
+  async (id) => {
+    try {
+      const response = await axios.get(`${url}/notes/findOne/${id}`, setHeaders());
+      return response.data;
+    } catch (error) {
+      console.log(error);
+      toast.error(error.response?.data || "Failed to fetch note");
+      throw error;
+    }
+  }
+);
+
+const notesCreate = createAsyncThunk(
   "notes/notesCreate",
   async (values) => {
     try {
@@ -36,7 +58,7 @@ export const notesCreate = createAsyncThunk(
   }
 );
 
-export const notesEdit = createAsyncThunk(
+const notesEdit = createAsyncThunk(
   "notes/notesEdit",
   async (values) => {
     try {
@@ -48,15 +70,12 @@ export const notesEdit = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.log(error);
-      toast.error(error.response?.data, {
-        position: "bottom-left",
-      });
       throw error;
     }
   }
 );
 
-export const notesDelete = createAsyncThunk(
+const notesDelete = createAsyncThunk(
   "notes/notesDelete",
   async (id) => {
     try {
@@ -64,13 +83,38 @@ export const notesDelete = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.log(error);
-      toast.error(error.response?.data);
       throw error;
     }
   }
 );
 
-// ✅ Slice
+const fetchNotesStats = createAsyncThunk(
+  "notes/fetchNotesStats",
+  async () => {
+    try {
+      const response = await axios.get(`${url}/notes/stats`, setHeaders());
+      return response.data;
+    } catch (error) {
+      console.log(error);
+      throw error;
+    }
+  }
+);
+
+const fetchIncomeStats = createAsyncThunk(
+  "notes/fetchIncomeStats",
+  async () => {
+    try {
+      const response = await axios.get(`${url}/notes/income/stats`, setHeaders());
+      return response.data;
+    } catch (error) {
+      console.log(error);
+      throw error;
+    }
+  }
+);
+
+// Slice
 const notesSlice = createSlice({
   name: "notes",
   initialState,
@@ -83,16 +127,30 @@ const notesSlice = createSlice({
         note._id === action.payload._id ? action.payload : note
       );
       state.items = updatedNotes;
+      if (state.currentNote?._id === action.payload._id) {
+        state.currentNote = action.payload;
+      }
     },
     noteDeleted: (state, action) => {
       state.items = state.items.filter(
         (note) => note._id !== action.payload._id
       );
+      if (state.currentNote?._id === action.payload._id) {
+        state.currentNote = null;
+      }
+    },
+    updateStats: (state, action) => {
+      const { type, data } = action.payload;
+      if (type === "notes") {
+        state.stats.notes = data;
+      } else if (type === "income") {
+        state.stats.income = data;
+      }
     },
   },
   extraReducers: (builder) => {
     builder
-      // ✅ notesFetch
+      // notesFetch
       .addCase(notesFetch.pending, (state) => {
         state.status = "pending";
       })
@@ -100,11 +158,26 @@ const notesSlice = createSlice({
         state.status = "success";
         state.items = action.payload;
       })
-      .addCase(notesFetch.rejected, (state) => {
+      .addCase(notesFetch.rejected, (state, action) => {
         state.status = "rejected";
+        state.error = action.error.message;
       })
-
-      // ✅ notesCreate
+      // fetchNoteById
+      .addCase(fetchNoteById.pending, (state) => {
+        state.fetchNoteStatus = "pending";
+      })
+      .addCase(fetchNoteById.fulfilled, (state, action) => {
+        state.fetchNoteStatus = "success";
+        state.currentNote = action.payload;
+        if (!state.items.some((note) => note._id === action.payload._id)) {
+          state.items.push(action.payload);
+        }
+      })
+      .addCase(fetchNoteById.rejected, (state, action) => {
+        state.fetchNoteStatus = "rejected";
+        state.error = action.error.message;
+      })
+      // notesCreate
       .addCase(notesCreate.pending, (state) => {
         state.createStatus = "pending";
       })
@@ -116,8 +189,7 @@ const notesSlice = createSlice({
       .addCase(notesCreate.rejected, (state) => {
         state.createStatus = "rejected";
       })
-
-      // ✅ notesEdit
+      // notesEdit
       .addCase(notesEdit.pending, (state) => {
         state.editStatus = "pending";
       })
@@ -126,14 +198,16 @@ const notesSlice = createSlice({
           note._id === action.payload._id ? action.payload : note
         );
         state.items = updatedNotes;
+        if (state.currentNote?._id === action.payload._id) {
+          state.currentNote = action.payload;
+        }
         state.editStatus = "success";
         toast.info("Note Edited");
       })
       .addCase(notesEdit.rejected, (state) => {
         state.editStatus = "rejected";
       })
-
-      // ✅ notesDelete
+      // notesDelete
       .addCase(notesDelete.pending, (state) => {
         state.deleteStatus = "pending";
       })
@@ -141,17 +215,58 @@ const notesSlice = createSlice({
         state.items = state.items.filter(
           (note) => note._id !== action.payload._id
         );
+        if (state.currentNote?._id === action.payload._id) {
+          state.currentNote = null;
+        }
         state.deleteStatus = "success";
         toast.error("Note Deleted");
       })
       .addCase(notesDelete.rejected, (state) => {
         state.deleteStatus = "rejected";
+      })
+      // fetchNotesStats
+      .addCase(fetchNotesStats.pending, (state) => {
+        state.statsStatus = "pending";
+      })
+      .addCase(fetchNotesStats.fulfilled, (state, action) => {
+        state.statsStatus = "success";
+        state.stats.notes = action.payload;
+      })
+      .addCase(fetchNotesStats.rejected, (state, action) => {
+        state.statsStatus = "rejected";
+        state.error = action.error.message;
+      })
+      // fetchIncomeStats
+      .addCase(fetchIncomeStats.pending, (state) => {
+        state.statsStatus = "pending";
+      })
+      .addCase(fetchIncomeStats.fulfilled, (state, action) => {
+        state.statsStatus = "success";
+        state.stats.income = action.payload;
+      })
+      .addCase(fetchIncomeStats.rejected, (state, action) => {
+        state.statsStatus = "rejected";
+        state.error = action.error.message;
       });
   },
 });
 
-// ✅ Export actions
-export const { noteAdded, noteUpdated, noteDeleted } = notesSlice.actions;
+// Export actions and thunks
+export const {
+  noteAdded,
+  noteUpdated,
+  noteDeleted,
+  updateStats,
+} = notesSlice.actions;
 
-// ✅ Export reducer
+export {
+  notesFetch,
+  fetchNoteById,
+  notesCreate,
+  notesEdit,
+  notesDelete,
+  fetchNotesStats,
+  fetchIncomeStats,
+};
+
 export default notesSlice.reducer;

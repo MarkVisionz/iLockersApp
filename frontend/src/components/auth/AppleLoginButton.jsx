@@ -2,58 +2,53 @@ import { signInWithPopup, OAuthProvider } from "firebase/auth";
 import { auth as authFirebase } from "../../features/firebase-config";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { loginUser } from "../../features/authSlice"; // ✅ unificado
+import { loginWithToken } from "../../features/authSlice";
 import { loginWithFirebaseToken } from "../../services/authApiService";
 import { FaApple } from "react-icons/fa";
 import { useState } from "react";
 import styled from "styled-components";
+import { toast } from "react-toastify";
+import { launchConfetti } from "../../utils/confetti";
 
 const AppleLoginButton = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [localStatus, setLocalStatus] = useState({
-    loading: false,
-    error: null,
-  });
+  const [loading, setLoading] = useState(false);
 
   const handleAppleLogin = async () => {
-    setLocalStatus({ loading: true, error: null });
+    setLoading(true);
 
     try {
-      // 1. Configuración del proveedor Apple
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
 
-      // 2. Autenticación con Apple
       const result = await signInWithPopup(authFirebase, provider);
       const user = result.user;
 
-      // 3. Validar si tiene email
       if (!user.email) {
         throw new Error("Tu cuenta de Apple no proporciona correo electrónico");
       }
 
-      // 4. Obtener token desde Firebase
       const token = await user.getIdToken(true);
 
-      // 5. Enviar token al backend y obtener respuesta
       const res = await loginWithFirebaseToken(
         token,
         user.displayName || user.email.split("@")[0]
       );
 
-      // 6. Guardar en Redux el token autenticado
-      await dispatch(loginUser({ token })).unwrap();
+      await dispatch(loginWithToken({ token: res.token })).unwrap();
 
-      // 7. Redirigir
       navigate("/cart");
+      launchConfetti();
     } catch (error) {
       console.error("❌ Error en Apple Auth:", error);
-      setLocalStatus({
-        loading: false,
-        error: error.message || "Error al autenticar con Apple",
+      toast.error(error.message || "Error al autenticar con Apple", {
+        position: "top-right",
+        autoClose: 5000,
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,14 +56,11 @@ const AppleLoginButton = () => {
     <AppleButton
       type="button"
       onClick={handleAppleLogin}
-      disabled={localStatus.loading}
-      aria-busy={localStatus.loading}
+      disabled={loading}
+      aria-busy={loading}
     >
       <FaApple size={24} />
-      {localStatus.loading ? "Cargando..." : "Continuar con Apple"}
-      {localStatus.error && (
-        <span className="sr-only">Error: {localStatus.error}</span>
-      )}
+      {loading ? "Cargando..." : "Continuar con Apple"}
     </AppleButton>
   );
 };

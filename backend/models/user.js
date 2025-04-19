@@ -28,11 +28,21 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "La contraseña debe tener al menos 6 caracteres"],
       select: false,
     },
+    profileImage: {
+      type: String,
+      default: "", // opcional, puedes poner una url default también
+    },
     loginAttempts: { type: Number, default: 0 },
     isLocked: { type: Boolean, default: false },
     lockUntil: { type: Date },
     isAdmin: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
+    authProvider: {
+      type: String,
+      enum: ['password', 'google.com', 'facebook.com'],
+      required: true,
+      default: 'password'
+    }
   },
   {
     timestamps: true,
@@ -77,4 +87,4 @@ userSchema.methods = {
 };
 
 const User = mongoose.model("User", userSchema);
-module.exports = User; // no destructures con {}
+module.exports = User;

@@ -1,72 +1,62 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
 import styled from "styled-components";
-import moment from "moment";
-import { setHeaders, url } from "../../features/api";
 import { LoadingSpinner } from "../LoadingAndError";
-import { useDispatch, useSelector } from "react-redux";
-import { ordersEdit } from "../../features/ordersSlice";
+import { useSelector } from "react-redux";
 
 const Order = () => {
-  const params = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const user = useSelector((state) => state.auth); // corregido: acceder directamente desde state.auth
+  const { list: orders, status } = useSelector((state) => state.orders);
+  const { isAdmin } = useSelector((state) => state.auth);
 
-  const [order, setOrder] = useState({});
-  const [loading, setLoading] = useState(false);
+  const order = useMemo(
+    () => orders.find((o) => o._id === id) || {},
+    [orders, id]
+  );
 
   const deliveryStatus = order.delivery_status || "pending";
   const shipping = order.shipping || {};
   const customerName = order.customer_name || "Sin nombre";
 
-  useEffect(() => {
-    const fetchOrder = async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get(
-          `${url}/orders/findOne/${params.id}`,
-          setHeaders()
-        );
-        setOrder(res.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const generateWhatsAppMessage = useMemo(
+    () => () => {
+      const name = order.customer_name || "cliente";
+      const date = order.createdAt
+        ? new Date(order.createdAt).toLocaleString("es-MX", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Fecha no disponible";
+      const total = order.total ? (order.total / 100).toFixed(2) : "0.00";
 
-    fetchOrder();
-  }, [params.id]);
+      const productsList =
+        order.products
+          ?.map((p) => {
+            return `🫚 ${p.description || "Producto"} x${p.quantity || 1} = $${
+              p.amount_total ? (p.amount_total / 100).toFixed(2) : "0.00"
+            }`;
+          })
+          .join("\n") || "No hay productos registrados.";
 
-  const generateWhatsAppMessage = () => {
-    const name = order.customer_name || "cliente";
-    const date = moment(order.createdAt).format("YYYY-MM-DD HH:mm");
-    const total = (order.total / 100).toFixed(2);
-
-    const productsList =
-      order.products
-        ?.map((p) => {
-          return `🫚 ${p.description} x${p.quantity} = $${(
-            p.amount_total / 100
-          ).toFixed(2)}`;
-        })
-        .join("\n") || "No hay productos registrados.";
-
-    return (
-      `👋 Hola, ${name}!\n` +
-      `Aquí está el resumen de tu orden:\n\n` +
-      `🤾 Orden ID: ${order._id}\n` +
-      `📅 Fecha: ${date}\n` +
-      `🧼 Servicios:\n${productsList}\n\n` +
-      `💰 Total: $${total}\n` +
-      `📍 Dirección: ${shipping?.line1 || "No disponible"}, ${
-        shipping?.city || ""
-      }\n` +
-      `✅ ¡Gracias por confiar en nosotros!`
-    );
-  };
+      return (
+        `👋 Hola, ${name}!\n` +
+        `Aquí está el resumen de tu orden:\n\n` +
+        `🤾 Orden ID: ${order._id || "N/A"}\n` +
+        `📅 Fecha: ${date}\n` +
+        `🧼 Servicios:\n${productsList}\n\n` +
+        `💰 Total: $${total}\n` +
+        `📍 Dirección: ${shipping?.line1 || "No disponible"}, ${
+          shipping?.city || ""
+        }\n` +
+        `✅ ¡Gracias por confiar en nosotros!`
+      );
+    },
+    [order]
+  );
 
   const sendWhatsAppReceipt = () => {
     if (!order.phone) {
@@ -75,15 +65,13 @@ const Order = () => {
     }
 
     const message = generateWhatsAppMessage();
-    const url = `https://wa.me/${order.phone.replace(
-      /\D/g,
-      ""
-    )}?text=${encodeURIComponent(message)}`;
+    const phone = order.phone.replace(/\D/g, "");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(url, "_blank");
   };
 
   const handleBackClick = () => {
-    if (user?.isAdmin) {
+    if (isAdmin) {
       navigate("/admin/summary");
     } else {
       navigate("/");
@@ -92,8 +80,16 @@ const Order = () => {
 
   return (
     <StyledOrder>
-      {loading ? (
+      {status === "loading" ? (
         <LoadingSpinner message="Loading order details..." />
+      ) : !order._id ? (
+        <OrdersContainer>
+          <Header>
+            <h2>Order Details</h2>
+            <BackButton onClick={handleBackClick}>Back to Dashboard</BackButton>
+          </Header>
+          <p>Orden no encontrada</p>
+        </OrdersContainer>
       ) : (
         <OrdersContainer>
           <Header>
@@ -133,18 +129,25 @@ const Order = () => {
                       <ProductQuantity>
                         x{product.quantity || 1}{" "}
                         <UnitPrice>
-                          (${(product.unit_amount / 100).toLocaleString()} c/u)
+                          (${product.unit_amount
+                            ? (product.unit_amount / 100).toLocaleString(
+                                "es-MX"
+                              )
+                            : "N/A"}{" "}
+                          c/u)
                         </UnitPrice>
                       </ProductQuantity>
                       <ProductPrice>
                         {product.amount_total
-                          ? `$${(product.amount_total / 100).toLocaleString()}`
+                          ? `$${(product.amount_total / 100).toLocaleString(
+                              "es-MX"
+                            )}`
                           : "N/A"}
                       </ProductPrice>
                     </ProductInfo>
                   </ProductDetails>
                 </Item>
-              ))}
+              )) || <p>No hay productos registrados</p>}
             </Items>
           </Section>
 
@@ -152,11 +155,11 @@ const Order = () => {
             <TotalPrice>
               <h3>Total Price</h3>
               {order.total
-                ? `$${(order.total / 100).toLocaleString()}`
+                ? `$${(order.total / 100).toLocaleString("es-MX")}`
                 : "No total disponible"}
             </TotalPrice>
 
-            {user?.isAdmin && (
+            {isAdmin && (
               <ButtonGroup>
                 <WhatsAppButton onClick={sendWhatsAppReceipt}>
                   Enviar por WhatsApp
@@ -173,7 +176,6 @@ const Order = () => {
 export default Order;
 
 // Styled Components
-
 const StyledOrder = styled.div`
   margin: 2rem;
   display: flex;
@@ -225,7 +227,7 @@ const DeliveryStatus = styled.span`
       case "delivered":
         return "rgba(102, 108, 255, 0.12)";
       case "cancelled":
-        return "rgba(220, 53, 69, 0.12)"; 
+        return "rgba(220, 53, 69, 0.12)";
       default:
         return "none";
     }

@@ -5,7 +5,7 @@ import axios from "axios";
 import { url } from "../../features/api";
 import { useDispatch } from "react-redux";
 import { addToCart } from "../../features/cartSlice";
-import { LoadingSpinner } from "../LoadingAndError"
+import { LoadingSpinner } from "../LoadingAndError";
 
 const Product = () => {
   const params = useParams();
@@ -49,8 +49,16 @@ const Product = () => {
             <ProductDetails>
               <h3>{product.name}</h3>
               <p>
-                <span>Weight:</span> {product.weight}
+                <span>Categoría:</span> {product.category}
               </p>
+              <p>
+                <span>Weight:</span> {product.weight}g
+              </p>
+              {product.description && (
+                <p>
+                  <span>Descripción:</span> {product.description}
+                </p>
+              )}
               <Price>${product.price?.toLocaleString()}</Price>
               <AddToCartButton onClick={() => handleAddToCart(product)}>
                 Add to Cart
@@ -78,14 +86,14 @@ const ProductContainer = styled.div`
   box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;
   border-radius: 5px;
   padding: 2rem;
-  background-color: #fff; /* Fondo blanco para mayor contraste */
+  background-color: #fff;
 `;
 
 const ImageContainer = styled.div`
   flex: 1;
   img {
     width: 100%;
-    border-radius: 5px; /* Bordes redondeados para la imagen */
+    border-radius: 5px;
   }
 `;
 
@@ -93,8 +101,8 @@ const ProductDetails = styled.div`
   flex: 2;
   margin-left: 2rem;
   h3 {
-    font-size: 2rem; /* Uso de rem para mejor accesibilidad */
-    margin-bottom: 0.5rem; /* Espaciado inferior */
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
   }
   p span {
     font-weight: bold;
@@ -104,20 +112,20 @@ const ProductDetails = styled.div`
 const Price = styled.div`
   margin: 1rem 0;
   font-weight: bold;
-  font-size: 1.5rem; /* Uso de rem para mejor accesibilidad */
+  font-size: 1.5rem;
 `;
 
 const AddToCartButton = styled.button`
   padding: 0.5rem 1rem;
-  font-size: 1rem; /* Uso de rem para mejor accesibilidad */
-  background-color: #007bff; /* Color de fondo */
-  color: white; /* Color de texto */
+  font-size: 1rem;
+  background-color: #007bff;
+  color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.3s ease;
 
   &:hover {
-    background-color: #0056b3; /* Color de fondo en hover */
+    background-color: #0056b3;
   }
 `;

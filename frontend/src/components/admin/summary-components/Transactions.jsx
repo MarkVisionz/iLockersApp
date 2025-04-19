@@ -1,4 +1,3 @@
-// Transactions.jsx
 import styled from "styled-components";
 import { useMemo, useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -8,15 +7,8 @@ import moment from "moment";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
 import { LoadingSpinner } from "../../LoadingAndError.jsx";
-import {
-  ordersFetch,
-  orderAdded,
-  orderUpdated,
-  orderDeleted,
-} from "../../../features/ordersSlice";
-import socket from "../../../features/socket.js";
+import { ordersFetch } from "../../../features/ordersSlice";
 import "react-toastify/dist/ReactToastify.css";
-
 
 const Transactions = () => {
   const dispatch = useDispatch();
@@ -29,14 +21,6 @@ const Transactions = () => {
 
   useEffect(() => {
     dispatch(ordersFetch());
-    socket.on("orderCreated", (order) => dispatch(orderAdded(order)));
-    socket.on("orderUpdated", (order) => dispatch(orderUpdated(order)));
-    socket.on("orderDeleted", (order) => dispatch(orderDeleted(order)));
-    return () => {
-      socket.off("orderCreated");
-      socket.off("orderUpdated");
-      socket.off("orderDeleted");
-    };
   }, [dispatch]);
 
   const getPeriodData = useCallback(
