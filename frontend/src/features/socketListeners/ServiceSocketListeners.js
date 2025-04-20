@@ -1,4 +1,4 @@
-// setupServiceSocketListeners.js
+// setupServiceSocketListeners.js - Versión optimizada
 import {
   serviceAdded,
   serviceUpdated,
@@ -9,33 +9,54 @@ import socket from "../socket";
 import { toast } from "react-toastify";
 
 const setupServiceSocketListeners = (dispatch) => {
-  socket.on("serviceCreated", (newService) => {
+  if (!socket) {
+    console.warn("Socket no está disponible");
+    return () => {};
+  }
+
+  // Handlers específicos
+  const handleServiceCreated = (newService) => {
     dispatch(serviceAdded(newService));
     toast.success(`Nuevo servicio: ${newService.name}`);
-  });
+  };
 
-  socket.on("serviceUpdated", (updatedService) => {
+  const handleServiceUpdated = (updatedService) => {
     dispatch(serviceUpdated(updatedService));
     toast.info(`Servicio actualizado: ${updatedService.name}`);
-  });
+  };
 
-  socket.on("serviceDeleted", (deletedService) => {
+  const handleServiceDeleted = (deletedService) => {
     dispatch(serviceDeleted(deletedService._id));
     toast.warning(`Servicio eliminado: ${deletedService.name}`);
-  });
+  };
 
-  socket.on("servicesCleared", () => {
+  const handleServicesCleared = () => {
     dispatch(clearAllServices());
     toast.warning("Todos los servicios fueron eliminados");
-  });
+  };
 
-  socket.on("servicesBulkCreated", (createdServices) => {
+  const handleBulkCreated = (createdServices) => {
     createdServices.forEach((service) => {
       dispatch(serviceAdded(service));
     });
-
     toast.success(`Se crearon ${createdServices.length} servicios correctamente`);
-  });
+  };
+
+  // Registrar listeners
+  socket.on("serviceCreated", handleServiceCreated);
+  socket.on("serviceUpdated", handleServiceUpdated);
+  socket.on("serviceDeleted", handleServiceDeleted);
+  socket.on("servicesCleared", handleServicesCleared);
+  socket.on("servicesBulkCreated", handleBulkCreated);
+
+  // Retornar función de limpieza
+  return () => {
+    socket.off("serviceCreated", handleServiceCreated);
+    socket.off("serviceUpdated", handleServiceUpdated);
+    socket.off("serviceDeleted", handleServiceDeleted);
+    socket.off("servicesCleared", handleServicesCleared);
+    socket.off("servicesBulkCreated", handleBulkCreated);
+  };
 };
 
 export default setupServiceSocketListeners;

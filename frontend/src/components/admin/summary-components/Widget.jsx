@@ -1,6 +1,10 @@
 import styled from "styled-components";
 
 const Widget = ({ data }) => {
+  const percentage = Number.isFinite(data.percentage)
+    ? Math.floor(data.percentage)
+    : 0;
+
   return (
     <StyledWidget>
       <Icon color={data.color} bgcolor={data.bgColor}>
@@ -8,24 +12,18 @@ const Widget = ({ data }) => {
       </Icon>
       <Text>
         <h3>
-          {data.isMoney
-            ? "$" + data.digits?.toLocaleString()
-            : data.digits?.toLocaleString()}
+          {data.digits === 0
+            ? "No data"
+            : data.isMoney
+            ? "$" + data.digits.toLocaleString()
+            : data.digits.toLocaleString()}
         </h3>
         <p>{data.title}</p>
       </Text>
-      {data.percentage < 0 ? (
-        <>
-          <Percentage isPositive={false}>
-            {Math.floor(data.percentage) + "%"}
-          </Percentage>
-        </>
+      {percentage < 0 ? (
+        <Percentage isPositive={false}>{percentage + "%"}</Percentage>
       ) : (
-        <>
-          <Percentage isPositive={true}>
-            {Math.floor(data.percentage) + "%"}
-          </Percentage>
-        </>
+        <Percentage isPositive={true}>{percentage + "%"}</Percentage>
       )}
     </StyledWidget>
   );

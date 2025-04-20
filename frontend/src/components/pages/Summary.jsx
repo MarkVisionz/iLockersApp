@@ -1,170 +1,292 @@
+import { useEffect, useMemo, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { FaUsers, FaChartBar, FaClipboard } from "react-icons/fa";
 import styled from "styled-components";
 import Widget from "../admin/summary-components/Widget";
-import { FaUsers, FaChartBar, FaClipboard } from "react-icons/fa";
 import Chart from "../admin/summary-components/Chart";
 import Transactions from "../admin/summary-components/Transactions";
 import AllTimeData from "../admin/summary-components/AllTimeData";
 import OrdersList from "../admin/list/OrdersList";
-import { useEffect, useMemo } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import socket from "../../features/socket";
 import {
   fetchOrderStats,
   fetchIncomeStats,
   fetchWeekSales,
-  updateStats,
 } from "../../features/ordersSlice";
+import { usersFetch } from "../../features/usersSlice";
 import { LoadingSpinner } from "../LoadingAndError";
+import { toast } from "react-toastify";
 
 const Summary = () => {
   const dispatch = useDispatch();
-  const { stats, status, error } = useSelector((state) => state.orders);
-
-  // Datos simulados para usuarios (sin socket)
-  const usersData = useMemo(
-    () => [
-      { _id: "current_month", total: 150 },
-      { _id: "previous_month", total: 120 },
-    ],
-    []
+  const { stats, status: ordersStatus, error: ordersError } = useSelector(
+    (state) => state.orders
   );
+  const { list: users = [], status: usersStatus, error: usersError } = useSelector(
+    (state) => state.users
+  );
+  const [currentDate] = useState(new Date());
+  const [widgetData, setWidgetData] = useState([
+    {
+      icon: <FaUsers />,
+      digits: 0,
+      isMoney: false,
+      title: "Users",
+      color: "rgb(255, 99, 132)",
+      bgColor: "rgba(255, 99, 132, 0.12)",
+      percentage: 0,
+    },
+    {
+      icon: <FaClipboard />,
+      digits: 0,
+      isMoney: false,
+      title: "Orders",
+      color: "#00d532",
+      bgColor: "rgba(0, 255, 115, 0.12)",
+      percentage: 0,
+    },
+    {
+      icon: <FaChartBar />,
+      digits: "0.00",
+      isMoney: true,
+      title: "Earnings",
+      color: "rgb(253, 181, 40)",
+      bgColor: "rgb(253, 181, 40, 0.12)",
+      percentage: 0,
+    },
+  ]);
 
-  const compare = (a, b) => (a._id < b._id ? 1 : -1);
+  // Función segura para filtrar usuarios
+  const getValidUsers = () => {
+    try {
+      return Array.isArray(users) 
+        ? users.filter(user => user?.createdAt) 
+        : [];
+    } catch (error) {
+      console.error("Error filtering users:", error);
+      return [];
+    }
+  };
 
-  // Carga inicial y WebSocket
+  // Función para comparar estadísticas
+  const compareStats = (a, b) => {
+    if (a._id === "current_month") return -1;
+    if (b._id === "current_month") return 1;
+    return 0;
+  };
+
   useEffect(() => {
-    dispatch(fetchOrderStats());
-    dispatch(fetchIncomeStats());
-    dispatch(fetchWeekSales());
-
-    const handleStatsUpdated = (payload) => {
-      dispatch(updateStats(payload));
+    // Cargar datos iniciales
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          dispatch(fetchOrderStats()),
+          dispatch(fetchIncomeStats()),
+          dispatch(fetchWeekSales()),
+          dispatch(usersFetch()),
+        ]);
+      } catch (error) {
+        toast.error("Error al cargar datos iniciales");
+        console.error("Error loading initial data:", error);
+      }
     };
 
-    socket.on("statsUpdated", handleStatsUpdated);
+    loadData();
+
+    // Configurar listeners de socket
+    const handleSocketConnect = () => {
+      toast.success("Conexión con el servidor establecida");
+    };
+
+    const handleSocketDisconnect = () => {
+      toast.warning("Conexión con el servidor perdida");
+    };
+
+    const handleSocketError = (error) => {
+      toast.error(`Error de conexión: ${error.message}`);
+    };
+
+    // Suscribir a eventos de conexión
+    socket.on("connect", handleSocketConnect);
+    socket.on("disconnect", handleSocketDisconnect);
+    socket.on("connect_error", handleSocketError);
 
     return () => {
-      socket.off("statsUpdated", handleStatsUpdated);
+      // Limpiar listeners de conexión
+      socket.off("connect", handleSocketConnect);
+      socket.off("disconnect", handleSocketDisconnect);
+      socket.off("connect_error", handleSocketError);
     };
   }, [dispatch]);
 
-  // Datos ordenados y porcentajes
-  const sortedOrders = useMemo(
-    () => [...(stats?.orders || [])].sort(compare),
-    [stats?.orders]
-  );
-  const sortedIncome = useMemo(
-    () => [...(stats?.income || [])].sort(compare),
-    [stats?.income]
-  );
-  const sortedUsers = useMemo(() => [...usersData].sort(compare), [usersData]);
+  // Obtener fechas para el mes actual y anterior
+  const currentMonth = currentDate.getUTCMonth();
+  const currentYear = currentDate.getUTCFullYear();
 
-  const usersPerc = useMemo(
-    () =>
-      sortedUsers.length >= 2 && sortedUsers[1].total !== 0
-        ? ((sortedUsers[0].total - sortedUsers[1].total) / sortedUsers[1].total) *
-          100
-        : 0,
-    [sortedUsers]
-  );
+  const previousMonthDate = new Date(currentDate);
+  previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+  const previousMonth = previousMonthDate.getUTCMonth();
+  const previousYear = previousMonthDate.getUTCFullYear();
 
-  const ordersPerc = useMemo(
-    () =>
-      sortedOrders.length >= 2 && sortedOrders[1].total !== 0
-        ? ((sortedOrders[0].total - sortedOrders[1].total) /
-            sortedOrders[1].total) *
-          100
-        : 0,
-    [sortedOrders]
-  );
+  // Calcular estadísticas con manejo seguro de errores
+  const { sortedOrders, sortedIncome, userStats } = useMemo(() => {
+    try {
+      const sortedOrders = [...(stats?.orders || [])].sort((a, b) => (a._id < b._id ? 1 : -1));
+      const sortedIncome = [...(stats?.income || [])].sort((a, b) => (a._id < b._id ? 1 : -1));
 
-  const incomePerc = useMemo(
-    () =>
-      sortedIncome.length >= 2 && sortedIncome[1].total !== 0
-        ? ((sortedIncome[0].total - sortedIncome[1].total) /
-            sortedIncome[1].total) *
-          100
-        : 0,
-    [sortedIncome]
-  );
+      const validUsers = getValidUsers();
+      
+      // Calcular usuarios por mes
+      const userStats = [
+        {
+          _id: "current_month",
+          total: validUsers.filter(user => {
+            try {
+              const created = new Date(user.createdAt);
+              return (
+                created.getUTCMonth() === currentMonth && 
+                created.getUTCFullYear() === currentYear
+              );
+            } catch {
+              return false;
+            }
+          }).length
+        },
+        {
+          _id: "previous_month",
+          total: validUsers.filter(user => {
+            try {
+              const created = new Date(user.createdAt);
+              return (
+                created.getUTCMonth() === previousMonth && 
+                created.getUTCFullYear() === previousYear
+              );
+            } catch {
+              return false;
+            }
+          }).length
+        }
+      ].sort(compareStats);
 
-  const data = useMemo(
-    () => [
-      {
-        icon: <FaUsers />,
-        digits: sortedUsers[0]?.total ?? 0,
-        isMoney: false,
-        title: "Users",
-        color: "rgb(255, 99, 132)",
-        bgColor: "rgba(255, 99, 132, 0.12)",
-        percentage: usersPerc,
-      },
-      {
-        icon: <FaClipboard />,
-        digits: sortedOrders[0]?.total ?? 0,
-        isMoney: false,
-        title: "Orders",
-        color: "#00d532",
-        bgColor: "rgba(0, 255, 115, 0.12)",
-        percentage: ordersPerc,
-      },
-      {
-        icon: <FaChartBar />,
-        digits: sortedIncome[0]?.total
-          ? (sortedIncome[0].total / 100).toFixed(2)
-          : "0.00",
-        isMoney: true,
-        title: "Earnings",
-        color: "rgb(253, 181, 40)",
-        bgColor: "rgb(253, 181, 40, 0.12)",
-        percentage: incomePerc,
-      },
-    ],
-    [sortedUsers, sortedOrders, sortedIncome, usersPerc, ordersPerc, incomePerc]
-  );
+      return { sortedOrders, sortedIncome, userStats };
+    } catch (error) {
+      console.error("Error calculating statistics:", error);
+      return {
+        sortedOrders: [],
+        sortedIncome: [],
+        userStats: [
+          { _id: "current_month", total: 0 },
+          { _id: "previous_month", total: 0 }
+        ]
+      };
+    }
+  }, [stats, users, currentMonth, currentYear, previousMonth, previousYear]);
+
+  // Calcular porcentajes con manejo seguro
+  const { usersPerc, ordersPerc, incomePerc } = useMemo(() => {
+    const calculatePercentage = (current, previous) => {
+      return previous > 0 ? ((current - previous) / previous) * 100 : 0;
+    };
+
+    return {
+      usersPerc: calculatePercentage(
+        userStats[0]?.total || 0,
+        userStats[1]?.total || 0
+      ),
+      ordersPerc: calculatePercentage(
+        sortedOrders[0]?.total || 0,
+        sortedOrders[1]?.total || 0
+      ),
+      incomePerc: calculatePercentage(
+        sortedIncome[0]?.total || 0,
+        sortedIncome[1]?.total || 0
+      )
+    };
+  }, [userStats, sortedOrders, sortedIncome]);
+
+  // Actualizar datos de widgets con manejo seguro
+  useEffect(() => {
+    try {
+      const currentUsers = userStats[0]?.total || 0;
+      const currentOrders = sortedOrders[0]?.total || 0;
+      const currentIncome = sortedIncome[0]?.total ? (sortedIncome[0].total / 100).toFixed(2) : "0.00";
+
+      setWidgetData([
+        {
+          icon: <FaUsers />,
+          digits: currentUsers,
+          isMoney: false,
+          title: "Users",
+          color: "rgb(255, 99, 132)",
+          bgColor: "rgba(255, 99, 132, 0.12)",
+          percentage: usersPerc,
+        },
+        {
+          icon: <FaClipboard />,
+          digits: currentOrders,
+          isMoney: false,
+          title: "Orders",
+          color: "#00d532",
+          bgColor: "rgba(0, 255, 115, 0.12)",
+          percentage: ordersPerc,
+        },
+        {
+          icon: <FaChartBar />,
+          digits: currentIncome,
+          isMoney: true,
+          title: "Earnings",
+          color: "rgb(253, 181, 40)",
+          bgColor: "rgb(253, 181, 40, 0.12)",
+          percentage: incomePerc,
+        },
+      ]);
+    } catch (error) {
+      console.error("Error updating widget data:", error);
+    }
+  }, [userStats, sortedOrders, sortedIncome, usersPerc, ordersPerc, incomePerc]);
+
+  // Renderizado condicional
+  if ((ordersStatus === "loading" && !stats?.orders?.length) || usersStatus === "loading") {
+    return <LoadingSpinner message={"Loading statistics..."} />;
+  }
+
+  if ((ordersStatus === "failed" && !stats?.orders?.length) || usersStatus === "rejected") {
+    return (
+      <LoadingMessage>
+        Error loading data: {ordersError || usersError || "Please try again later"}
+      </LoadingMessage>
+    );
+  }
 
   return (
     <StyledSummary>
-      {status === "loading" && !stats?.orders?.length ? (
-        <LoadingSpinner message={"Loading statistics..."}></LoadingSpinner>
-      ) : status === "failed" && !stats?.orders?.length ? (
-        <LoadingMessage>
-          Error loading statistics: {error || "Please try again later"}
-        </LoadingMessage>
-      ) : (
-        <>
-          <MainStats>
-            <Overview>
-              <Title>
-                <h2>Overview</h2>
-                <p>
-                  How your Laundry is performing compared to the previous month
-                </p>
-                <SocketStatus
-                  status={socket.connected ? "connected" : "disconnected"}
-                >
-                  {socket.connected ? "🟢 Conectado" : "🔴 Desconectado"}
-                </SocketStatus>
-              </Title>
-              <WidgetWrapper>
-                {data.map((data, index) => (
-                  <Widget key={index} data={data} />
-                ))}
-              </WidgetWrapper>
-            </Overview>
-            <Chart data={stats?.weekly || []} />
-            <OrdersList />
-          </MainStats>
-          <SideStats>
-            <Transactions />
-            <AllTimeData />
-          </SideStats>
-        </>
-      )}
+      <MainStats>
+        <Overview>
+          <Title>
+            <h2>Overview</h2>
+            <p>How your Laundry is performing compared to the previous month</p>
+            <SocketStatus status={socket.connected ? "connected" : "disconnected"}>
+              {socket.connected ? "🟢 Conectado" : "🔴 Desconectado"}
+            </SocketStatus>
+          </Title>
+          <WidgetWrapper>
+            {widgetData.map((data, index) => (
+              <Widget key={index} data={data} />
+            ))}
+          </WidgetWrapper>
+        </Overview>
+        <Chart data={stats?.weekly || []} />
+        <OrdersList />
+      </MainStats>
+      <SideStats>
+        <Transactions />
+        <AllTimeData />
+      </SideStats>
     </StyledSummary>
   );
 };
 
+// Estilos (se mantienen igual)
 export default Summary;
 
 // Estilos

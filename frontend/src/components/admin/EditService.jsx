@@ -3,7 +3,6 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   Button,
 } from "@mui/material";
 import styled from "styled-components";
@@ -13,13 +12,7 @@ import { v4 as uuidv4 } from "uuid";
 import { serviceAPI } from "../../services/serviceApi";
 import { FloatingInput } from "./CommonStyled";
 
-const EditService = ({
-  service,
-  setServices,
-  setError,
-  setLoading,
-  onClose,
-}) => {
+const EditService = ({ service, onClose }) => {
   const [formData, setFormData] = useState({
     name: service.name || "",
     type: service.type || "simple",
@@ -30,6 +23,7 @@ const EditService = ({
 
   const [newSize, setNewSize] = useState({ name: "", price: "" });
   const [formError, setFormError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -105,7 +99,6 @@ const EditService = ({
           throw new Error("Precio inválido para servicio simple");
         }
         payload.price = Number(formData.price);
-        payload.sizes = undefined;
       } else {
         if (!formData.sizes || formData.sizes.length === 0) {
           throw new Error("Debe agregar al menos una talla");
@@ -116,25 +109,9 @@ const EditService = ({
           name: size.name.trim(),
           price: Number(size.price),
         }));
-
-        payload.price = undefined;
       }
 
-      setLoading(true);
-      const response = await serviceAPI.updateService(service._id, payload);
-
-      setServices((prev) =>
-        prev.map((s) =>
-          s._id === service._id
-            ? {
-                ...s,
-                ...payload,
-                _id: service._id,
-              }
-            : s
-        )
-      );
-
+      await serviceAPI.updateService(service._id, payload);
       toast.success("Servicio actualizado exitosamente");
       onClose();
     } catch (err) {
@@ -152,6 +129,7 @@ const EditService = ({
       setLoading(false);
     }
   };
+
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -298,7 +276,7 @@ const EditService = ({
                 Cancelar
               </CloseButton>
               <SubmitButton type="submit">
-                {setLoading ? "Guardando..." : "Guardar Cambios"}
+                {loading ? "Guardando..." : "Guardar Cambios"}
               </SubmitButton>
             </ButtonsContainer>
           </StyledForm>

@@ -1,24 +1,46 @@
-// features/ordersSocketListeners.js
 import socket from "../socket";
-import { orderUpdated, orderDeleted, updateStatsFromSocket } from "../ordersSlice";
+import { 
+  socketOrderAdded,
+  socketOrderUpdated,
+  socketOrderStatusChanged,
+  socketStatsUpdated
+} from "../ordersSlice";
 
-const setupOrderSocketListeners = (dispatch) => {
-  if (!socket) return;
+const setupOrdersSocketListeners = (dispatch) => {
+  if (!socket) {
+    console.warn("Socket no está disponible");
+    return () => {};
+  }
 
-  // Actualización de orden
-  socket.on("orderUpdated", (updatedOrder) => {
-    dispatch(orderUpdated(updatedOrder));
-  });
+  const handleNewOrder = (order) => {
+    dispatch(socketOrderAdded(order));
+  };
 
-  // Orden cancelada
-  socket.on("orderDeleted", (deletedOrder) => {
-    dispatch(orderDeleted(deletedOrder));
-  });
+  const handleUpdatedOrder = (order) => {
+    dispatch(socketOrderUpdated(order));
+  };
 
-  // Estadísticas actualizadas (ordenes, ingresos o semanales)
-  socket.on("statsUpdated", ({ type, data }) => {
-    dispatch(updateStatsFromSocket({ type, data }));
-  });
+  const handleOrderStatusChange = ({ orderId, status }) => {
+    dispatch(socketOrderStatusChanged({ _id: orderId, status }));
+  };
+
+  const handleStatsUpdate = (stats) => {
+    dispatch(socketStatsUpdated(stats));
+  };
+
+  // Registrar listeners
+  socket.on("orderCreated", handleNewOrder);
+  socket.on("orderUpdated", handleUpdatedOrder);
+  socket.on("orderStatusChanged", handleOrderStatusChange);
+  socket.on("statsUpdated", handleStatsUpdate);
+
+  // Función de limpieza
+  return () => {
+    socket.off("orderCreated", handleNewOrder);
+    socket.off("orderUpdated", handleUpdatedOrder);
+    socket.off("orderStatusChanged", handleOrderStatusChange);
+    socket.off("statsUpdated", handleStatsUpdate);
+  };
 };
 
-export default setupOrderSocketListeners;
+export default setupOrdersSocketListeners;

@@ -14,10 +14,12 @@ import usersSlice from "./features/usersSlice";
 import notesReducer from "./features/notesSlice";
 import servicesSlice from "./features/servicesSlice";
 
-import ordersSocketListeners from "./features/socketListeners/ordersSocketListeners";
-import { startProductSocketListeners } from "./features/socketListeners/ProductsSocketListeners";
-import setupLaundrySocketListeners from "./features/socketListeners/laundryNoteSocketListeners";
-import setupServiceSocketListeners from "./features/socketListeners/ServiceSocketListeners";
+// import ordersSocketListeners from "./features/socketListeners/ordersSocketListeners";
+// import startProductSocketListeners from "./features/socketListeners/ProductsSocketListeners";
+// import setupLaundrySocketListeners from "./features/socketListeners/laundryNoteSocketListeners";
+// import setupServiceSocketListeners from "./features/socketListeners/ServiceSocketListeners";
+
+import setupAllSocketListeners from "./features/socketListeners/AllSocketListeners";
 
 const store = configureStore({
   reducer: {
@@ -38,10 +40,12 @@ store.dispatch(productsFetch());
 store.dispatch(getTotals());
 store.dispatch(loadUser(null));
 
-startProductSocketListeners(store.dispatch);
-ordersSocketListeners(store.dispatch);
-setupLaundrySocketListeners(store.dispatch);
-setupServiceSocketListeners(store.dispatch);
+// startProductSocketListeners(store.dispatch);
+// ordersSocketListeners(store.dispatch);
+// setupLaundrySocketListeners(store.dispatch);
+// setupServiceSocketListeners(store.dispatch);
+
+setupAllSocketListeners(store.dispatch);
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

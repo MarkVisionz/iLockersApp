@@ -3,7 +3,6 @@ import axios from "axios";
 import { url, setHeaders } from "./api";
 import { toast } from "react-toastify";
 
-// Estado inicial
 const initialState = {
   list: [],
   status: null,
@@ -17,14 +16,13 @@ const initialState = {
   },
 };
 
-// Utilidad para manejar errores
 const handleError = (error, rejectWithValue) => {
   const message = error.response?.data?.message || error.message || "Error desconocido";
   toast.error(message);
   return rejectWithValue(message);
 };
 
-// Obtener todas las órdenes
+// Thunks para operaciones asíncronas
 export const ordersFetch = createAsyncThunk(
   "orders/ordersFetch",
   async (_, { rejectWithValue }) => {
@@ -37,7 +35,6 @@ export const ordersFetch = createAsyncThunk(
   }
 );
 
-// Obtener estadísticas de órdenes
 export const fetchOrderStats = createAsyncThunk(
   "orders/fetchOrderStats",
   async (_, { rejectWithValue }) => {
@@ -50,7 +47,6 @@ export const fetchOrderStats = createAsyncThunk(
   }
 );
 
-// Obtener estadísticas de ingresos
 export const fetchIncomeStats = createAsyncThunk(
   "orders/fetchIncomeStats",
   async (_, { rejectWithValue }) => {
@@ -63,7 +59,6 @@ export const fetchIncomeStats = createAsyncThunk(
   }
 );
 
-// Obtener ventas semanales
 export const fetchWeekSales = createAsyncThunk(
   "orders/fetchWeekSales",
   async (_, { rejectWithValue }) => {
@@ -76,7 +71,6 @@ export const fetchWeekSales = createAsyncThunk(
   }
 );
 
-// Editar una orden (cambiar estado)
 export const ordersEdit = createAsyncThunk(
   "orders/ordersEdit",
   async (values, { rejectWithValue }) => {
@@ -94,7 +88,6 @@ export const ordersEdit = createAsyncThunk(
   }
 );
 
-// Cancelar una orden
 export const ordersDelete = createAsyncThunk(
   "orders/ordersDelete",
   async (id, { rejectWithValue }) => {
@@ -112,42 +105,41 @@ export const ordersDelete = createAsyncThunk(
   }
 );
 
-// Slice
 const ordersSlice = createSlice({
   name: "orders",
   initialState,
   reducers: {
-    orderAdded: (state, action) => {
-      const exists = state.list.find(o => o._id === action.payload._id);
+    // Reducers para actualizaciones via socket
+    socketOrderAdded: (state, action) => {
+      const exists = state.list.some(o => o._id === action.payload._id);
       if (!exists) {
         state.list.unshift(action.payload);
       }
     },
-    orderUpdated: (state, action) => {
-      state.list = state.list.map(order =>
-        order._id === action.payload._id ? action.payload : order
-      );
+    socketOrderUpdated: (state, action) => {
+      const index = state.list.findIndex(o => o._id === action.payload._id);
+      if (index !== -1) {
+        state.list[index] = action.payload;
+      }
     },
-    orderDeleted: (state, action) => {
-      state.list = state.list.map(order =>
-        order._id === action.payload._id
-          ? { ...order, delivery_status: "cancelled" }
-          : order
-      );
+    socketOrderStatusChanged: (state, action) => {
+      const order = state.list.find(o => o._id === action.payload._id);
+      if (order) {
+        order.delivery_status = action.payload.status;
+      }
     },
-    updateStatsFromSocket: (state, action) => {
-      const { type, data } = action.payload;
-      state.stats[type] = data;
-    },
-    updateStats: (state, action) => {
+    socketStatsUpdated: (state, action) => {
       const { type, data } = action.payload;
       state.stats[type] = data;
       state.stats.loading = false;
     },
+    // Reducer para forzar recarga de datos
+    invalidateOrdersCache: (state) => {
+      state.status = null;
+    }
   },
   extraReducers: (builder) => {
     builder
-      // Orders
       .addCase(ordersFetch.pending, (state) => {
         state.status = "loading";
         state.error = null;
@@ -160,69 +152,60 @@ const ordersSlice = createSlice({
         state.status = "failed";
         state.error = action.payload;
       })
-
-      // Orders Edit
       .addCase(ordersEdit.fulfilled, (state, action) => {
-        state.list = state.list.map(order =>
-          order._id === action.payload._id ? action.payload : order
-        );
+        const index = state.list.findIndex(o => o._id === action.payload._id);
+        if (index !== -1) {
+          state.list[index] = action.payload;
+        }
       })
-
-      // Orders Delete (cancelación)
       .addCase(ordersDelete.fulfilled, (state, action) => {
-        state.list = state.list.map(order =>
-          order._id === action.payload._id
-            ? { ...order, delivery_status: "cancelled" }
-            : order
-        );
+        const order = state.list.find(o => o._id === action.payload._id);
+        if (order) {
+          order.delivery_status = "cancelled";
+        }
       })
-
-      // Stats loading
       .addMatcher(
-        action =>
-          action.type === fetchOrderStats.pending.type ||
-          action.type === fetchIncomeStats.pending.type ||
-          action.type === fetchWeekSales.pending.type,
+        action => [
+          fetchOrderStats.pending.type,
+          fetchIncomeStats.pending.type,
+          fetchWeekSales.pending.type
+        ].includes(action.type),
         (state) => {
           state.stats.loading = true;
           state.stats.error = null;
         }
       )
-
-      // Stats fulfilled
       .addMatcher(
-        action =>
-          action.type === fetchOrderStats.fulfilled.type ||
-          action.type === fetchIncomeStats.fulfilled.type ||
-          action.type === fetchWeekSales.fulfilled.type,
+        action => [
+          fetchOrderStats.fulfilled.type,
+          fetchIncomeStats.fulfilled.type,
+          fetchWeekSales.fulfilled.type
+        ].includes(action.type),
         (state, action) => {
-          const { type, data } = action.payload;
-          state.stats[type] = data;
+          state.stats[action.payload.type] = action.payload.data;
           state.stats.loading = false;
         }
       )
-
-      // Stats rejected
       .addMatcher(
-        action =>
-          action.type === fetchOrderStats.rejected.type ||
-          action.type === fetchIncomeStats.rejected.type ||
-          action.type === fetchWeekSales.rejected.type,
+        action => [
+          fetchOrderStats.rejected.type,
+          fetchIncomeStats.rejected.type,
+          fetchWeekSales.rejected.type
+        ].includes(action.type),
         (state, action) => {
           state.stats.loading = false;
           state.stats.error = action.payload;
         }
       );
-  },
+  }
 });
 
-// Exportar acciones
-export const {
-  orderAdded,
-  orderUpdated,
-  orderDeleted,
-  updateStatsFromSocket,
-  updateStats
+export const { 
+  socketOrderAdded,
+  socketOrderUpdated,
+  socketOrderStatusChanged,
+  socketStatsUpdated,
+  invalidateOrdersCache
 } = ordersSlice.actions;
 
 export default ordersSlice.reducer;

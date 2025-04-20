@@ -184,7 +184,6 @@ const notesSlice = createSlice({
       .addCase(notesCreate.fulfilled, (state, action) => {
         state.items.push(action.payload);
         state.createStatus = "success";
-        toast.success("Note Created!");
       })
       .addCase(notesCreate.rejected, (state) => {
         state.createStatus = "rejected";
@@ -202,7 +201,6 @@ const notesSlice = createSlice({
           state.currentNote = action.payload;
         }
         state.editStatus = "success";
-        toast.info("Note Edited");
       })
       .addCase(notesEdit.rejected, (state) => {
         state.editStatus = "rejected";

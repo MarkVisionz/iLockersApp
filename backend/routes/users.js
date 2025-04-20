@@ -16,9 +16,13 @@ router.get("/", isAdmin, async (req, res) => {
 });
 
 // DELETE USER
-router.delete("/id", isAdmin, async (req, res) => {
+router.delete("/:id", isAdmin, async (req, res) => {
   try {
     const deletedUser = await User.findByIdAndDelete(req.params.id);
+    if (!deletedUser)
+      return res.status(404).json({ message: "Usuario no encontrado" });
+
+    req.io.emit("userDeleted", deletedUser); // ✅ Emitimos evento
     res.status(200).send(deletedUser);
   } catch (error) {
     res.status(500).send(error);
@@ -71,14 +75,17 @@ router.put("/:id", isUser, async (req, res) => {
     if (fromResetFlow && authProvider === "password") {
       if (!["google.com", "facebook.com"].includes(user.authProvider)) {
         return res.status(400).json({
-          message: "Este flujo solo aplica para usuarios autenticados con Google o Facebook",
+          message:
+            "Este flujo solo aplica para usuarios autenticados con Google o Facebook",
         });
       }
 
       user.authProvider = "password";
       const updatedUser = await user.save();
 
-      console.log(`Usuario ${user._id} cambió authProvider a "password" mediante fromResetFlow`);
+      console.log(
+        `Usuario ${user._id} cambió authProvider a "password" mediante fromResetFlow`
+      );
 
       // Emitir evento userUpdated
       req.io.to(`user_${user._id}`).emit("userUpdated", {
@@ -136,7 +143,8 @@ router.put("/:id", isUser, async (req, res) => {
     if (newPassword) {
       if (user.authProvider !== "password") {
         return res.status(403).json({
-          message: "No puedes cambiar la contraseña en este método de autenticación",
+          message:
+            "No puedes cambiar la contraseña en este método de autenticación",
         });
       }
 
@@ -148,7 +156,9 @@ router.put("/:id", isUser, async (req, res) => {
 
       const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) {
-        return res.status(401).json({ message: "Contraseña actual incorrecta" });
+        return res
+          .status(401)
+          .json({ message: "Contraseña actual incorrecta" });
       }
 
       const salt = await bcrypt.genSalt(10);
@@ -164,6 +174,17 @@ router.put("/:id", isUser, async (req, res) => {
 
     // Emitir evento userUpdated
     console.log(`Emitiendo userUpdated para user_${user._id}`);
+    // Emitir evento global (admin, listas, etc.)
+    req.io.emit("userUpdated", {
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      isAdmin: updatedUser.isAdmin,
+      photoURL: updatedUser.photoURL,
+      authProvider: updatedUser.authProvider,
+    });
+
+    // Emitir evento privado (perfil del usuario)
     req.io.to(`user_${user._id}`).emit("userUpdated", {
       _id: updatedUser._id,
       name: updatedUser.name,
@@ -196,35 +217,38 @@ router.put("/:id", isUser, async (req, res) => {
 });
 
 // GET USER STATS
-router.get("/stats", /*isAdmin,*/ async (req, res) => {
-  const previousMonth = moment()
-    .month(moment().month() - 1)
-    .set("date", 1)
-    .format("YYYY-MM-DD HH:mm:ss");
+router.get(
+  "/stats",
+  /*isAdmin,*/ async (req, res) => {
+    const previousMonth = moment()
+      .month(moment().month() - 1)
+      .set("date", 1)
+      .format("YYYY-MM-DD HH:mm:ss");
 
-  try {
-    const users = await User.aggregate([
-      {
-        $match: { createdAt: { $gte: new Date(previousMonth) } },
-      },
-      {
-        $project: {
-          month: { $month: "$createdAt" },
+    try {
+      const users = await User.aggregate([
+        {
+          $match: { createdAt: { $gte: new Date(previousMonth) } },
         },
-      },
-      {
-        $group: {
-          _id: "$month",
-          total: { $sum: 1 },
+        {
+          $project: {
+            month: { $month: "$createdAt" },
+          },
         },
-      },
-    ]);
+        {
+          $group: {
+            _id: "$month",
+            total: { $sum: 1 },
+          },
+        },
+      ]);
 
-    res.status(200).send(users);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err);
+      res.status(200).send(users);
+    } catch (err) {
+      console.log(err);
+      res.status(500).send(err);
+    }
   }
-});
+);
 
 module.exports = router;

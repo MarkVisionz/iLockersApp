@@ -17,7 +17,7 @@ if (!admin.apps.length) {
 
 // 🔐 LOGIN con Firebase
 router.post("/firebase-login", async (req, res) => {
-  console.log("Iniciando autenticación Firebase:", req.body); // Log temporal
+  console.log("Iniciando autenticación Firebase:", req.body);
 
   try {
     const { token, name: userName } = req.body;
@@ -39,6 +39,7 @@ router.post("/firebase-login", async (req, res) => {
     }
 
     let user = await User.findOne({ email });
+    let isNew = false;
 
     if (!user) {
       const name = userName || decoded.name || email.split("@")[0];
@@ -50,7 +51,9 @@ router.post("/firebase-login", async (req, res) => {
         isVerified: true,
         authProvider,
       });
+
       await user.save();
+      isNew = true;
       console.log("✅ Nuevo usuario creado:", email, "Proveedor:", authProvider);
     } else {
       if (user.authProvider !== authProvider) {
@@ -79,6 +82,18 @@ router.post("/firebase-login", async (req, res) => {
       authProvider: user.authProvider,
     });
 
+    // 🔁 Emitimos si es nuevo
+    if (isNew && req.io) {
+      req.io.emit("userCreated", {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        photoURL: user.photoURL,
+        authProvider: user.authProvider,
+      });
+    }
+
     res.status(200).json({
       token: jwtToken,
       user: {
@@ -103,7 +118,7 @@ router.post("/firebase-login", async (req, res) => {
 
 // ✅ REGISTRO vía Firebase
 router.post("/firebase-register", async (req, res) => {
-  console.log("Iniciando registro Firebase:", req.body); // Log temporal
+  console.log("Iniciando registro Firebase:", req.body);
 
   try {
     const { email, name, password } = req.body;
@@ -133,6 +148,18 @@ router.post("/firebase-register", async (req, res) => {
       isAdmin: user.isAdmin,
       authProvider: user.authProvider,
     });
+
+    // 🔁 Emitimos evento para panel en tiempo real
+    if (req.io) {
+      req.io.emit("userCreated", {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        photoURL: user.photoURL,
+        authProvider: user.authProvider,
+      });
+    }
 
     res.status(201).json({
       token,
