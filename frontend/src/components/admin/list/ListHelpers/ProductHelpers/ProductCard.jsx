@@ -7,7 +7,7 @@ const ProductCard = ({ item, handleDelete, navigate }) => {
 
   return (
     <CardContainer>
-      <ProductInfo onClick={() => navigate(`/product/${item._id}`)}>
+      <ProductInfo>
         <ProductId>ID: {item._id}</ProductId>
         <ImageContainer>
           <ProductImage src={item.image?.url} alt={item.name} />

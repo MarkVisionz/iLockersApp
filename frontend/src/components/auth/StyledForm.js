@@ -32,19 +32,6 @@ export const PageWrapper = styled.div`
   }
 `;
 
-// Texto de bienvenida con animación
-export const WelcomeText = styled(motion.h1)`
-  font-family: "Pacifico", cursive;
-  font-size: clamp(2rem, 5vw, 3rem);
-  color: #fff;
-  text-shadow: 2px 2px 8px #007bff, 1px 1px 2px rgba(0, 0, 0, 0.5);
-  display: flex;
-  gap: 0.1rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  text-align: center;
-`;
-
 // Formulario principal
 export const Form = styled.form`
   max-height: 90vh;
@@ -151,7 +138,7 @@ export const ButtonLogin = styled.button`
 // Texto debajo del formulario
 export const SignupPrompt = styled.p`
   text-align: center;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
   color: #666;
 
   a {

@@ -11,10 +11,9 @@ import {
   FaApple,
   FaKey
 } from "react-icons/fa";
+import { motion } from "framer-motion";
 
-// Componente AllTimeData
 const AllTimeData = () => {
-  // Obtener datos del estado
   const { 
     list: users = [], 
     status: usersStatus, 
@@ -34,11 +33,9 @@ const AllTimeData = () => {
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Determinar estados de carga y error
   const isLoading = (usersStatus === "loading" || ordersStatus === "loading") && isInitialLoad;
   const isError = usersError || ordersError;
 
-  // Calcular estadísticas de usuarios por proveedor de autenticación
   const authProviderStats = useMemo(() => {
     const stats = {
       google: 0,
@@ -49,33 +46,21 @@ const AllTimeData = () => {
 
     users.forEach(user => {
       switch(user.authProvider) {
-        case 'google.com':
-          stats.google++;
-          break;
-        case 'facebook.com':
-          stats.facebook++;
-          break;
-        case 'apple.com':
-          stats.apple++;
-          break;
-        case 'password':
-          stats.password++;
-          break;
-        default:
-          stats.password++; // Por defecto
+        case 'google.com': stats.google++; break;
+        case 'facebook.com': stats.facebook++; break;
+        case 'apple.com': stats.apple++; break;
+        default: stats.password++; 
       }
     });
 
     return stats;
   }, [users]);
 
-  // Calcular estadísticas de órdenes
   const orderStatistics = useMemo(() => {
     const totalOrders = orders.length;
     const cancelledOrders = orders.filter(order => order.delivery_status === 'cancelled').length;
     const completedOrders = orders.filter(order => order.delivery_status === 'delivered').length;
     
-    // Calcular ganancias totales (sumando todas las órdenes no canceladas)
     const totalEarnings = orders.reduce((sum, order) => {
       return order.delivery_status !== 'cancelled' ? sum + (order.total || 0) : sum;
     }, 0);
@@ -91,13 +76,7 @@ const AllTimeData = () => {
     };
   }, [orders]);
 
-  // Calcular total de notas/órdenes de todos los meses
-  const totalNotes = useMemo(() => {
-    if (!orderStats.orders || !Array.isArray(orderStats.orders)) return 0;
-    return orderStats.orders.reduce((sum, month) => sum + (month.total || 0), 0);
-  }, [orderStats.orders]);
 
-  // Marcar la carga inicial como completa cuando los datos estén listos
   useMemo(() => {
     if (usersStatus === "success" && ordersStatus === "success") {
       setIsInitialLoad(false);
@@ -107,80 +86,108 @@ const AllTimeData = () => {
   if (isError) {
     return (
       <Container>
-        <h3>Resumen Acumulado</h3>
-        <Error>Error al cargar datos: {usersError || ordersError}</Error>
+        <Header>
+          <Title>Resumen General</Title>
+        </Header>
+        <ErrorMessage>Error al cargar datos: {usersError || ordersError}</ErrorMessage>
       </Container>
     );
   }
 
   return (
     <Container>
-      <h3>Resumen Acumulado</h3>
+      <Header>
+        <Title>Resumen General</Title>
+        <Subtitle>Estadísticas acumuladas de la plataforma</Subtitle>
+      </Header>
+      
       {isLoading ? (
-        <Loading>Cargando estadísticas completas...</Loading>
+        <LoadingContainer>
+          <LoadingSpinner />
+          <LoadingText>Cargando estadísticas...</LoadingText>
+        </LoadingContainer>
       ) : (
-        <>
-          <StatsGrid>
-            <StatCard>
-              <IconWrapper>
+        <StatsGrid>
+          {/* Fila 1 */}
+          <StatsRow>
+            <StatsCard 
+              as={motion.div}
+              whileHover={{ y: -3 }}
+              color="#4b70e2"
+            >
+              <CardIcon color="#4b70e2">
                 <FaUsers />
-              </IconWrapper>
-              <Data>
-                <Label>Total Usuarios</Label>
-                <Value>{users.length}</Value>
-                <AuthStats>
-                  <AuthStat color="#DB4437">
-                    <FaGoogle /> {authProviderStats.google}
-                  </AuthStat>
-                  <AuthStat color="#4267B2">
-                    <FaFacebook /> {authProviderStats.facebook}
-                  </AuthStat>
-                  <AuthStat color="#000000">
-                    <FaApple /> {authProviderStats.apple}
-                  </AuthStat>
-                  <AuthStat color="#666666">
-                    <FaKey /> {authProviderStats.password}
-                  </AuthStat>
-                </AuthStats>
-              </Data>
-            </StatCard>
-            
-            <StatCard>
-              <IconWrapper>
+              </CardIcon>
+              <CardContent>
+                <CardValue>{users.length}</CardValue>
+                <CardLabel>Usuarios</CardLabel>
+                <AuthProviders>
+                  <ProviderBadge color="#DB4437">
+                    <FaGoogle size={10} /> {authProviderStats.google}
+                  </ProviderBadge>
+                  <ProviderBadge color="#4267B2">
+                    <FaFacebook size={10} /> {authProviderStats.facebook}
+                  </ProviderBadge>
+                  <ProviderBadge color="#000000">
+                    <FaApple size={10} /> {authProviderStats.apple}
+                  </ProviderBadge>
+                  <ProviderBadge color="#666666">
+                  <FaKey size={10} /> {authProviderStats.password}
+                </ProviderBadge>
+                </AuthProviders>
+              </CardContent>
+            </StatsCard>
+
+            <StatsCard 
+              as={motion.div}
+              whileHover={{ y: -3 }}
+              color="#28a745"
+            >
+              <CardIcon color="#28a745">
                 <FaTshirt />
-              </IconWrapper>
-              <Data>
-                <Label>Total Productos</Label>
-                <Value>{products.length}</Value>
-              </Data>
-            </StatCard>
-            
-            <StatCard>
-              <IconWrapper>
+              </CardIcon>
+              <CardContent>
+                <CardValue>{products.length}</CardValue>
+                <CardLabel>Productos</CardLabel>
+              </CardContent>
+            </StatsCard>
+          </StatsRow>
+
+          {/* Fila 2 */}
+          <StatsRow>
+            <StatsCard 
+              as={motion.div}
+              whileHover={{ y: -3 }}
+              color="#dc3545"
+            >
+              <CardIcon color="#dc3545">
                 <FaClipboardList />
-              </IconWrapper>
-              <Data>
-                <Label>Total Órdenes</Label>
-                <Value>{orderStatistics.totalOrders}</Value>
+              </CardIcon>
+              <CardContent>
+                <CardValue>{orderStatistics.totalOrders}</CardValue>
+                <CardLabel>Órdenes</CardLabel>
                 <OrderDetails>
-                  <Detail>Completadas: {orderStatistics.completedOrders}</Detail>
-                  <Detail>Canceladas: {orderStatistics.cancelledOrders}</Detail>
-                  <Detail>Notas: {totalNotes}</Detail>
+                  <Detail positive>{orderStatistics.completedOrders} completadas</Detail>
+                  <Detail negative>{orderStatistics.cancelledOrders} canceladas</Detail>
                 </OrderDetails>
-              </Data>
-            </StatCard>
-            
-            <StatCard>
-              <IconWrapper>
+              </CardContent>
+            </StatsCard>
+
+            <StatsCard 
+              as={motion.div}
+              whileHover={{ y: -3 }}
+              color="#ffc107"
+            >
+              <CardIcon color="#ffc107">
                 <FaMoneyBillWave />
-              </IconWrapper>
-              <Data>
-                <Label>Ganancias Totales</Label>
-                <Value>{orderStatistics.totalEarnings}</Value>
-              </Data>
-            </StatCard>
-          </StatsGrid>
-        </>
+              </CardIcon>
+              <CardContent>
+                <CardValue>{orderStatistics.totalEarnings}</CardValue>
+                <CardLabel>Ganancias</CardLabel>
+              </CardContent>
+            </StatsCard>
+          </StatsRow>
+        </StatsGrid>
       )}
     </Container>
   );
@@ -188,174 +195,174 @@ const AllTimeData = () => {
 
 export default AllTimeData;
 
-// Styled components
+// Estilos
 const Container = styled.div`
   background: #fff;
   border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   width: 100%;
+`;
 
-  h3 {
-    color: #333;
-    margin-bottom: 1rem;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
+const Header = styled.div`
+  margin-bottom: 1.5rem;
+`;
+
+const Title = styled.h3`
+  color: #2d3748;
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+`;
+
+const Subtitle = styled.p`
+  color: #718096;
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
 `;
 
 const StatsGrid = styled.div`
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  margin-top: 1rem;
-
-  @media (min-width: 768px) {
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  }
-  @media (min-width: 1200px) {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  }
-`;
-
-const StatCard = styled.div`
-  display: flex;
-  align-items: flex-start;
-  padding: 1rem;
-  background: #f4f7ff;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(75, 112, 226, 0.1);
-  transition: all 0.2s ease;
-  min-height: 100px;
-  max-width: 300px;
-  overflow: hidden;
-
-  &:hover {
-    background: #e8edff;
-    transform: translateY(-2px);
-  }
-
-  @media (max-width: 768px) {
-    padding: 0.8rem;
-    min-height: 80px;
-  }
-`;
-
-const IconWrapper = styled.div`
-  font-size: 1.5rem;
-  color: #4b70e2;
-  margin-right: 0.8rem;
-  margin-top: 0.2rem;
-  flex-shrink: 0;
-
-  @media (max-width: 768px) {
-    font-size: 1.2rem;
-    margin-right: 0.5rem;
-  }
-`;
-
-const Data = styled.div`
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 0; /* Evita desborde del contenido */
+  gap: 1rem;
 `;
 
-const Label = styled.span`
-  font-size: 0.85rem;
-  color: #777;
-  margin-bottom: 0.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  @media (max-width: 768px) {
-    font-size: 0.75rem;
-  }
-`;
-
-const Value = styled.span`
-  font-size: 1.3rem;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 0.4rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  @media (max-width: 768px) {
-    font-size: 1.1rem;
-  }
-`;
-
-const AuthStats = styled.div`
+const StatsRow = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.2rem;
+  gap: 1rem;
+  width: 100%;
+`;
 
-  @media (max-width: 768px) {
-    gap: 0.3rem;
+const StatsCard = styled.div`
+  flex: 1;
+  position: relative;
+  padding: 1.25rem 1rem;
+  background: #fff;
+  border-radius: 10px;
+  border-left: 3px solid ${props => props.color};
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  min-height: 120px;
+  overflow: hidden;
+  
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: ${props => props.color}05;
+    z-index: 0;
   }
 `;
 
-const AuthStat = styled.span`
+const CardIcon = styled.div`
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  font-size: 1.1rem;
+  color: ${props => props.color};
+  z-index: 1;
+`;
+
+const CardContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding-top: 0.5rem;
+  z-index: 1;
+`;
+
+const CardValue = styled.div`
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 0.25rem;
+`;
+
+const CardLabel = styled.div`
+  font-size: 0.85rem;
+  color: #718096;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+`;
+
+const AuthProviders = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  max-width: 160px;
+`;
+
+const ProviderBadge = styled.span`
   display: flex;
   align-items: center;
-  gap: 0.2rem;
-  font-size: 0.75rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  background: ${props => props.color}20;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 12px;
+  background: ${props => props.color}15;
   color: ${props => props.color};
+  font-weight: 500;
   white-space: nowrap;
-
-  svg {
-    font-size: 0.8rem;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 0.65rem;
-    padding: 0.1rem 0.3rem;
-
-    svg {
-      font-size: 0.7rem;
-    }
-  }
+  text-align: center;
 `;
 
 const OrderDetails = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  margin-top: 0.2rem;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
 `;
 
 const Detail = styled.span`
   font-size: 0.75rem;
-  color: #555;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: ${props => props.positive ? '#38a169' : props.negative ? '#e53e3e' : '#718096'};
+  font-weight: 500;
+`;
 
-  @media (max-width: 768px) {
-    font-size: 0.65rem;
+const LoadingContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+`;
+
+const LoadingSpinner = styled.div`
+  width: 32px;
+  height: 32px;
+  border: 3px solid #edf2f7;
+  border-top: 3px solid #4b70e2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
 `;
 
-const Loading = styled.p`
-  text-align: center;
-  margin: 1rem 0;
-  color: #666;
-  font-size: 1rem;
+const LoadingText = styled.p`
+  margin-top: 1rem;
+  color: #718096;
+  font-size: 0.9rem;
 `;
 
-const Error = styled.p`
+const ErrorMessage = styled.div`
   text-align: center;
-  color: #dc2626;
-  font-weight: bold;
+  color: #e53e3e;
+  font-weight: 500;
   padding: 1rem;
-  background: #fef2f2;
-  border-radius: 6px;
+  background: #fff5f5;
+  border-radius: 8px;
+  border: 1px solid #fed7d7;
   font-size: 0.9rem;
 `;

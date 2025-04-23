@@ -1,8 +1,9 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import styled, { css } from "styled-components";
 import { logoutUser } from "../features/authSlice";
 import { toast } from "react-toastify";
+import { useMediaQuery } from "react-responsive";
 
 const NavBar = () => {
   const navigate = useNavigate();
@@ -11,6 +12,8 @@ const NavBar = () => {
   const auth = useSelector((state) => state.auth);
   const location = useLocation();
   const isHome = location.pathname === "/";
+  const isMobile = useMediaQuery({ maxWidth: 768 });
+  const isVerySmallScreen = useMediaQuery({ maxWidth: 400 });
 
   const handleLogout = () => {
     dispatch(logoutUser(null));
@@ -20,35 +23,42 @@ const NavBar = () => {
 
   return (
     <NavContainer $isHome={isHome}>
-      <LogoLink to="/">
+      <LogoLink to="/" aria-label="Ir a la página principal">
         <LogoImage
           src="https://res.cloudinary.com/mkocloud/image/upload/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png"
+          srcSet="
+            https://res.cloudinary.com/mkocloud/image/upload/w_80/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png 80w,
+            https://res.cloudinary.com/mkocloud/image/upload/w_120/v1715454398/OnlineLaundry/LogosWeb/LogoLaundry_saga4u.png 120w"
+          sizes="(max-width: 768px) 80px, 120px"
           alt="Online Laundry Logo"
+          $isMobile={isMobile}
+          $isVerySmallScreen={isVerySmallScreen}
+          loading="lazy"
         />
       </LogoLink>
 
-      <NavContent>
+      <NavContent $isMobile={isMobile}>
         {auth._id ? (
-          <NavLinks>
+          <NavLinks $isMobile={isMobile}>
             {!auth.isAdmin ? (
-              <NavButton to="/user/profile">Perfil</NavButton>
+              <NavButton to="/user/profile" $isMobile={isMobile}>Perfil</NavButton>
             ) : (
               <>
-                <NavButton to="/admin/summary">Admin</NavButton>
-                <NavButton to="/laundry-screen">Lavandería</NavButton>
+                <NavButton to="/admin/summary" $isMobile={isMobile}>Admin</NavButton>
+                <NavButton to="/laundry-screen" $isMobile={isMobile}>Lavandería</NavButton>
               </>
             )}
-            <LogoutButton onClick={handleLogout}>Salir</LogoutButton>
+            <LogoutButton onClick={handleLogout} $isMobile={isMobile} aria-label="Cerrar sesión">Salir</LogoutButton>
           </NavLinks>
         ) : (
-          <AuthLinks>
-            <NavButton to="/login">Entrar</NavButton>
-            <NavButton to="/register">Registrarse</NavButton>
+          <AuthLinks $isMobile={isMobile}>
+            <NavButton to="/login" $isMobile={isMobile}>Entrar</NavButton>
+            <NavButton to="/register" $isMobile={isMobile}>Registrarse</NavButton>
           </AuthLinks>
         )}
 
-        <CartLink to="/cart" $isHome={isHome}>
-          <CartIcon $isHome={isHome}>
+        <CartLink to="/cart" $isHome={isHome} aria-label={`Ver carrito con ${cartTotalQuantity} ítems`}>
+          <CartIcon $isHome={isHome} $isMobile={isMobile}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="26"
@@ -59,7 +69,7 @@ const NavBar = () => {
               <path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
             </svg>
             {cartTotalQuantity > 0 && (
-              <BagQuantity>{cartTotalQuantity}</BagQuantity>
+              <BagQuantity $isMobile={isMobile}>{cartTotalQuantity}</BagQuantity>
             )}
           </CartIcon>
         </CartLink>
@@ -107,6 +117,15 @@ const NavContainer = styled.nav`
           backdrop-filter: blur(10px);
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         `}
+
+  @media (max-width: 768px) {
+    padding: 0 1rem;
+    height: 70px;
+  }
+
+  @media (max-width: 400px) {
+    padding: 0 0.5rem;
+  }
 `;
 
 const LogoLink = styled(Link)`
@@ -115,7 +134,8 @@ const LogoLink = styled(Link)`
 `;
 
 const LogoImage = styled.img`
-  height: 120px;
+  height: ${(props) =>
+    props.$isVerySmallScreen ? "60px" : props.$isMobile ? "80px" : "120px"};
   transition: transform 0.3s ease;
 
   &:hover {
@@ -126,50 +146,58 @@ const LogoImage = styled.img`
 const NavContent = styled.div`
   display: flex;
   align-items: center;
-  gap: 2rem;
-
-  @media (max-width: 768px) {
-    gap: 1rem;
-  }
+  gap: ${(props) => (props.$isMobile ? "0.75rem" : "2rem")};
 `;
 
 const NavLinks = styled.div`
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: ${(props) => (props.$isMobile ? "0.5rem" : "1.5rem")};
 `;
 
 const AuthLinks = styled(NavLinks)``;
 
-const NavButton = styled(Link)`
-  padding: 0.5rem 1.2rem;
+const NavButton = styled(NavLink)`
+  padding: ${(props) => (props.$isMobile ? "0.4rem 0.8rem" : "0.5rem 1.2rem")};
   border-radius: 20px;
-  font-size: 14px;
+  font-size: ${(props) => (props.$isMobile ? "12px" : "14px")};
   font-weight: 500;
   color: white;
   text-decoration: none;
   background: linear-gradient(145deg, #141622, #1f1f28);
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 
   &:hover {
     background: #007bff;
     color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+  }
+
+  &.active {
+    background: #0056b3;
+    color: white;
+    border-color: #0056b3;
   }
 `;
 
-const LogoutButton = styled.div`
-  padding: 0.5rem 1.2rem;
+const LogoutButton = styled.button`
+  padding: ${(props) => (props.$isMobile ? "0.4rem 0.8rem" : "0.5rem 1.2rem")};
   border-radius: 20px;
-  font-size: 14px;
+  font-size: ${(props) => (props.$isMobile ? "12px" : "14px")};
   font-weight: 500;
   background: linear-gradient(145deg, #27272a, #1f1f28);
   color: white;
   cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 
   &:hover {
     background: #e74c3c;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
   }
 `;
 
@@ -186,6 +214,8 @@ const CartIcon = styled.div`
   svg {
     transition: transform 0.2s ease;
     color: ${(props) => (props.$isHome ? "#111" : "white")};
+    width: ${(props) => (props.$isMobile ? "22px" : "26px")};
+    height: ${(props) => (props.$isMobile ? "22px" : "26px")};
   }
 
   &:hover svg {
@@ -199,9 +229,9 @@ const BagQuantity = styled.span`
   right: -12px;
   background: #e74c3c;
   color: white;
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
+  width: ${(props) => (props.$isMobile ? "16px" : "20px")};
+  height: ${(props) => (props.$isMobile ? "16px" : "20px")};
+  font-size: ${(props) => (props.$isMobile ? "10px" : "12px")};
   font-weight: 600;
   border-radius: 50%;
   display: flex;

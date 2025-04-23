@@ -20,23 +20,38 @@ const PayButton = ({ cartItems }) => {
       .catch((err) => console.log(err.message));
   };
 
-  return <CheckoutButton onClick={handleCheckout}>Check out</CheckoutButton>;
+  return <CheckoutButton onClick={handleCheckout}>Pagar Ahora</CheckoutButton>;
 };
 
 export default PayButton;
 
 const CheckoutButton = styled.button`
-  background: #28a745;
+  background-color: #28a745;
   color: white;
   border: none;
   border-radius: 6px;
-  padding: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
   margin-top: 1rem;
   cursor: pointer;
   width: 100%;
-  transition: background 0.3s ease;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 
   &:hover {
-    background: #218838;
+    background-color: #218838;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  @media (max-width: 768px) {
+    &:active {
+      transform: scale(0.98);
+    }
+    padding: 0.5rem;
+    font-size: 0.95rem;
   }
 `;

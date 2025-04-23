@@ -10,6 +10,8 @@ const ProductFilters = ({
   setSearchQuery,
   sortConfig,
   setSortConfig,
+  categoryFilter,
+  setCategoryFilter,
   navigate,
   hideCreateButton = false,
 }) => {
@@ -42,10 +44,10 @@ const ProductFilters = ({
           <SearchIcon aria-hidden="true" />
           <SearchInput
             type="text"
-            placeholder="Nombre, precio, categoría o ID"
+            placeholder="Buscar por nombre..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Buscar productos"
+            aria-label="Buscar productos por nombre"
           />
         </SearchWrapper>
 
@@ -87,11 +89,11 @@ const ProductFilters = ({
                 <SortSelect
                   id="category-select"
                   onChange={(e) =>
-                    setSearchQuery(
+                    setCategoryFilter(
                       e.target.value === "all" ? "" : e.target.value
                     )
                   }
-                  value={searchQuery === "" ? "all" : searchQuery}
+                  value={categoryFilter === "" ? "all" : categoryFilter}
                   aria-label="Filtrar por categoría"
                 >
                   <option value="all">Todas</option>
@@ -252,11 +254,6 @@ const SortButton = styled.button`
   &:hover {
     background-color: #0056b3;
   }
-
-  &:focus {
-    outline: 2px solid #0056b3;
-    outline-offset: 2px;
-  }
 `;
 
 const SearchWrapper = styled.div`
@@ -311,7 +308,7 @@ const ToggleFiltersButton = styled.button`
 `;
 
 const CreateButton = styled.button`
-  background:#0056b3;
+  background: #0056b3;
   color: white;
   border: none;
   padding: 0.5rem 3rem;

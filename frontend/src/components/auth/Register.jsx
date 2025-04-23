@@ -12,7 +12,6 @@ import {
   BackgroundWrapper,
   PageWrapper,
   Form,
-  FormGroup,
   ButtonLogin,
   SignupPrompt,
   PasswordWrapper,
@@ -66,12 +65,9 @@ const Register = () => {
               aria-label="Formulario de registro"
             >
               <Title>Crear cuenta</Title>
-              <Subtitle>
-                Regístrate para comenzar con Easy Laundry
-              </Subtitle>
+              <Subtitle>Regístrate para comenzar con Easy Laundry</Subtitle>
 
-              <FormGroup>
-                <label htmlFor="name">Nombre</label>
+              <FloatingInput>
                 <input
                   type="text"
                   name="name"
@@ -79,18 +75,19 @@ const Register = () => {
                   value={formData.name}
                   onChange={handleInputChange}
                   onBlur={handleBlur}
-                  placeholder="Nombre completo"
+                  placeholder=" "
                   aria-required="true"
                   aria-invalid={!!errors.name}
                   aria-describedby={errors.name ? "name-error" : undefined}
+                  className={formData.name ? "filled" : ""}
                 />
+                <label htmlFor="name">Nombre completo</label>
                 {errors.name && (
                   <ErrorMessage id="name-error" message={errors.name} />
                 )}
-              </FormGroup>
+              </FloatingInput>
 
-              <FormGroup>
-                <label htmlFor="email">Correo</label>
+              <FloatingInput>
                 <input
                   type="email"
                   name="email"
@@ -98,18 +95,19 @@ const Register = () => {
                   value={formData.email}
                   onChange={handleInputChange}
                   onBlur={handleBlur}
-                  placeholder="Correo electrónico"
+                  placeholder=" "
                   aria-required="true"
                   aria-invalid={!!errors.email}
                   aria-describedby={errors.email ? "email-error" : undefined}
+                  className={formData.email ? "filled" : ""}
                 />
+                <label htmlFor="email">Correo electrónico</label>
                 {errors.email && (
                   <ErrorMessage id="email-error" message={errors.email} />
                 )}
-              </FormGroup>
+              </FloatingInput>
 
-              <FormGroup>
-                <label htmlFor="password">Contraseña</label>
+              <FloatingInput>
                 <PasswordWrapper>
                   <input
                     type={showPassword ? "text" : "password"}
@@ -118,28 +116,29 @@ const Register = () => {
                     value={formData.password}
                     onChange={handleInputChange}
                     onBlur={handleBlur}
-                    placeholder="Contraseña segura"
+                    placeholder=" "
                     aria-required="true"
                     aria-invalid={!!errors.password}
                     aria-describedby={
                       errors.password ? "password-error" : undefined
                     }
+                    className={formData.password ? "filled" : ""}
                   />
+                  <label htmlFor="password">Contraseña segura</label>
                   <TogglePasswordButton
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    aria-label={
+                      showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                    }
                   >
                     {showPassword ? <FiEyeOff /> : <FiEye />}
                   </TogglePasswordButton>
                 </PasswordWrapper>
                 {errors.password && (
-                  <ErrorMessage
-                    id="password-error"
-                    message={errors.password}
-                  />
+                  <ErrorMessage id="password-error" message={errors.password} />
                 )}
-              </FormGroup>
+              </FloatingInput>
 
               <ButtonLogin disabled={isSubmitting} type="submit">
                 {isSubmitting ? (
@@ -158,8 +157,7 @@ const Register = () => {
               <AppleLoginButton />
 
               <SignupPrompt>
-                ¿Ya tienes una cuenta?{" "}
-                <Link to="/login">Inicia sesión</Link>
+                ¿Ya tienes una cuenta? <Link to="/login">Inicia sesión</Link>
               </SignupPrompt>
             </Form>
           </motion.div>
@@ -205,5 +203,92 @@ const Divider = styled.div`
 
   &::after {
     right: 0;
+  }
+`;
+
+const FloatingInput = styled.label`
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+  width: 100%;
+
+  input {
+    padding: 1.2rem 1rem 0.6rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background: #fefefe;
+    transition: all 0.3s ease;
+    width: 100%;
+    
+    /* Elimina el fondo azul del autocompletado */
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover, 
+    &:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0px 1000px #fefefe inset;
+      -webkit-text-fill-color: #333;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    &:focus {
+      border-color: #007bff;
+      outline: none;
+      background: #fefefe;
+    }
+  }
+
+  label {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    font-size: 1rem;
+    color: #999;
+    background: #fefefee6;
+    padding: 0 4px;
+    transition: all 0.2s ease;
+    pointer-events: none;
+  }
+
+  input:focus + label,
+  .filled + label {
+    top: -0.6rem;
+    left: 0.8rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #007bff;
+    background: #fefefe;
+  }
+
+  ${PasswordWrapper} {
+    position: relative;
+    width: 100%;
+
+    input {
+      padding-right: 2.5rem;
+    }
+  }
+
+  ${TogglePasswordButton} {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0.25rem;
+    z-index: 2;
+
+    &:hover {
+      color: #333;
+    }
+  }
+
+  ${ErrorMessage} {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #dc3545;
   }
 `;

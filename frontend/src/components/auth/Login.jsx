@@ -11,7 +11,6 @@ import {
   BackgroundWrapper,
   PageWrapper,
   Form,
-  FormGroup,
   ButtonLogin,
   SignupPrompt,
   PasswordWrapper,
@@ -89,40 +88,42 @@ const Login = () => {
                 </AttemptsWarning>
               )}
 
-              <FormGroup>
-                <label htmlFor="email">Correo</label>
+              <FloatingInput>
                 <input
                   type="email"
                   id="email"
                   name="email"
-                  placeholder="Correo electrónico"
+                  placeholder=" "
                   value={formData.email}
                   onChange={handleInputChange}
                   onBlur={handleBlur}
                   aria-required="true"
                   aria-invalid={!!errors.email}
                   autoComplete="username"
+                  className={formData.email ? "filled" : ""}
                 />
+                <label htmlFor="email">Correo electrónico</label>
                 {touched.email && errors.email && (
                   <ErrorMessage message={errors.email} />
                 )}
-              </FormGroup>
+              </FloatingInput>
 
-              <FormGroup>
-                <label htmlFor="password">Contraseña</label>
+              <FloatingInput>
                 <PasswordWrapper>
                   <input
                     type={showPassword ? "text" : "password"}
                     id="password"
                     name="password"
-                    placeholder="Contraseña"
+                    placeholder=" "
                     value={formData.password}
                     onChange={handleInputChange}
                     onBlur={handleBlur}
                     aria-required="true"
                     aria-invalid={!!errors.password}
                     autoComplete="current-password"
+                    className={formData.password ? "filled" : ""}
                   />
+                  <label htmlFor="password">Contraseña</label>
                   <TogglePasswordButton
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -136,7 +137,7 @@ const Login = () => {
                 {touched.password && errors.password && (
                   <ErrorMessage message={errors.password} />
                 )}
-              </FormGroup>
+              </FloatingInput>
 
               <ForgotLink>
                 <Link to="/forgot-password" aria-label="Recuperar contraseña">
@@ -201,5 +202,89 @@ const Divider = styled.div`
 
   &::after {
     right: 0;
+  }
+`;
+
+const FloatingInput = styled.label`
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+  width: 100%;
+
+  input {
+    padding: 1.2rem 1rem 0.6rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background: #fefefe;
+    transition: border 0.3s;
+    width: 100%;
+    /* Elimina el fondo azul del autocompletado */
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover, 
+    &:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0px 1000px #fefefe inset;
+      -webkit-text-fill-color: #333;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    &:focus {
+      border-color: #007bff;
+      outline: none;
+    }
+  }
+
+  label {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    font-size: 1rem;
+    color: #999;
+    background: #fefefee6;
+    padding: 0 4px;
+    transition: all 0.2s ease;
+    pointer-events: none;
+  }
+
+  input:focus + label,
+  .filled + label {
+    top: -0.6rem;
+    left: 0.8rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #007bff;
+  }
+
+  ${PasswordWrapper} {
+    position: relative;
+    width: 100%;
+
+    input {
+      padding-right: 2.5rem;
+    }
+  }
+
+  ${TogglePasswordButton} {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0.25rem;
+    z-index: 2;
+
+    &:hover {
+      color: #333;
+    }
+  }
+
+  ${ErrorMessage} {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #dc3545;
   }
 `;
