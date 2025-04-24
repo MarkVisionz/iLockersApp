@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import styled from "styled-components";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
@@ -8,13 +8,13 @@ import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import { toast } from "react-toastify";
 import socket from "../../features/socket";
 import {
-  AiOutlineEdit,
-  AiOutlineArrowUp,
-  AiOutlineArrowDown,
   AiOutlineEye,
   AiOutlineEyeInvisible,
+  AiOutlineLogout,
+  AiOutlineSetting,
 } from "react-icons/ai";
 import { MdOutlineAdminPanelSettings, MdOutlinePerson } from "react-icons/md";
+import { FaHeart, FaRegHeart, FaStar } from "react-icons/fa";
 import UserPagination from "./UserAux/UserPagination";
 import UserOrdersCard from "./UserAux/UserOrdersCard";
 import {
@@ -35,29 +35,76 @@ import {
 import NotificationModal from "../NotificacionModal";
 import { logoutUser } from "../../features/authSlice";
 import { ordersFetch } from "../../features/ordersSlice";
+import { motion, AnimatePresence } from "framer-motion";
+import AddressCardList from "./UserAux/AddressCardList";
+
+const CARD_THEMES = [
+  "linear-gradient(45deg, #ff6200, #ff8c00)",
+  "linear-gradient(45deg, #1a3c34, #2a5d53)",
+  "linear-gradient(45deg, #004d7a, #008793)",
+  "linear-gradient(45deg, #4b2e2e, #6b4e4e)",
+];
+
+const ITEMS_PER_PAGE = 3;
+const PASSWORD_CHECK_INTERVAL = 3000;
+const PASSWORD_CHECK_ATTEMPTS = 60;
 
 const UserProfile = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { _id: authId, isAdmin, email: authEmail } = useSelector(
-    (state) => state.auth
+
+  const auth = useSelector((state) => state.auth);
+  const { _id: authId, isAdmin, email: authEmail } = auth;
+  const { list: orders, status: ordersStatus } = useSelector(
+    (state) => state.orders
   );
-  const { list: orders, status } = useSelector((state) => state.orders);
+
   const userId = isAdmin ? id : authId;
+
+  const [initialFormState, setInitialFormState] = useState({
+    name: "",
+    email: "",
+    newPassword: "",
+    image: null,
+  });
 
   const [user, setUser] = useState({
     name: "",
     email: "",
     isAdmin: false,
     photoURL: "",
+    createdAt: "",
+    favorites: [],
   });
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(false);
+
+  const [editForm, setEditForm] = useState({
+    name: "",
+    email: "",
+    photoURL: "",
+    currentPassword: "",
+    newPassword: "",
+    showCurrentPassword: false,
+    showNewPassword: false,
+    image: null,
+    preview: "",
+  });
+
+  const [uiState, setUiState] = useState({
+    loading: false,
+    currentPage: 1,
+    pendingPage: 1,
+    sortOrder: "desc",
+    authProvider: "password",
+    showPasswordSuccessModal: false,
+    showPasswordEmailInfo: false,
+    isCheckingPasswordUpdate: false,
+    showSuccessModal: false,
+    showSettings: false,
+    selectedAddress: null,
+    currentAddressIndex: 0,
+  });
+
   const [errors, setErrors] = useState({
     name: "",
     email: "",
@@ -65,60 +112,349 @@ const UserProfile = () => {
     newPassword: "",
     form: "",
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(3);
-  const [sortOrder, setSortOrder] = useState("desc");
-  const [image, setImage] = useState(null);
-  const [preview, setPreview] = useState("");
-  const [authProvider, setAuthProvider] = useState("password");
-  const [showPasswordSuccessModal, setShowPasswordSuccessModal] =
-    useState(false);
-  const [showPasswordEmailInfo, setShowPasswordEmailInfo] = useState(false);
-  const [isCheckingPasswordUpdate, setIsCheckingPasswordUpdate] =
-    useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
 
-  const fetchUser = useCallback(async () => {
-    try {
-      setLoading(true);
-      const headers = setHeaders();
-      const res = await axios.get(`${url}/users/find/${userId}`, headers);
-      const firebaseUser = firebaseAuth.currentUser;
-      const provider =
-        firebaseUser?.providerData[0]?.providerId ||
-        res.data.authProvider ||
-        "password";
-      if (!["google.com", "facebook.com", "password"].includes(provider)) {
-        setErrors((prev) => ({
-          ...prev,
-          form: "Proveedor de autenticación no soportado",
-        }));
-        toast.error("Proveedor de autenticación no soportado");
+  const allOrders = useMemo(
+    () => orders.filter((order) => order.userId === userId),
+    [orders, userId]
+  );
+
+  const filteredOrders = useMemo(
+    () => allOrders.filter((order) => order.delivery_status === "delivered"),
+    [allOrders]
+  );
+
+  const pendingOrders = useMemo(
+    () =>
+      allOrders.filter((order) =>
+        ["pending", "dispatched"].includes(order.delivery_status)
+      ),
+    [allOrders]
+  );
+
+  const sortedOrders = useMemo(
+    () =>
+      [...filteredOrders].sort((a, b) =>
+        uiState.sortOrder === "asc"
+          ? new Date(a.createdAt) - new Date(b.createdAt)
+          : new Date(b.createdAt) - new Date(a.createdAt)
+      ),
+    [filteredOrders, uiState.sortOrder]
+  );
+
+  const currentOrders = useMemo(() => {
+    const start = (uiState.currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedOrders, uiState.currentPage]);
+
+  const currentPendingOrders = useMemo(() => {
+    const start = (uiState.pendingPage - 1) * ITEMS_PER_PAGE;
+    return pendingOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [pendingOrders, uiState.pendingPage]);
+
+  const accountAge = useMemo(() => {
+    if (!user.createdAt) return "N/A";
+    const createdDate = new Date(user.createdAt);
+    const now = new Date();
+    const diffYears = now.getFullYear() - createdDate.getFullYear();
+    const diffMonths = now.getMonth() - createdDate.getMonth();
+    const totalMonths = diffYears * 12 + diffMonths;
+    return totalMonths > 12
+      ? `${Math.floor(totalMonths / 12)} years`
+      : `${totalMonths} months`;
+  }, [user.createdAt]);
+
+  const favoriteProducts = useMemo(() => {
+    const productCounts = {};
+
+    allOrders.forEach((order) => {
+      if (!order.products || !Array.isArray(order.products)) return;
+
+      order.products.forEach((product) => {
+        // Usamos description como identificador único ya que algunos productos no tienen product_id
+        const productKey = product.description || product.product_id;
+
+        if (!productKey) return;
+
+        if (!productCounts[productKey]) {
+          productCounts[productKey] = {
+            id: product.product_id || productKey, // Usamos product_id si existe, sino el description
+            name: product.description,
+            image: product.image || "",
+            timesOrdered: 0,
+            totalQuantity: 0,
+          };
+        }
+
+        productCounts[productKey].timesOrdered += 1;
+        productCounts[productKey].totalQuantity += product.quantity || 0;
+      });
+    });
+
+    // Convertir a array y ordenar por cantidad total (de mayor a menor)
+    const sortedProducts = Object.values(productCounts).sort(
+      (a, b) => b.totalQuantity - a.totalQuantity
+    );
+
+    // Tomar solo los 3 primeros y marcar favoritos
+    return sortedProducts.slice(0, 3).map((product) => ({
+      ...product,
+      isFavorite: user.favorites.includes(product.id),
+    }));
+  }, [allOrders, user.favorites]);
+
+  const addressesFromOrders = useMemo(() => {
+    const uniqueAddresses = [];
+    const seenAddresses = new Set();
+
+    allOrders.forEach((order) => {
+      if (
+        !order.shipping ||
+        !order.shipping.line1 ||
+        !order.shipping.city ||
+        !order.shipping.postal_code
+      ) {
         return;
       }
-      setUser({
-        name: res.data.name,
-        email: res.data.email,
-        isAdmin: res.data.isAdmin,
-        photoURL: res.data.photoURL,
-      });
-      setAuthProvider(provider);
-    } catch (error) {
-      if (error.response?.status !== 401) {
-        setErrors((prev) => ({
-          ...prev,
-          form: "Error al obtener datos del usuario",
-        }));
-        toast.error("Error al obtener datos del usuario");
+
+      const addressKey = `${order.shipping.line1}-${order.shipping.city}-${order.shipping.postal_code}`;
+
+      if (!seenAddresses.has(addressKey)) {
+        seenAddresses.add(addressKey);
+        uniqueAddresses.push({
+          id: `address-${uniqueAddresses.length}`,
+          details: {
+            customerName: order.customer_name || "Customer",
+            address: `${order.shipping.line1}${
+              order.shipping.line2 ? `, ${order.shipping.line2}` : ""
+            }`,
+            city: order.shipping.city,
+            postalCode: order.shipping.postal_code,
+            phone: order.phone || "No phone provided",
+          },
+          rawDetails: JSON.stringify(order.shipping),
+        });
       }
+    });
+
+    return uniqueAddresses;
+  }, [allOrders]);
+
+  const hasChanges = useMemo(() => {
+    return (
+      editForm.name !== initialFormState.name ||
+      editForm.email !== initialFormState.email ||
+      editForm.newPassword !== initialFormState.newPassword ||
+      editForm.image !== initialFormState.image
+    );
+  }, [editForm, initialFormState]);
+
+  const toggleFavorite = async (productId) => {
+    try {
+      setUiState((prev) => ({ ...prev, loading: true }));
+
+      const updatedFavorites = user.favorites.includes(productId)
+        ? user.favorites.filter((id) => id !== productId)
+        : [...user.favorites, productId];
+
+      await axios.put(
+        `${url}/users/${userId}`,
+        { favorites: updatedFavorites },
+        setHeaders()
+      );
+
+      setUser((prev) => ({
+        ...prev,
+        favorites: updatedFavorites,
+      }));
+
+      toast.success(
+        updatedFavorites.includes(productId)
+          ? "Product added to favorites!"
+          : "Product removed from favorites"
+      );
+    } catch (error) {
+      toast.error("Failed to update favorites");
+      console.error("Error updating favorites:", error);
     } finally {
-      setLoading(false);
+      setUiState((prev) => ({ ...prev, loading: false }));
     }
-  }, [userId]);
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    setEditForm((prev) => ({
+      ...prev,
+      image: file,
+      preview: URL.createObjectURL(file),
+    }));
+  };
+
+  const handleDeletePhoto = async () => {
+    if (!user.photoURL) return;
+    try {
+      const fileRef = ref(storage, user.photoURL);
+      await deleteObject(fileRef);
+      setUser((prev) => ({ ...prev, photoURL: "" }));
+      setEditForm((prev) => ({ ...prev, photoURL: "", preview: "" }));
+      toast.success("Photo deleted");
+    } catch (error) {
+      toast.error("Failed to delete photo");
+    }
+  };
+
+  const handlePasswordResetEmail = async () => {
+    try {
+      if (!user.email) throw new Error("No registered email found");
+      await sendPasswordResetEmail(firebaseAuth, user.email, {
+        url: `${window.location.origin}/login`,
+      });
+      setUiState((prev) => ({
+        ...prev,
+        showPasswordEmailInfo: true,
+        isCheckingPasswordUpdate: true,
+      }));
+      toast.success("Reset link sent");
+      setUiState((prev) => ({ ...prev, showSettings: false }));
+    } catch (error) {
+      setErrors((prev) => ({
+        ...prev,
+        form: `Failed to send email: ${error.message}`,
+      }));
+      toast.error(`Failed to send email: ${error.message}`);
+    }
+  };
+
+  const handlePasswordSuccessClose = () => {
+    setUiState((prev) => ({ ...prev, showPasswordSuccessModal: false }));
+    signOut(firebaseAuth);
+    dispatch(logoutUser());
+    navigate("/login", {
+      state: {
+        message: "Password set! Please log in with your new password.",
+      },
+    });
+  };
+
+  const handleSuccessClose = () => {
+    setUiState((prev) => ({ ...prev, showSuccessModal: false }));
+  };
+
+  const handleCloseInfoModal = () => {
+    setUiState((prev) => ({ ...prev, showPasswordEmailInfo: false }));
+    signOut(firebaseAuth);
+    dispatch(logoutUser());
+    toast.info(
+      "Session closed for security. Log in with your new credentials."
+    );
+    navigate("/login", {
+      state: {
+        message: "Password reset link sent. Check your email and log in.",
+        email: user.email,
+      },
+    });
+  };
+
+  const handleCancelPasswordReset = () => {
+    setUiState((prev) => ({
+      ...prev,
+      showPasswordEmailInfo: false,
+      isCheckingPasswordUpdate: false,
+    }));
+    toast.info("Password reset process canceled.");
+  };
+
+  const handleLogout = async () => {
+    await signOut(firebaseAuth);
+    dispatch(logoutUser());
+    navigate("/login");
+  };
+
+  const handleViewAddress = (index) => {
+    setUiState((prev) => ({ ...prev, currentAddressIndex: index }));
+  };
+
+  const handleSelectAddress = async (index) => {
+    const selectedAddress = addressesFromOrders[index];
+    try {
+      await axios.put(
+        `${url}/users/${userId}`,
+        { preferredAddress: selectedAddress.rawDetails },
+        setHeaders()
+      );
+      setUiState((prev) => ({
+        ...prev,
+        selectedAddress: selectedAddress.rawDetails,
+      }));
+      toast.success("Address set as default");
+    } catch (error) {
+      toast.error("Failed to set default address");
+    }
+  };
+
+  const handleNextAddress = () => {
+    setUiState((prev) => ({
+      ...prev,
+      currentAddressIndex:
+        prev.currentAddressIndex === addressesFromOrders.length - 1
+          ? 0
+          : prev.currentAddressIndex + 1,
+    }));
+  };
+
+  const handlePrevAddress = () => {
+    setUiState((prev) => ({
+      ...prev,
+      currentAddressIndex:
+        prev.currentAddressIndex === 0
+          ? addressesFromOrders.length - 1
+          : prev.currentAddressIndex - 1,
+    }));
+  };
 
   useEffect(() => {
     if (!authId) return;
+
+    const fetchUser = async () => {
+      try {
+        setUiState((prev) => ({ ...prev, loading: true }));
+        const headers = setHeaders();
+        const res = await axios.get(`${url}/users/find/${userId}`, headers);
+        const firebaseUser = firebaseAuth.currentUser;
+        const provider =
+          firebaseUser?.providerData[0]?.providerId ||
+          res.data.authProvider ||
+          "password";
+
+        if (!["google.com", "facebook.com", "password"].includes(provider)) {
+          setErrors((prev) => ({
+            ...prev,
+            form: "Unsupported authentication provider",
+          }));
+          toast.error("Unsupported authentication provider");
+          return;
+        }
+
+        setUser({
+          name: res.data.name,
+          email: res.data.email,
+          isAdmin: res.data.isAdmin,
+          photoURL: res.data.photoURL,
+          createdAt: res.data.createdAt || new Date().toISOString(),
+          favorites: res.data.favorites || [],
+        });
+        setUiState((prev) => ({ ...prev, authProvider: provider }));
+      } catch (error) {
+        if (error.response?.status !== 401) {
+          setErrors((prev) => ({
+            ...prev,
+            form: "Failed to fetch user data",
+          }));
+          toast.error("Failed to fetch user data");
+        }
+      } finally {
+        setUiState((prev) => ({ ...prev, loading: false }));
+      }
+    };
 
     fetchUser();
     dispatch(ordersFetch());
@@ -134,25 +470,29 @@ const UserProfile = () => {
               ? updatedUser.isAdmin
               : prev.isAdmin,
           photoURL: updatedUser.photoURL || prev.photoURL,
-          authProvider: updatedUser.authProvider || prev.authProvider,
+          createdAt: updatedUser.createdAt || prev.createdAt,
+          favorites: updatedUser.favorites || prev.favorites,
         }));
       }
     };
 
     socket.on("userUpdated", handleUserUpdated);
     return () => socket.off("userUpdated", handleUserUpdated);
-  }, [authId, userId, fetchUser, dispatch]);
+  }, [authId, userId, dispatch]);
 
   useEffect(() => {
-    if (!isCheckingPasswordUpdate || authProvider === "password") return;
+    if (
+      !uiState.isCheckingPasswordUpdate ||
+      uiState.authProvider === "password"
+    )
+      return;
 
-    const maxAttempts = 60;
     let attempts = 0;
 
     const checkPasswordUpdate = async () => {
       try {
         const currentUser = firebaseAuth.currentUser;
-        if (!currentUser) throw new Error("No hay sesión activa");
+        if (!currentUser) throw new Error("No active session");
 
         await currentUser.reload();
         const providerId = currentUser.providerData[0]?.providerId;
@@ -165,28 +505,62 @@ const UserProfile = () => {
             { headers: { "x-auth-token": newToken } }
           );
 
-          setAuthProvider("password");
-          setShowPasswordSuccessModal(true);
-          setIsCheckingPasswordUpdate(false);
+          setUiState((prev) => ({
+            ...prev,
+            authProvider: "password",
+            showPasswordSuccessModal: true,
+            isCheckingPasswordUpdate: false,
+          }));
         }
       } catch (error) {
-        toast.error("Error al verificar el cambio de contraseña");
-        setIsCheckingPasswordUpdate(false);
+        toast.error("Error verifying password change");
+        setUiState((prev) => ({ ...prev, isCheckingPasswordUpdate: false }));
       }
 
       attempts++;
-      if (attempts >= maxAttempts) {
-        setIsCheckingPasswordUpdate(false);
-        toast.info("El tiempo para establecer la contraseña ha expirado.");
+      if (attempts >= PASSWORD_CHECK_ATTEMPTS) {
+        setUiState((prev) => ({ ...prev, isCheckingPasswordUpdate: false }));
+        toast.info("Password setup time expired.");
         await signOut(firebaseAuth);
         dispatch(logoutUser());
         navigate("/login");
       }
     };
 
-    const intervalId = setInterval(checkPasswordUpdate, 3000);
+    const intervalId = setInterval(
+      checkPasswordUpdate,
+      PASSWORD_CHECK_INTERVAL
+    );
     return () => clearInterval(intervalId);
-  }, [isCheckingPasswordUpdate, authProvider, userId, dispatch, navigate]);
+  }, [
+    uiState.isCheckingPasswordUpdate,
+    uiState.authProvider,
+    userId,
+    dispatch,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (uiState.showSettings) {
+      setInitialFormState({
+        name: user.name,
+        email: user.email,
+        newPassword: "",
+        image: null,
+      });
+      setEditForm({
+        name: user.name,
+        email: user.email,
+        photoURL: user.photoURL,
+        currentPassword: "",
+        newPassword: "",
+        showCurrentPassword: false,
+        showNewPassword: false,
+        image: null,
+        preview: user.photoURL || "",
+      });
+    }
+  }, [uiState.showSettings, user.name, user.email, user.photoURL]);
 
   const validateForm = () => {
     const newErrors = {
@@ -197,27 +571,25 @@ const UserProfile = () => {
       form: "",
     };
 
-    if (editing) {
-      if (!user.name.trim() || user.name.length < 2) {
-        newErrors.name = "El nombre debe tener al menos 2 caracteres";
-      }
+    if (!editForm.name.trim() || editForm.name.length < 2) {
+      newErrors.name = "Name must be at least 2 characters";
+    }
 
-      if (
-        !user.email.trim() ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)
-      ) {
-        newErrors.email = "Correo inválido";
-      }
+    if (
+      !editForm.email.trim() ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email)
+    ) {
+      newErrors.email = "Invalid email";
+    }
 
-      if (authProvider === "password" && newPassword) {
-        if (!currentPassword) {
-          newErrors.currentPassword = "La contraseña actual es requerida";
-        }
-        if (newPassword.length < 6) {
-          newErrors.newPassword = "Mínimo 6 caracteres";
-        } else if (newPassword.length > 50) {
-          newErrors.newPassword = "Máximo 50 caracteres";
-        }
+    if (uiState.authProvider === "password" && editForm.newPassword) {
+      if (!editForm.currentPassword) {
+        newErrors.currentPassword = "Current password is required";
+      }
+      if (editForm.newPassword.length < 6) {
+        newErrors.newPassword = "Minimum 6 characters";
+      } else if (editForm.newPassword.length > 50) {
+        newErrors.newPassword = "Maximum 50 characters";
       }
     }
 
@@ -225,430 +597,615 @@ const UserProfile = () => {
     return !Object.values(newErrors).some((e) => e);
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    setImage(file);
-    setPreview(URL.createObjectURL(file));
-  };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrors({
+      name: "",
+      email: "",
+      currentPassword: "",
+      newPassword: "",
+      form: "",
+    });
 
-  const handleDeletePhoto = async () => {
-    if (!user.photoURL) return;
-    try {
-      const fileRef = ref(storage, user.photoURL);
-      await deleteObject(fileRef);
-      setUser({ ...user, photoURL: "" });
-      toast.success("Foto eliminada");
-    } catch (error) {
-      toast.error("No se pudo eliminar la foto");
-    }
-  };
+    if (!hasChanges) return;
+    if (!validateForm()) return;
 
-  const handlePasswordResetEmail = async () => {
+    setUiState((prev) => ({ ...prev, loading: true }));
+
     try {
-      if (!user.email) throw new Error("No se encontró un correo registrado");
-      await sendPasswordResetEmail(firebaseAuth, user.email, {
-        url: `${window.location.origin}/login`,
+      let photoURL = editForm.photoURL;
+      if (editForm.image) {
+        const storageRef = ref(
+          storage,
+          `users/${userId}/${editForm.image.name}`
+        );
+        const uploadTask = await uploadBytesResumable(
+          storageRef,
+          editForm.image
+        );
+        photoURL = await getDownloadURL(uploadTask.ref);
+      }
+
+      const currentUser = firebaseAuth.currentUser;
+      if (!currentUser) {
+        throw new Error("No active session. Please log in again.");
+      }
+
+      const updates = {
+        name: editForm.name,
+        email: editForm.email,
+        photoURL,
+      };
+
+      if (uiState.authProvider === "password") {
+        if (editForm.newPassword || editForm.email !== authEmail) {
+          const credential = EmailAuthProvider.credential(
+            authEmail,
+            editForm.currentPassword
+          );
+          await reauthenticateWithCredential(currentUser, credential);
+
+          if (editForm.newPassword) {
+            await updatePassword(currentUser, editForm.newPassword);
+            updates.password = editForm.newPassword;
+          }
+
+          if (editForm.email !== authEmail) {
+            await updateEmail(currentUser, editForm.email);
+          }
+        }
+      } else if (editForm.newPassword) {
+        await updatePassword(currentUser, editForm.newPassword);
+        updates.password = editForm.newPassword;
+        updates.authProvider = "password";
+      }
+
+      await axios.put(`${url}/users/${authId}`, updates, setHeaders());
+
+      setUser({
+        ...user,
+        name: editForm.name,
+        email: editForm.email,
+        photoURL,
       });
-      setShowPasswordEmailInfo(true);
-      setIsCheckingPasswordUpdate(true);
-      toast.success("Enlace de restablecimiento enviado");
-    } catch (error) {
-      setErrors((prev) => ({
+
+      setEditForm((prev) => ({
         ...prev,
-        form: `Error al enviar el correo: ${error.message}`,
-      }));
-      toast.error(`Error al enviar el correo: ${error.message}`);
-    }
-  };
-
-  const handleCancelPasswordReset = () => {
-    setShowPasswordEmailInfo(false);
-    setIsCheckingPasswordUpdate(false);
-    toast.info("Proceso de restablecimiento de contraseña cancelado.");
-  };
-
-  const handlePasswordSuccessClose = () => {
-    setShowPasswordSuccessModal(false);
-    signOut(firebaseAuth);
-    dispatch(logoutUser());
-    navigate("/login", {
-      state: {
-        message:
-          "¡Contraseña establecida! Por favor inicia sesión con tu nueva contraseña.",
-      },
-    });
-  };
-
-  const handleCloseInfoModal = () => {
-    setShowPasswordEmailInfo(false);
-    signOut(firebaseAuth);
-    dispatch(logoutUser());
-    toast.info(
-      "Tu sesión ha sido cerrada por seguridad. Inicia sesión con tus nuevos datos."
-    );
-    navigate("/login", {
-      state: {
-        message:
-          "Se envió el enlace para establecer contraseña. Por favor revisa tu correo e inicia sesión.",
-        email: user.email,
-      },
-    });
-  };
-
-  const handleSuccessClose = () => {
-    setShowSuccessModal(false);
-  };
-
-  const handleSubmit = useCallback(
-    async (e) => {
-      e.preventDefault();
-      setErrors({
-        name: "",
-        email: "",
         currentPassword: "",
         newPassword: "",
-        form: "",
-      });
-      if (!validateForm()) return;
+        image: null,
+        preview: photoURL || prev.preview,
+      }));
 
-      setLoading(true);
-      try {
-        let photoURL = user.photoURL;
-        if (image) {
-          const storageRef = ref(storage, `users/${userId}/${image.name}`);
-          const uploadTask = await uploadBytesResumable(storageRef, image);
-          photoURL = await getDownloadURL(uploadTask.ref);
-        }
+      setUiState((prev) => ({
+        ...prev,
+        showSettings: false,
+        showSuccessModal: true,
+      }));
 
-        const currentUser = firebaseAuth.currentUser;
-        if (!currentUser) {
-          throw new Error(
-            "No hay sesión activa. Por favor, inicia sesión de nuevo"
-          );
-        }
-
-        const updates = { name: user.name, email: user.email, photoURL };
-
-        if (authProvider === "password") {
-          if (newPassword || user.email !== authEmail) {
-            const credential = EmailAuthProvider.credential(
-              authEmail,
-              currentPassword
-            );
-            await reauthenticateWithCredential(currentUser, credential);
-
-            if (newPassword) {
-              await updatePassword(currentUser, newPassword);
-              updates.password = newPassword;
-            }
-
-            if (user.email !== authEmail) {
-              await updateEmail(currentUser, user.email);
-            }
-          }
-        } else if (newPassword) {
-          await updatePassword(currentUser, newPassword);
-          updates.password = newPassword;
-          updates.authProvider = "password";
-        }
-
-        await axios.put(`${url}/users/${authId}`, updates, setHeaders());
-
-        setCurrentPassword("");
-        setNewPassword("");
-        setImage(null);
-        setPreview("");
-        setEditing(false);
-
-        setSuccessMessage(
-          newPassword
-            ? "Actualizaste tu contraseña exitosamente"
-            : "Actualizaste tu información exitosamente"
-        );
-        setShowSuccessModal(true);
-
-        if (newPassword || user.email !== authEmail) {
-          toast.info("Por seguridad, vuelve a iniciar sesión");
-          setTimeout(() => {
-            dispatch(logoutUser());
-            navigate("/login");
-          }, 3000);
-        }
-      } catch (error) {
-        let msg = "Error al actualizar el perfil";
-        if (error.code) {
-          switch (error.code) {
-            case "auth/wrong-password":
-              msg = "Contraseña actual incorrecta";
-              break;
-            case "auth/invalid-credential":
-              msg = "Error de autenticación. Por favor, inicia sesión de nuevo";
-              break;
-            case "auth/too-many-requests":
-              msg = "Demasiados intentos fallidos. Intenta de nuevo más tarde";
-              break;
-            case "auth/invalid-email":
-              msg = "El formato del correo es incorrecto";
-              break;
-            case "auth/requires-recent-login":
-              msg = "Por seguridad, vuelve a iniciar sesión";
-              break;
-          }
-        } else if (error.response?.data?.message) {
-          msg = error.response.data.message;
-        }
-
-        setErrors((prev) => ({ ...prev, form: msg }));
-        toast.error(msg);
-      } finally {
-        setLoading(false);
+      if (editForm.newPassword || editForm.email !== authEmail) {
+        toast.info("For security, please log in again.");
+        setTimeout(() => {
+          dispatch(logoutUser());
+          navigate("/login");
+        }, 3000);
       }
-    },
-    [
-      user,
-      image,
-      authId,
-      userId,
-      currentPassword,
-      newPassword,
-      authEmail,
-      authProvider,
-      dispatch,
-      navigate,
-    ]
-  );
+    } catch (error) {
+      let msg = "Failed to update profile";
+      if (error.code) {
+        switch (error.code) {
+          case "auth/wrong-password":
+            msg = "Incorrect current password";
+            break;
+          case "auth/invalid-credential":
+            msg = "Authentication error. Please log in again.";
+            break;
+          case "auth/too-many-requests":
+            msg = "Too many failed attempts. Try again later.";
+            break;
+          case "auth/invalid-email":
+            msg = "Invalid email format";
+            break;
+          case "auth/requires-recent-login":
+            msg = "For security, please log in again.";
+            break;
+        }
+      } else if (error.response?.data?.message) {
+        msg = error.response.data.message;
+      }
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter((order) => order.userId === userId);
-  }, [orders, userId]);
+      setErrors((prev) => ({ ...prev, form: msg }));
+      toast.error(msg);
+    } finally {
+      setUiState((prev) => ({ ...prev, loading: false }));
+    }
+  };
 
-  const sortedOrders = useMemo(() => {
-    return [...filteredOrders].sort((a, b) =>
-      sortOrder === "asc"
-        ? new Date(a.createdAt) - new Date(b.createdAt)
-        : new Date(b.createdAt) - new Date(a.createdAt)
-    );
-  }, [filteredOrders, sortOrder]);
-
-  const currentOrders = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return sortedOrders.slice(start, start + itemsPerPage);
-  }, [sortedOrders, currentPage, itemsPerPage]);
+  console.log("All Orders:", allOrders);
+  console.log("User Favorites:", user.favorites);
+  console.log("Favorite Products:", favoriteProducts);
 
   return (
     <StyledProfile>
-      <ProfileContainer>
-        <Header>
-          {user.photoURL || preview ? (
-            <>
-              <Avatar src={preview || user.photoURL} alt={user.name} />
-              <Button onClick={handleDeletePhoto}>Eliminar foto</Button>
-            </>
-          ) : (
-            <AvatarPlaceholder>
-              {user.name?.charAt(0)?.toUpperCase() || "U"}
-            </AvatarPlaceholder>
-          )}
-          <h3>{user.name}</h3>
-          <RoleTag isAdmin={user.isAdmin}>
-            {user.isAdmin ? (
-              <MdOutlineAdminPanelSettings />
-            ) : (
-              <MdOutlinePerson />
-            )}
-            {user.isAdmin ? " Admin" : " Customer"}
-          </RoleTag>
-          <p>{user.email}</p>
-          <Button onClick={() => setEditing((prev) => !prev)}>
-            <AiOutlineEdit /> {editing ? "Cancelar" : "Editar Perfil"}
-          </Button>
-        </Header>
-
-        {(loading || status === "loading") && <LoadingSpinner />}
-        {errors.form && <ErrorMessage message={errors.form} />}
-
-        {editing && (
-          <EditForm onSubmit={handleSubmit}>
-            <label>
-              Nombre
-              <input
-                type="text"
-                value={user.name}
-                onChange={(e) => setUser({ ...user, name: e.target.value })}
-                aria-invalid={!!errors.name}
-              />
-              {errors.name && <ErrorMessage message={errors.name} />}
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={user.email}
-                onChange={(e) => setUser({ ...user, email: e.target.value })}
-                aria-invalid={!!errors.email}
-                disabled={true}
-              />
-              {errors.email && <ErrorMessage message={errors.email} />}
-            </label>
-
-            {authProvider === "password" ? (
-              <>
-                <label>
-                  Contraseña actual
-                  <PasswordContainer>
-                    <input
-                      type={showCurrentPassword ? "text" : "password"}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      aria-invalid={!!errors.currentPassword}
-                    />
-                    <TogglePassword
-                      onClick={() =>
-                        setShowCurrentPassword(!showCurrentPassword)
-                      }
-                      aria-label={
-                        showCurrentPassword
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
-                      }
-                    >
-                      {showCurrentPassword ? (
-                        <AiOutlineEyeInvisible />
-                      ) : (
-                        <AiOutlineEye />
-                      )}
-                    </TogglePassword>
-                  </PasswordContainer>
-                  {errors.currentPassword && (
-                    <ErrorMessage message={errors.currentPassword} />
-                  )}
-                </label>
-                <label>
-                  Nueva contraseña
-                  <PasswordContainer>
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
-                      aria-invalid={!!errors.newPassword}
-                    />
-                    <TogglePassword
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      aria-label={
-                        showNewPassword
-                          ? "Ocultar contraseña"
-                          : "Mostrar contraseña"
-                      }
-                    >
-                      {showNewPassword ? (
-                        <AiOutlineEyeInvisible />
-                      ) : (
-                        <AiOutlineEye />
-                      )}
-                    </TogglePassword>
-                  </PasswordContainer>
-                  {errors.newPassword && (
-                    <ErrorMessage message={errors.newPassword} />
-                  )}
-                </label>
-              </>
-            ) : (
-              <PasswordResetBox>
-                <p>
-                  Estás usando{" "}
-                  {authProvider === "google.com" ? "Google" : "Facebook"}.
-                  Establece una contraseña para tu cuenta.
-                </p>
-                <Button
-                  type="button"
-                  onClick={handlePasswordResetEmail}
-                  disabled={isCheckingPasswordUpdate}
-                >
-                  {isCheckingPasswordUpdate
-                    ? "Procesando..."
-                    : "Establecer contraseña"}
-                </Button>
-                <small>
-                  Se enviará un enlace a tu email {user.email || "registrado"}
-                </small>
-              </PasswordResetBox>
-            )}
-
-            <label>
-              Foto de perfil
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-              />
-            </label>
-            {preview && <PreviewImg src={preview} alt="Preview" />}
-            <Button type="submit" disabled={loading}>
-              {loading ? "Actualizando..." : "Guardar cambios"}
-            </Button>
-          </EditForm>
-        )}
-
-        <Orders>
-          <OrderControls>
-            <h4>Tus órdenes</h4>
-            <Button
-              onClick={() =>
-                setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))
-              }
-            >
-              {sortOrder === "asc" ? (
-                <AiOutlineArrowDown />
+      <DashboardGrid>
+        <MainColumn>
+          <ProfileCard>
+            <CardTitle>Welcome, {user.name}</CardTitle>
+            <AvatarSection>
+              {user.photoURL ? (
+                <Avatar src={user.photoURL} alt={user.name} />
               ) : (
-                <AiOutlineArrowUp />
+                <AvatarPlaceholder>
+                  {user.name?.charAt(0)?.toUpperCase() || "U"}
+                </AvatarPlaceholder>
               )}
-              {sortOrder === "asc" ? " Más antiguas" : " Más recientes"}
-            </Button>
-          </OrderControls>
+              <RoleTag isAdmin={user.isAdmin}>
+                {user.isAdmin ? (
+                  <MdOutlineAdminPanelSettings />
+                ) : (
+                  <MdOutlinePerson />
+                )}
+                {user.isAdmin ? "Admin" : "Customer"}
+              </RoleTag>
+            </AvatarSection>
+            <UserInfo>
+              <InfoItem>
+                <strong>Email:</strong> {user.email}
+              </InfoItem>
+              <InfoItem>
+                <strong>Total Orders:</strong> {allOrders.length}
+              </InfoItem>
+              <InfoItem>
+                <strong>Account Age:</strong> {accountAge}
+              </InfoItem>
+            </UserInfo>
+            <ButtonGroup>
+              <ActionButton
+                onClick={() =>
+                  setUiState((prev) => ({
+                    ...prev,
+                    showSettings: !prev.showSettings,
+                  }))
+                }
+              >
+                <AiOutlineSetting />{" "}
+                {uiState.showSettings ? "Close Settings" : "Edit Profile"}
+              </ActionButton>
+              <ActionButton onClick={handleLogout}>
+                <AiOutlineLogout /> Log Out
+              </ActionButton>
+            </ButtonGroup>
+          </ProfileCard>
 
-          {filteredOrders.length === 0 ? (
-            <NoOrdersMessage>No se encontraron órdenes.</NoOrdersMessage>
-          ) : (
-            currentOrders.map((order) => (
-              <UserOrdersCard
-                key={`${order._id}-${order.delivery_status}`}
-                order={order}
-              />
-            ))
-          )}
+          <Card>
+            <CardTitle>Orders in Process</CardTitle>
+            {pendingOrders.length === 0 ? (
+              <EmptyState>No pending or dispatched orders.</EmptyState>
+            ) : (
+              <>
+                {currentPendingOrders.map((order) => (
+                  <UserOrdersCard
+                    key={`${order._id}-${order.delivery_status}`}
+                    order={order}
+                  />
+                ))}
+                <UserPagination
+                  currentPage={uiState.pendingPage}
+                  setCurrentPage={(page) =>
+                    setUiState((prev) => ({ ...prev, pendingPage: page }))
+                  }
+                  totalNotes={pendingOrders.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              </>
+            )}
+          </Card>
+        </MainColumn>
 
-          <UserPagination
-            currentPage={currentPage}
-            setCurrentPage={setCurrentPage}
-            totalNotes={filteredOrders.length}
-            itemsPerPage={itemsPerPage}
-          />
-        </Orders>
-      </ProfileContainer>
+        <SideColumn>
+          <Card>
+            <CardTitle>Quick Actions</CardTitle>
+            <ButtonGroup>
+              {isAdmin && (
+                <QuickActionButton onClick={() => navigate("/admin")}>
+                  Admin Dashboard
+                </QuickActionButton>
+              )}
+              <QuickActionButton onClick={() => navigate("/support")}>
+                Contact Support
+              </QuickActionButton>
+            </ButtonGroup>
+          </Card>
+
+          <Card>
+            <CardTitle>Your Top 3 Most Ordered Products</CardTitle>
+            {favoriteProducts.length === 0 ? (
+              <EmptyState>You haven't ordered any products yet.</EmptyState>
+            ) : (
+              <ProductList>
+                {favoriteProducts.map((product) => (
+                  <ProductItem key={product.id}>
+                    {product.image && (
+                      <ProductImage src={product.image} alt={product.name} />
+                    )}
+                    <ProductInfo>
+                      <CustomerName>{product.name}</CustomerName>
+                      <ProductMeta>
+                        <span>
+                          <FaStar color="#FFD700" /> Ordered{" "}
+                          {product.timesOrdered} times ({product.totalQuantity}{" "}
+                          units total)
+                        </span>
+                        <FavoriteButton
+                          onClick={() => toggleFavorite(product.id)}
+                          isFavorite={product.isFavorite}
+                        >
+                          {product.isFavorite ? (
+                            <FaHeart color="#ff3b30" />
+                          ) : (
+                            <FaRegHeart color="#666" />
+                          )}
+                        </FavoriteButton>
+                      </ProductMeta>
+                    </ProductInfo>
+                  </ProductItem>
+                ))}
+              </ProductList>
+            )}
+          </Card>
+
+          <WalletHolder>
+            <WalletSlot />
+            <AddressTitle>Saved Addresses</AddressTitle>
+
+            {addressesFromOrders.length === 0 ? (
+              <EmptyState>No addresses found.</EmptyState>
+            ) : (
+              <>
+                <AddressCardList
+                  addresses={addressesFromOrders}
+                  cardThemes={CARD_THEMES}
+                  onSelectAddress={handleViewAddress}
+                />
+                <AnimatePresence mode="wait">
+                  <AddressDetails
+                    key={uiState.currentAddressIndex}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <DetailsColumn>
+                      <DetailItem>
+                        {
+                          addressesFromOrders[uiState.currentAddressIndex]
+                            ?.details.customerName
+                        }
+                      </DetailItem>
+                      <DetailItem>
+                        {
+                          addressesFromOrders[uiState.currentAddressIndex]
+                            ?.details.address
+                        }
+                      </DetailItem>
+                      <DetailItem>
+                        {
+                          addressesFromOrders[uiState.currentAddressIndex]
+                            ?.details.city
+                        }
+                        ,{" "}
+                        {
+                          addressesFromOrders[uiState.currentAddressIndex]
+                            ?.details.postalCode
+                        }
+                      </DetailItem>
+                      <DetailItem>
+                        {
+                          addressesFromOrders[uiState.currentAddressIndex]
+                            ?.details.phone
+                        }
+                      </DetailItem>
+                    </DetailsColumn>
+                    <SetDefaultButton
+                      onClick={() =>
+                        handleSelectAddress(uiState.currentAddressIndex)
+                      }
+                      selected={
+                        uiState.selectedAddress ===
+                        addressesFromOrders[uiState.currentAddressIndex]
+                          ?.rawDetails
+                      }
+                    >
+                      {uiState.selectedAddress ===
+                      addressesFromOrders[uiState.currentAddressIndex]
+                        ?.rawDetails
+                        ? "✓ Default Address"
+                        : "Set as Default"}
+                    </SetDefaultButton>
+                  </AddressDetails>
+                </AnimatePresence>
+              </>
+            )}
+          </WalletHolder>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Completed Orders</CardTitle>
+              <SortButton
+                onClick={() =>
+                  setUiState((prev) => ({
+                    ...prev,
+                    sortOrder: prev.sortOrder === "asc" ? "desc" : "asc",
+                  }))
+                }
+              >
+                {uiState.sortOrder === "asc" ? "Older" : "Newer"}
+              </SortButton>
+            </CardHeader>
+            {filteredOrders.length === 0 ? (
+              <EmptyState>No delivered orders found.</EmptyState>
+            ) : (
+              <>
+                {currentOrders.map((order) => (
+                  <UserOrdersCard
+                    key={`${order._id}-${order.delivery_status}`}
+                    order={order}
+                  />
+                ))}
+                <UserPagination
+                  currentPage={uiState.currentPage}
+                  setCurrentPage={(page) =>
+                    setUiState((prev) => ({ ...prev, currentPage: page }))
+                  }
+                  totalNotes={filteredOrders.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              </>
+            )}
+          </Card>
+        </SideColumn>
+      </DashboardGrid>
+
+      <AnimatePresence>
+        {uiState.showSettings && (
+          <ModalBackdrop
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() =>
+              setUiState((prev) => ({ ...prev, showSettings: false }))
+            }
+          >
+            <ModalContent
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Card>
+                {(uiState.loading || ordersStatus === "loading") && (
+                  <LoadingSpinner />
+                )}
+                {errors.form && <ErrorMessage message={errors.form} />}
+
+                <EditForm onSubmit={handleSubmit}>
+                  <CardTitle>Edit Profile</CardTitle>
+                  <FormField>
+                    <label htmlFor="name">Name</label>
+                    <input
+                      id="name"
+                      type="text"
+                      value={editForm.name}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, name: e.target.value })
+                      }
+                      aria-invalid={!!errors.name}
+                      placeholder="Enter your name"
+                    />
+                    {errors.name && <ErrorMessage message={errors.name} />}
+                  </FormField>
+                  <FormField>
+                    <label htmlFor="email">Email</label>
+                    <input
+                      id="email"
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, email: e.target.value })
+                      }
+                      aria-invalid={!!errors.email}
+                      disabled
+                      placeholder="Enter your email"
+                    />
+                    {errors.email && <ErrorMessage message={errors.email} />}
+                  </FormField>
+
+                  {uiState.authProvider === "password" ? (
+                    <>
+                      <FormField>
+                        <label htmlFor="currentPassword">
+                          Current Password
+                        </label>
+                        <PasswordContainer>
+                          <input
+                            id="currentPassword"
+                            type={
+                              editForm.showCurrentPassword ? "text" : "password"
+                            }
+                            value={editForm.currentPassword}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                currentPassword: e.target.value,
+                              })
+                            }
+                            aria-invalid={!!errors.currentPassword}
+                            placeholder="Enter current password"
+                          />
+                          <TogglePassword
+                            onClick={() =>
+                              setEditForm({
+                                ...editForm,
+                                showCurrentPassword:
+                                  !editForm.showCurrentPassword,
+                              })
+                            }
+                            aria-label={
+                              editForm.showCurrentPassword
+                                ? "Hide password"
+                                : "Show password"
+                            }
+                          >
+                            {editForm.showCurrentPassword ? (
+                              <AiOutlineEyeInvisible />
+                            ) : (
+                              <AiOutlineEye />
+                            )}
+                          </TogglePassword>
+                        </PasswordContainer>
+                        {errors.currentPassword && (
+                          <ErrorMessage message={errors.currentPassword} />
+                        )}
+                      </FormField>
+                      <FormField>
+                        <label htmlFor="newPassword">New Password</label>
+                        <PasswordContainer>
+                          <input
+                            id="newPassword"
+                            type={
+                              editForm.showNewPassword ? "text" : "password"
+                            }
+                            value={editForm.newPassword}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                newPassword: e.target.value,
+                              })
+                            }
+                            placeholder="Minimum 6 characters"
+                            aria-invalid={!!errors.newPassword}
+                          />
+                          <TogglePassword
+                            onClick={() =>
+                              setEditForm({
+                                ...editForm,
+                                showNewPassword: !editForm.showNewPassword,
+                              })
+                            }
+                            aria-label={
+                              editForm.showNewPassword
+                                ? "Hide password"
+                                : "Show password"
+                            }
+                          >
+                            {editForm.showNewPassword ? (
+                              <AiOutlineEyeInvisible />
+                            ) : (
+                              <AiOutlineEye />
+                            )}
+                          </TogglePassword>
+                        </PasswordContainer>
+                        {errors.newPassword && (
+                          <ErrorMessage message={errors.newPassword} />
+                        )}
+                      </FormField>
+                    </>
+                  ) : (
+                    <PasswordResetBox>
+                      <p>
+                        You are using{" "}
+                        {uiState.authProvider === "google.com"
+                          ? "Google"
+                          : "Facebook"}
+                        . Set a password for your account.
+                      </p>
+                      <ActionButton
+                        type="button"
+                        onClick={handlePasswordResetEmail}
+                        disabled={uiState.isCheckingPasswordUpdate}
+                      >
+                        {uiState.isCheckingPasswordUpdate
+                          ? "Processing..."
+                          : "Set Password"}
+                      </ActionButton>
+                      <small>
+                        A link will be sent to{" "}
+                        {user.email || "your registered email"}.
+                      </small>
+                    </PasswordResetBox>
+                  )}
+
+                  <FormField>
+                    <label htmlFor="photo">Profile Photo</label>
+                    <input
+                      id="photo"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                    />
+                    {editForm.preview && (
+                      <div>
+                        <PreviewImg src={editForm.preview} alt="Preview" />
+                        <ActionButton
+                          type="button"
+                          onClick={handleDeletePhoto}
+                          style={{ background: "#ff3b30", marginTop: "0.5rem" }}
+                        >
+                          Delete Photo
+                        </ActionButton>
+                      </div>
+                    )}
+                  </FormField>
+
+                  <ButtonGroup>
+                    <ActionButton
+                      type="submit"
+                      disabled={uiState.loading || !hasChanges}
+                    >
+                      {uiState.loading ? "Saving..." : "Save Changes"}
+                    </ActionButton>
+                    <ActionButton
+                      type="button"
+                      onClick={() =>
+                        setUiState((prev) => ({ ...prev, showSettings: false }))
+                      }
+                      style={{ background: "#ff3b30" }}
+                    >
+                      Cancel
+                    </ActionButton>
+                  </ButtonGroup>
+                </EditForm>
+              </Card>
+            </ModalContent>
+          </ModalBackdrop>
+        )}
+      </AnimatePresence>
 
       <NotificationModal
-        isOpen={showSuccessModal}
-        message={successMessage}
+        isOpen={uiState.showSuccessModal}
+        message="Profile updated successfully!"
         onClose={handleSuccessClose}
         autoClose={3000}
         variant="success"
       />
 
       <NotificationModal
-        isOpen={showPasswordSuccessModal}
-        message="¡Contraseña establecida con éxito! Serás redirigido para iniciar sesión."
+        isOpen={uiState.showPasswordSuccessModal}
+        message="Password set successfully! Redirecting to login."
         onClose={handlePasswordSuccessClose}
         autoClose={3000}
+        variant="success"
       />
 
       <NotificationModal
-        isOpen={showPasswordEmailInfo}
-        message={`Se ha enviado un enlace de restablecimiento de contraseña a ${user.email}. Una vez establecida, vuelve a iniciar sesión.`}
+        isOpen={uiState.showPasswordEmailInfo}
+        message={`A password reset link has been sent to ${user.email}. Please check your email.`}
         onClose={handleCloseInfoModal}
         onCancel={handleCancelPasswordReset}
         autoClose={10000}
-        showCloseButton={true}
+        showCloseButton
       />
     </StyledProfile>
   );
@@ -656,62 +1213,377 @@ const UserProfile = () => {
 
 export default UserProfile;
 
-// Estilos
+// Styles
 const StyledProfile = styled.div`
-  display: flex;
-  justify-content: center;
   padding: 2rem;
-  background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+  background-color: #f5f5f7;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 `;
 
-const ProfileContainer = styled.div`
-  max-width: 600px;
+const DashboardGrid = styled.div`
+  display: grid;
+  grid-template-columns: 2fr 1.5fr;
+  gap: 1.5rem;
   width: 100%;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  max-width: 1200px;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
-const Header = styled.div`
-  padding: 2rem;
-  text-align: center;
+const MainColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`;
+
+const SideColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+`;
+
+const Card = styled.div`
+  background: #fff;
+  border-radius: 18px;
+  padding: 1.2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const ProfileCard = styled(Card)`
   background: linear-gradient(45deg, #007bff, #0056b3);
-  color: white;
-
-  h3 {
-    margin: 0.5rem 0;
-  }
-
+  color: #fff;
+  text-align: center;
+  h2,
   p {
-    font-size: 14px;
-    opacity: 0.9;
+    color: #fff;
   }
+`;
+
+const CardTitle = styled.h2`
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin-bottom: 1rem;
+  text-align: center;
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+`;
+
+const AvatarSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1rem;
 `;
 
 const Avatar = styled.img`
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   object-fit: cover;
   border-radius: 50%;
-  margin: 0 auto;
-  display: block;
   border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 `;
 
 const AvatarPlaceholder = styled.div`
-  width: 80px;
-  height: 80px;
-  background: white;
-  color: #007bff;
+  width: 120px;
+  height: 120px;
+  background: #e5e5ea;
+  color: #007aff;
   border: 3px solid #007bff;
   border-radius: 50%;
-  font-size: 36px;
+  font-size: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+`;
+
+const RoleTag = styled.div`
+  background: ${({ isAdmin }) => (isAdmin ? "#ffd60a" : "#e5e5ea")};
+  color: ${({ isAdmin }) => (isAdmin ? "#1d1d1f" : "#007aff")};
+  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const UserInfo = styled.div`
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+`;
+
+const InfoItem = styled.p`
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+`;
+
+const ActionButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  background: #007aff;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #d1d1d6;
+    cursor: not-allowed;
+  }
+`;
+
+const QuickActionButton = styled(ActionButton)`
+  width: 100%;
+  justify-content: center;
+`;
+
+const SortButton = styled(ActionButton)`
+  padding: 0.5rem 1rem;
+  background: #e5e5ea;
+  color: #1d1d1f;
+  font-size: 0.85rem;
+`;
+
+const EmptyState = styled.p`
+  text-align: center;
+  color: #86868b;
+  font-size: 0.95rem;
+  margin: 1rem 0;
+`;
+
+const ChartContainer = styled.div`
+  margin-top: 1rem;
+`;
+
+const ProductList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+`;
+
+const ProductItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #f5f5f7;
+  border-radius: 12px;
+  font-size: 0.95rem;
+`;
+
+const CustomerName = styled.span`
+  font-weight: 500;
+  color: #1d1d1f;
+`;
+
+const Amount = styled.span`
+  font-weight: 600;
+  color: #34c759;
+`;
+
+const WalletHolder = styled.div`
+  background: #1c2526;
+  border-radius: 16px;
+  width: 100%;
+  min-height: 300px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+  margin-bottom: 1.2rem;
+  overflow: visible;
+`;
+
+const WalletSlot = styled.div`
+  background: #2a2a2a;
+  width: 100%;
+  height: 20%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+`;
+
+const AddressTitle = styled.div`
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+`;
+
+const AddressDetails = styled(motion.div)`
+  padding: 0.5rem 1rem;
+  width: 100%;
+  margin-top: 1.5rem;
+  color: #fff;
+  position: absolute;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const DetailsColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+`;
+
+const DetailItem = styled.p`
+  font-size: 0.85rem;
+  margin: 0.2rem 0;
+  line-height: 1.3;
+`;
+
+const SetDefaultButton = styled.button`
+  padding: 0.5rem 1rem;
+  background: ${({ selected }) => (selected ? "#34c759" : "#007aff")};
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-top: 4rem;
+
+  &:hover {
+    background: ${({ selected }) => (selected ? "#2d9e4b" : "#005bb5")};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const EditForm = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const FormField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  label {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #1d1d1f;
+  }
+
+  input {
+    padding: 0.75rem;
+    border: 1px solid #d1d1d6;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+
+    &:focus {
+      border-color: #007aff;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    }
+
+    &:disabled {
+      background: #f5f5f7;
+      color: #86868b;
+    }
+  }
+`;
+
+const PasswordContainer = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+`;
+
+const TogglePassword = styled.span`
+  position: absolute;
+  right: 0.75rem;
+  color: #86868b;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    color: #007aff;
+  }
+`;
+
+const PasswordResetBox = styled.div`
+  padding: 1rem;
+  background: #f5f5f7;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #1d1d1f;
+
+  p {
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+  }
+
+  small {
+    display: block;
+    margin-top: 0.5rem;
+    color: #86868b;
+    font-size: 0.85rem;
+  }
 `;
 
 const PreviewImg = styled.img`
@@ -719,120 +1591,71 @@ const PreviewImg = styled.img`
   height: 80px;
   object-fit: cover;
   border-radius: 50%;
-  margin-bottom: 1rem;
+  margin: 1rem auto;
 `;
-
-const RoleTag = styled.div`
-  background: ${({ isAdmin }) => (isAdmin ? "gold" : "lightblue")};
-  color: ${({ isAdmin }) => (isAdmin ? "black" : "blue")};
-  padding: 0.2rem 0.5rem;
-  margin: 0.5rem auto;
-  display: inline-block;
-  border-radius: 5px;
-`;
-
-const Button = styled.button`
-  background: #007bff;
-  color: white;
-  padding: 0.5rem 1rem;
-  margin: 0.5rem;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 14px;
-
-  &:hover {
-    background: #0056b3;
-  }
-
-  &:disabled {
-    background: #cccccc;
-    cursor: not-allowed;
-  }
-`;
-
-const EditForm = styled.form`
-  padding: 2rem;
-
-  label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-  }
-
-  input {
-    width: 100%;
-    padding: 0.5rem;
-    margin-bottom: 1rem;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-  }
-`;
-
-const PasswordContainer = styled.div`
-  position: relative;
-  input {
-    width: 100%;
-    padding-right: 2.5rem;
-    display: flex;
-    align-items: center;
-  }
-`;
-
-const TogglePassword = styled.span`
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  padding: 0.5rem;
+const ModalBackdrop = styled(motion.div)`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-
-  &:hover {
-    color: #007bff;
-  }
+  z-index: 1000;
 `;
 
-const PasswordResetBox = styled.div`
-  margin: 1rem 0;
-  padding: 1rem;
-  background: #f8f9fa;
+const ModalContent = styled(motion.div)`
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
+`;
+// Agrega estos componentes estilizados al final del archivo, con los demás estilos
+const ProductImage = styled.img`
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
   border-radius: 8px;
-  text-align: center;
-
-  p {
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-  }
-
-  small {
-    display: block;
-    margin-top: 0.5rem;
-    color: #666;
-    font-size: 0.8rem;
-  }
+  margin-right: 1rem;
 `;
 
-const Orders = styled.div`
-  padding: 2rem;
+const ProductInfo = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 `;
 
-const OrderControls = styled.div`
+const ProductMeta = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
 `;
 
-const NoOrdersMessage = styled.p`
-  text-align: center;
-  font-size: 16px;
-  color: #888;
-  margin-top: 1rem;
-  font-style: italic;
+const FavoriteButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: transform 0.2s;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &:focus {
+    outline: none;
+  }
 `;
