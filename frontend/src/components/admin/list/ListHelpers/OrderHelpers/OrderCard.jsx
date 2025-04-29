@@ -3,9 +3,9 @@ import styled from "styled-components";
 import moment from "moment";
 
 const OrderCard = ({ order, onView, onDispatch, onDeliver, onDelete }) => {
-  const name = order?.shipping?.name || order?.customer_name || "Sin nombre";
-  const total = order?.total
-    ? (order.total / 100).toLocaleString("es-MX", {
+  const name = order?.contact?.name || "Sin nombre";
+  const total = order?.total !== undefined
+    ? order.total.toLocaleString("es-MX", {
         style: "currency",
         currency: "MXN",
       })
@@ -18,45 +18,81 @@ const OrderCard = ({ order, onView, onDispatch, onDeliver, onDelete }) => {
 
   return (
     <CardContainer onClick={onView} $cancelled={isCancelled}>
-      <OrderInfo>
-        <OrderId>ID: {order._id}</OrderId>
-        <OrderName>Nombre: {name}</OrderName>
-        <OrderAmount>Total: {total}</OrderAmount>
-        <OrderStatus>
-          {order.delivery_status === "pending" ? (
-            <Pending>Pendiente</Pending>
-          ) : order.delivery_status === "dispatched" ? (
-            <Dispatched>En camino</Dispatched>
-          ) : order.delivery_status === "delivered" ? (
-            <Delivered>Entregado</Delivered>
-          ) : order.delivery_status === "cancelled" ? (
-            <Cancelled>Cancelado</Cancelled>
-          ) : (
-            "Sin estado"
-          )}
-        </OrderStatus>
-        <OrderDate>Fecha: {date}</OrderDate>
-      </OrderInfo>
-      <Actions>
-        <DispatchButton onClick={(e) => { e.stopPropagation(); onDispatch(order._id); }}>
-          Dispatch
-        </DispatchButton>
-        <DeliveryButton onClick={(e) => { e.stopPropagation(); onDeliver(order._id); }}>
-          Deliver
-        </DeliveryButton>
-        <DeleteButton onClick={(e) => { e.stopPropagation(); onDelete(order._id); }}>
-          Cancelar
-        </DeleteButton>
-      </Actions>
-    </CardContainer>
+  <BadgeContainer>
+    {order.isGuestOrder ? (
+      <BadgeGuest>Guest</BadgeGuest>
+    ) : (
+      <BadgeUser>User</BadgeUser>
+    )}
+  </BadgeContainer>
+  <OrderInfo>
+    <OrderId>ID: {order._id}</OrderId>
+    <OrderName>Nombre: {name}</OrderName>
+    <OrderAmount>Total: {total}</OrderAmount>
+    <OrderStatus>
+      {order.delivery_status === "pending" ? (
+        <Pending>Pendiente</Pending>
+      ) : order.delivery_status === "dispatched" ? (
+        <Dispatched>En camino</Dispatched>
+      ) : order.delivery_status === "delivered" ? (
+        <Delivered>Entregado</Delivered>
+      ) : order.delivery_status === "cancelled" ? (
+        <Cancelled>Cancelado</Cancelled>
+      ) : (
+        "Sin estado"
+      )}
+    </OrderStatus>
+    <OrderDate>Fecha: {date}</OrderDate>
+  </OrderInfo>
+  <Actions>
+    <DispatchButton onClick={(e) => { e.stopPropagation(); onDispatch(order._id); }}>
+      Dispatch
+    </DispatchButton>
+    <DeliveryButton onClick={(e) => { e.stopPropagation(); onDeliver(order._id); }}>
+      Deliver
+    </DeliveryButton>
+    <DeleteButton onClick={(e) => { e.stopPropagation(); onDelete(order._id); }}>
+      Cancelar
+    </DeleteButton>
+  </Actions>
+</CardContainer>
+
   );
 };
 
 export default OrderCard;
 
 
+const BadgeContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+`;
+
+const BadgeGuest = styled.span`
+  background-color: #ffc107;
+  color: #333;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+`;
+
+const BadgeUser = styled.span`
+  background-color: #28a745;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+`;
+
 // Styled Components
 const CardContainer = styled.div`
+  position: relative; /* 🔥 importante para que el BadgeContainer se ubique sobre la Card */
   border: 1px solid #ddd;
   border-radius: 8px;
   padding: 1.5rem;
@@ -88,7 +124,7 @@ const OrderInfo = styled.div`
 `;
 
 const OrderId = styled.p`
-  margin: 0 0 0.5rem;
+  margin: 0.5rem 0 0.5rem;
   font-weight: bold;
   color: #007bff;
 `;

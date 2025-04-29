@@ -15,7 +15,7 @@ const UserOrdersCard = ({ order }) => {
   const formattedTotal = useMemo(
     () =>
       order?.total
-        ? (order.total / 100).toLocaleString("es-MX", {
+        ? (order.total).toLocaleString("es-MX", {
             style: "currency",
             currency: "MXN",
           })
@@ -33,7 +33,7 @@ const UserOrdersCard = ({ order }) => {
         <OrderDetails>
           <OrderId>Order #{order._id || "ID no disponible"}</OrderId>
           <OrderCustomer>
-            Name: {order.customer_name || "Cliente no especificado"}
+            Name: {order.contact.name || "Cliente no especificado"}
           </OrderCustomer>
           <OrderDate>Placed on: {formattedDate}</OrderDate>
           <OrderTotal>Total: {formattedTotal}</OrderTotal>
@@ -147,11 +147,6 @@ const TimelineWrapper = styled.div`
   flex-direction: column;
   align-items: center; /* Centra la línea de tiempo y la nota horizontalmente */
   justify-content: center;
-
-  > div:first-child {
-    width: 100%; /* Asegura que TimelineView ocupe todo el ancho */
-    max-width: 500px; /* Limita el ancho máximo para mejor apariencia */
-  }
 
   @media (max-width: 768px) {
     overflow-x: auto;

@@ -3,29 +3,24 @@ import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import { userDelete, usersFetch } from "../../../features/usersSlice";
-import UserCard from "./ListHelpers/UserHelpers/UserCard"; // Asegúrate de que este componente exista
-import Pagination from "./SummaryHelpers/pagination"; // Importa el componente de paginación
-import FilterBar from "./ListHelpers/UserHelpers/filterBar"; // Importa el nuevo componente de filtro
-import SimpleConfirmationModal from "../../SimpleModal"; // Importa el nuevo modal
+import UserCard from "./ListHelpers/UserHelpers/UserCard";
+import Pagination from "./SummaryHelpers/pagination";
+import FilterBar from "./ListHelpers/UserHelpers/filterBar";
+import SimpleConfirmationModal from "../../SimpleModal";
 import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
 
 const UsersList = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { list = [], loading, error } = useSelector((state) => state.users); // Asegúrate de que list sea un array por defecto
+  const { list = [], loading, error } = useSelector((state) => state.users);
 
-  const [sortConfig, setSortConfig] = useState({
-    field: "",
-    direction: "ascending",
-  });
+  const [sortConfig, setSortConfig] = useState({ field: "", direction: "ascending" });
   const [searchQuery, setSearchQuery] = useState("");
   const [onlyShow, setOnlyShow] = useState("");
-  const itemsPerPage = 5;
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Estado para el modal de confirmación
   const [showModal, setShowModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
+  const itemsPerPage = 5;
 
   useEffect(() => {
     dispatch(usersFetch());
@@ -33,42 +28,40 @@ const UsersList = () => {
 
   const handleDelete = (id) => {
     setUserToDelete(id);
-    setShowModal(true); // Mostrar el modal de confirmación
+    setShowModal(true);
   };
 
   const confirmDelete = () => {
     if (userToDelete) {
       dispatch(userDelete(userToDelete)).catch((error) => {
         console.error("Error deleting user:", error);
-        // Aquí podrías mostrar un mensaje de error en la interfaz
       });
     }
-    setShowModal(false); // Cerrar el modal
+    setShowModal(false);
   };
 
   const filteredUsers = useMemo(() => {
-    return list.filter((user) => {
-      const matchesQuery =
-        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const isNewUser  =
-        onlyShow === "newUsers"
-          ? new Date(user.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-          : true;
-      return matchesQuery && isNewUser ;
-    });
+    return list
+      .filter((user) => !user.isGuest) // 🚀 no mostrar usuarios guest
+      .filter((user) => {
+        const matchesQuery =
+          user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+        const isNewUser =
+          onlyShow === "newUsers"
+            ? new Date(user.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            : true;
+        return matchesQuery && isNewUser;
+      });
   }, [list, searchQuery, onlyShow]);
 
   const sortedUsers = useMemo(() => {
     return [...filteredUsers].sort((a, b) => {
       const order = sortConfig.direction === "ascending" ? 1 : -1;
-      if (sortConfig.field === "name")
-        return order * a.name.localeCompare(b.name);
-      if (sortConfig.field === "email")
-        return order * a.email.localeCompare(b.email);
+      if (sortConfig.field === "name") return order * a.name.localeCompare(b.name);
+      if (sortConfig.field === "email") return order * a.email.localeCompare(b.email);
       if (sortConfig.field === "isAdmin") return order * (a.isAdmin ? -1 : 1);
-      if (sortConfig.field === "createdAt")
-        return order * (new Date(a.createdAt) - new Date(b.createdAt));
+      if (sortConfig.field === "createdAt") return order * (new Date(a.createdAt) - new Date(b.createdAt));
       return 0;
     });
   }, [filteredUsers, sortConfig]);
@@ -88,12 +81,12 @@ const UsersList = () => {
         onlyShow={onlyShow}
         setOnlyShow={setOnlyShow}
       />
-      {loading && (
-        <LoadingSpinner message={`Loading users ...`} />
-      )}
+
+      {loading && <LoadingSpinner message="Cargando usuarios..." />}
       {error && <ErrorMessage message={error} />}
-      {list.length === 0 ? (
-        <NoUsersMessage>No users found.</NoUsersMessage>
+
+      {filteredUsers.length === 0 ? (
+        <NoUsersMessage>No se encontraron usuarios.</NoUsersMessage>
       ) : (
         <CardsContainer>
           {paginatedUsers.map((user) => (
@@ -106,26 +99,27 @@ const UsersList = () => {
           ))}
         </CardsContainer>
       )}
+
       <Pagination
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         totalNotes={filteredUsers.length}
         itemsPerPage={itemsPerPage}
       />
+
       <SimpleConfirmationModal
         showModal={showModal}
         handleClose={() => setShowModal(false)}
         handleConfirm={confirmDelete}
-        userName={
-          userToDelete
-            ? list.find((user) => user._id === userToDelete)?.name
-            : ""
-        }
+        userName={userToDelete ? list.find((u) => u._id === userToDelete)?.name : ""}
       />
     </Container>
   );
 };
 
+export default UsersList;
+
+// Styled Components
 const Container = styled.div`
   width: 100%;
   margin-top: 2rem;
@@ -141,5 +135,3 @@ const CardsContainer = styled.div`
   display: flex;
   flex-direction: column;
 `;
-
-export default UsersList;

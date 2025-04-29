@@ -1,5 +1,10 @@
 import socket from "../socket";
-import { userUpdated, userDeleted, userAdded } from "../usersSlice";
+import { 
+  userUpdated, 
+  userDeleted, 
+  userAdded,
+  setCurrentGuest
+} from "../usersSlice";
 import { toast } from "react-toastify";
 
 const setupUsersSocketListeners = (dispatch) => {
@@ -8,11 +13,14 @@ const setupUsersSocketListeners = (dispatch) => {
     return () => {};
   }
 
-  // Handlers con notificaciones Toast y manejo de errores
   const handleUserUpdated = (updatedUser) => {
     try {
       dispatch(userUpdated(updatedUser));
-      toast.info(`Usuario actualizado: ${updatedUser.name || updatedUser.email}`);
+      if (updatedUser.isGuest) {
+        toast.info(`Guest user updated: ${updatedUser.guestId.slice(-4)}`);
+      } else {
+        toast.info(`Usuario actualizado: ${updatedUser.name || updatedUser.email}`);
+      }
     } catch (error) {
       toast.error('Error al actualizar usuario');
       console.error('Error handling userUpdated:', error);
@@ -22,7 +30,11 @@ const setupUsersSocketListeners = (dispatch) => {
   const handleUserDeleted = (deletedUser) => {
     try {
       dispatch(userDeleted(deletedUser));
-      toast.warning(`Usuario eliminado: ${deletedUser.name || deletedUser.email}`);
+      if (deletedUser.isGuest) {
+        toast.warning(`Guest user session terminated`);
+      } else {
+        toast.warning(`Usuario eliminado: ${deletedUser.name || deletedUser.email}`);
+      }
     } catch (error) {
       toast.error('Error al eliminar usuario');
       console.error('Error handling userDeleted:', error);
@@ -31,24 +43,40 @@ const setupUsersSocketListeners = (dispatch) => {
 
   const handleUserCreated = (newUser) => {
     try {
-      dispatch(userAdded(newUser));
-      toast.success(`Nuevo usuario registrado: ${newUser.name || newUser.email}`);
+      if (newUser.isGuest) {
+        dispatch(setCurrentGuest(newUser));
+        toast.success(`Sesión de invitado creada`);
+      } else {
+        dispatch(userAdded(newUser));
+        toast.success(`Nuevo usuario registrado: ${newUser.name || newUser.email}`);
+      }
     } catch (error) {
       toast.error('Error al agregar usuario');
       console.error('Error handling userCreated:', error);
     }
   };
 
-  // Registrar listeners
+  const handleGuestConverted = (convertedUser) => {
+    try {
+      dispatch(userUpdated(convertedUser));
+      dispatch(setCurrentGuest(null));
+      toast.success(`¡Cuenta convertida a usuario regular!`);
+    } catch (error) {
+      toast.error('Error al convertir usuario');
+      console.error('Error handling guestConverted:', error);
+    }
+  };
+
   socket.on("userUpdated", handleUserUpdated);
   socket.on("userDeleted", handleUserDeleted);
   socket.on("userCreated", handleUserCreated);
+  socket.on("guestConverted", handleGuestConverted);
 
-  // Retornar función de limpieza
   return () => {
     socket.off("userUpdated", handleUserUpdated);
     socket.off("userDeleted", handleUserDeleted);
     socket.off("userCreated", handleUserCreated);
+    socket.off("guestConverted", handleGuestConverted);
   };
 };
 

@@ -16,7 +16,7 @@ const OrderPeriodSection = ({ title, orders, totalSales, color }) => {
         <InfoTitle>Total Ventas</InfoTitle>
         <InfoData>
           {Number(
-            validOrders.reduce((sum, order) => sum + (order.total || 0) / 100, 0)
+            validOrders.reduce((sum, order) => sum + (order.total || 0), 0)
           ).toLocaleString("es-MX", {
             style: "currency",
             currency: "MXN",

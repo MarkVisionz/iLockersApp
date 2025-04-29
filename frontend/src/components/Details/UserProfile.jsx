@@ -60,7 +60,20 @@ const UserProfile = () => {
     (state) => state.orders
   );
 
-  const userId = isAdmin ? id : authId;
+  // Use id if admin viewing another profile, otherwise use authId
+  const userId = isAdmin && id ? id : authId;
+  const profileUserId = id || authId;
+  const isViewingOtherProfile = id && id !== authId;
+
+  const profileOrders = useMemo(() => {
+    console.log("Filtering orders for profileUserId:", profileUserId);
+    console.log("Available orders:", orders);
+    return orders.filter(
+      (order) =>
+        order.userId?.toString() === profileUserId ||
+        (order.contact?.email === authEmail && order.isGuestOrder)
+    );
+  }, [orders, profileUserId, authEmail]);
 
   const [initialFormState, setInitialFormState] = useState({
     name: "",
@@ -113,10 +126,9 @@ const UserProfile = () => {
     form: "",
   });
 
-  const allOrders = useMemo(
-    () => orders.filter((order) => order.userId === userId),
-    [orders, userId]
-  );
+  const allOrders = useMemo(() => {
+    return profileOrders; // Use profileOrders directly
+  }, [profileOrders]);
 
   const filteredOrders = useMemo(
     () => allOrders.filter((order) => order.delivery_status === "delivered"),
@@ -170,14 +182,13 @@ const UserProfile = () => {
       if (!order.products || !Array.isArray(order.products)) return;
 
       order.products.forEach((product) => {
-        // Usamos description como identificador único ya que algunos productos no tienen product_id
         const productKey = product.description || product.product_id;
 
         if (!productKey) return;
 
         if (!productCounts[productKey]) {
           productCounts[productKey] = {
-            id: product.product_id || productKey, // Usamos product_id si existe, sino el description
+            id: product.product_id || productKey,
             name: product.description,
             image: product.image || "",
             timesOrdered: 0,
@@ -190,12 +201,10 @@ const UserProfile = () => {
       });
     });
 
-    // Convertir a array y ordenar por cantidad total (de mayor a menor)
     const sortedProducts = Object.values(productCounts).sort(
       (a, b) => b.totalQuantity - a.totalQuantity
     );
 
-    // Tomar solo los 3 primeros y marcar favoritos
     return sortedProducts.slice(0, 3).map((product) => ({
       ...product,
       isFavorite: user.favorites.includes(product.id),
@@ -223,13 +232,13 @@ const UserProfile = () => {
         uniqueAddresses.push({
           id: `address-${uniqueAddresses.length}`,
           details: {
-            customerName: order.customer_name || "Customer",
+            customerName: order.contact.name || "Customer",
             address: `${order.shipping.line1}${
               order.shipping.line2 ? `, ${order.shipping.line2}` : ""
             }`,
             city: order.shipping.city,
             postalCode: order.shipping.postal_code,
-            phone: order.phone || "No phone provided",
+            phone: order.contact.phone || "No phone provided",
           },
           rawDetails: JSON.stringify(order.shipping),
         });
@@ -391,29 +400,10 @@ const UserProfile = () => {
     }
   };
 
-  const handleNextAddress = () => {
-    setUiState((prev) => ({
-      ...prev,
-      currentAddressIndex:
-        prev.currentAddressIndex === addressesFromOrders.length - 1
-          ? 0
-          : prev.currentAddressIndex + 1,
-    }));
-  };
-
-  const handlePrevAddress = () => {
-    setUiState((prev) => ({
-      ...prev,
-      currentAddressIndex:
-        prev.currentAddressIndex === 0
-          ? addressesFromOrders.length - 1
-          : prev.currentAddressIndex - 1,
-    }));
-  };
-
   useEffect(() => {
     if (!authId) return;
 
+    // Fetch user data
     const fetchUser = async () => {
       try {
         setUiState((prev) => ({ ...prev, loading: true }));
@@ -438,7 +428,7 @@ const UserProfile = () => {
           name: res.data.name,
           email: res.data.email,
           isAdmin: res.data.isAdmin,
-          photoURL: res.data.photoURL,
+          photoURL: res.data.photoURL || res.data.profileImage || "",
           createdAt: res.data.createdAt || new Date().toISOString(),
           favorites: res.data.favorites || [],
         });
@@ -456,8 +446,19 @@ const UserProfile = () => {
       }
     };
 
+    // Fetch orders
+    const fetchOrders = async () => {
+      try {
+        console.log("Fetching orders for userId:", userId);
+        await dispatch(ordersFetch({ userId })).unwrap();
+      } catch (error) {
+        console.error("Error fetching orders:", error);
+        toast.error("Failed to fetch orders");
+      }
+    };
+
     fetchUser();
-    dispatch(ordersFetch());
+    fetchOrders();
 
     const handleUserUpdated = (updatedUser) => {
       if (updatedUser._id === userId) {
@@ -660,7 +661,7 @@ const UserProfile = () => {
         updates.authProvider = "password";
       }
 
-      await axios.put(`${url}/users/${authId}`, updates, setHeaders());
+      await axios.put(`${url}/users/${userId}`, updates, setHeaders());
 
       setUser({
         ...user,
@@ -730,7 +731,7 @@ const UserProfile = () => {
       <DashboardGrid>
         <MainColumn>
           <ProfileCard>
-            <CardTitle>Welcome, {user.name}</CardTitle>
+            <CardTitle>¡Bienvenido! {user.name}</CardTitle>
             <AvatarSection>
               {user.photoURL ? (
                 <Avatar src={user.photoURL} alt={user.name} />
@@ -807,7 +808,7 @@ const UserProfile = () => {
             <CardTitle>Quick Actions</CardTitle>
             <ButtonGroup>
               {isAdmin && (
-                <QuickActionButton onClick={() => navigate("/admin")}>
+                <QuickActionButton onClick={() => navigate("/admin/summary")}>
                   Admin Dashboard
                 </QuickActionButton>
               )}
@@ -1213,7 +1214,7 @@ const UserProfile = () => {
 
 export default UserProfile;
 
-// Styles
+// Styles (unchanged, included for completeness)
 const StyledProfile = styled.div`
   padding: 2rem;
   background-color: #f5f5f7;
@@ -1395,10 +1396,6 @@ const EmptyState = styled.p`
   margin: 1rem 0;
 `;
 
-const ChartContainer = styled.div`
-  margin-top: 1rem;
-`;
-
 const ProductList = styled.div`
   display: flex;
   flex-direction: column;
@@ -1418,11 +1415,6 @@ const ProductItem = styled.div`
 const CustomerName = styled.span`
   font-weight: 500;
   color: #1d1d1f;
-`;
-
-const Amount = styled.span`
-  font-weight: 600;
-  color: #34c759;
 `;
 
 const WalletHolder = styled.div`
@@ -1593,30 +1585,7 @@ const PreviewImg = styled.img`
   border-radius: 50%;
   margin: 1rem auto;
 `;
-const ModalBackdrop = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
 
-const ModalContent = styled(motion.div)`
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  padding: 0.5rem;
-`;
-// Agrega estos componentes estilizados al final del archivo, con los demás estilos
 const ProductImage = styled.img`
   width: 50px;
   height: 50px;
@@ -1658,4 +1627,28 @@ const FavoriteButton = styled.button`
   &:focus {
     outline: none;
   }
+`;
+
+const ModalBackdrop = styled(motion.div)`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const ModalContent = styled(motion.div)`
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  padding: 0.5rem;
 `;

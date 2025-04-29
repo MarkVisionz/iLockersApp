@@ -75,8 +75,12 @@ const Transactions = () => {
       })
       .map((order) => ({
         Folio: order._id,
-        "Nombre del Cliente": order.shipping?.name || "Cliente desconocido",
-        Total: (order.total || 0) / 100,
+        "Nombre del Cliente": order.contact?.name || "Cliente desconocido",
+        Total:
+          order.total?.toLocaleString("es-MX", {
+            style: "currency",
+            currency: "MXN",
+          }) || "$0.00",
         Fecha: moment(order.createdAt).format("DD/MM/YYYY HH:mm"),
         "Estado del Pedido": order.delivery_status || "Sin estado",
         "Estado de Pago": order.payment_status || "Desconocido",
@@ -213,16 +217,25 @@ const Transactions = () => {
         <TransactionList>
           {latestTransactions.map((order, index) => (
             <TransactionItem key={index}>
-              <CustomerName>
-                {order?.customer_name ?? "Cliente desconocido"}
-              </CustomerName>
-              <Amount>
-                {((order?.total || 0) / 100).toLocaleString("es-MX", {
-                  style: "currency",
-                  currency: "MXN",
-                })}
-              </Amount>
-              <Time>{moment(order?.createdAt).fromNow()}</Time>
+              <BadgeContainer>
+                {order.isGuestOrder ? (
+                  <BadgeGuest>Guest</BadgeGuest>
+                ) : (
+                  <BadgeUser>User</BadgeUser>
+                )}
+              </BadgeContainer>
+              <TransactionContent>
+                <CustomerName>
+                  {order?.contact?.name || "Cliente desconocido"}
+                </CustomerName>
+                <Amount>
+                  {order?.total?.toLocaleString("es-MX", {
+                    style: "currency",
+                    currency: "MXN",
+                  }) || "$0.00"}
+                </Amount>
+                <Time>{moment(order?.createdAt).fromNow()}</Time>
+              </TransactionContent>
             </TransactionItem>
           ))}
         </TransactionList>
@@ -409,8 +422,13 @@ const TransactionList = styled.div`
   gap: 1rem;
 `;
 
-const TransactionItem = styled.div`
+const TransactionContent = styled.div`
   display: flex;
+  margin-top: 1.2rem;
+`;
+
+const TransactionItem = styled.div`
+  position: relative;
   justify-content: space-between;
   align-items: center;
   background: #eef2ff;
@@ -419,7 +437,7 @@ const TransactionItem = styled.div`
   transition: box-shadow 0.5s ease, transform 0.4s ease;
 
   &:hover {
-    box-shadow: 0 6px 12px rgba(75, 112, 226, 0.2);
+    box-shadow: 0 4px 6px rgba(75, 112, 226, 0.2);
     transform: translateY(-1px);
   }
 `;
@@ -449,4 +467,31 @@ const EmptyState = styled.p`
   text-align: center;
   color: #aaa;
   margin-top: 1rem;
+`;
+
+const BadgeContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+`;
+
+const BadgeGuest = styled.span`
+  background-color: #ffc107;
+  color: #333;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+`;
+
+const BadgeUser = styled.span`
+  background-color: #28a745;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
 `;

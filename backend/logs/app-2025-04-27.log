@@ -1,0 +1,57 @@
+{"logId":"bf4b57ac","timestamp":"2025-04-27 08:51:05.686","level":"info","message":"Usuario guest creado exitosamente","guestId":"680e3648cddb9e15d14befe5","email":"guest-1745761864915@example.com","name":"Invitado-4744de","pid":24901}
+{"logId":"543bc143","timestamp":"2025-04-27 08:51:06.726","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1SUipivsk25vdgUmdpTAcZfAUsDCPDDLeyH5P9GRIRvCy4wKQpvCgrTbR","pid":24901}
+{"logId":"98ee0a0a","timestamp":"2025-04-27 08:54:41.328","level":"info","message":"Usuario guest creado exitosamente","guestId":"680e3721cddb9e15d14befe9","email":"guest-1745762081194@example.com","name":"Invitado-1ybmbx","pid":24901}
+{"logId":"c95dfaaa","timestamp":"2025-04-27 08:54:42.106","level":"info","message":"Checkout session creada","sessionId":"cs_test_a1GtPcLnGjPrQ1Seeyo5pDDzWqn1sa9rTdaYGJD5eY4LWO01HDyrhRLOlx","pid":24901}
+{"logId":"520debc5","timestamp":"2025-04-27 13:05:10.009","level":"info","message":"Usuario guest creado exitosamente","guestId":"680e71d53d671aef2ec5fe7b","email":"guest-1745777109866@example.com","name":"Invitado-2318j9","pid":28875}
+{"logId":"f05c3443","timestamp":"2025-04-27 13:05:10.959","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1Jsz1WXY51PBgjZmmMHe4SJl84r86bu3LAgsXWtTm15yYjIeeJiMSwaVb","pid":28875}
+{"logId":"1adfb9e6","timestamp":"2025-04-27 13:05:31.986","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIZa2BPmbYGdI5T0JrIBYS3","pid":28875}
+{"logId":"518da3ad","timestamp":"2025-04-27 13:05:32.028","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIZa2BPmbYGdI5T0uEDMJXG","pid":28875}
+{"logId":"1f08a678","timestamp":"2025-04-27 13:05:32.124","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIZa2BPmbYGdI5T00oq2mvA","pid":28875}
+{"logId":"c5a70436","timestamp":"2025-04-27 13:05:32.170","level":"warn","message":"Email duplicado detectado, no se actualiza email","email":"pichita1119@gmail.com","guestId":"680e71d53d671aef2ec5fe7b","pid":28875}
+{"logId":"023a7bd4","timestamp":"2025-04-27 13:05:32.265","level":"info","message":"✅ Usuario invitado actualizado correctamente","guestId":"680e71d53d671aef2ec5fe7b","pid":28875}
+{"logId":"5dc7bfd4","timestamp":"2025-04-27 13:05:32.840","level":"info","message":"Orden 680e71ec3d671aef2ec5fe84 creada","orderType":"GUEST","amount":206,"pid":28875}
+{"logId":"78288b6c","timestamp":"2025-04-27 13:05:32.841","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIZa4BPmbYGdI5TenqMaSXK","orderId":"680e71ec3d671aef2ec5fe84","pid":28875}
+{"logId":"ea84c5b2","timestamp":"2025-04-27 13:05:34.223","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIZa2BPmbYGdI5T0elMybgR","pid":28875}
+{"logId":"36abf97a","timestamp":"2025-04-27 13:07:09.369","level":"info","message":"Usuario guest creado exitosamente","guestId":"680e724d3d671aef2ec5fe89","email":"guest-1745777229268@example.com","name":"Invitado-sq357v","pid":28875}
+{"logId":"6d8aa405","timestamp":"2025-04-27 13:07:10.314","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1rRekgQxnhsd2FUH0vthX3To2MaCXcvVj6qelK0IWoQymUdQh0loYY4Bb","pid":28875}
+{"logId":"630ebd0b","timestamp":"2025-04-27 13:07:38.732","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIZc5BPmbYGdI5T07qOdrrk","pid":28875}
+{"logId":"992f3163","timestamp":"2025-04-27 13:07:38.806","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIZc5BPmbYGdI5T0pPQTees","pid":28875}
+{"logId":"dfa80226","timestamp":"2025-04-27 13:07:38.848","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIZc5BPmbYGdI5T0qxCVKvP","pid":28875}
+{"logId":"816857bf","timestamp":"2025-04-27 13:07:39.227","level":"warn","message":"Email duplicado detectado, no se actualiza email","email":"pichita1119@gmail.com","guestId":"680e724d3d671aef2ec5fe89","pid":28875}
+{"logId":"67ef8f59","timestamp":"2025-04-27 13:07:39.341","level":"info","message":"✅ Usuario invitado actualizado correctamente","guestId":"680e724d3d671aef2ec5fe89","pid":28875}
+{"logId":"62cd2655","timestamp":"2025-04-27 13:07:39.865","level":"info","message":"Orden 680e726b3d671aef2ec5fe92 creada","orderType":"GUEST","amount":535,"pid":28875}
+{"logId":"ef7bde03","timestamp":"2025-04-27 13:07:39.866","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIZc7BPmbYGdI5TcqCisYxV","orderId":"680e726b3d671aef2ec5fe92","pid":28875}
+{"logId":"c1eac96c","timestamp":"2025-04-27 13:07:40.975","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIZc5BPmbYGdI5T0WIhD2Rt","pid":28875}
+{"logId":"ea0a3f3c","timestamp":"2025-04-27 13:09:25.491","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1Bp2NXtJCtZsJgoGpW7VmOB2Qay4t2h6NzluV4WtU0RPNyol3TkqhSlBW","pid":28875}
+{"logId":"32b5b56d","timestamp":"2025-04-27 13:10:03.294","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIZeQBPmbYGdI5T0M9o1Y8Z","pid":28875}
+{"logId":"64b46765","timestamp":"2025-04-27 13:10:03.361","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIZeQBPmbYGdI5T0Oe2B33s","pid":28875}
+{"logId":"46a7faaf","timestamp":"2025-04-27 13:10:03.417","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIZeQBPmbYGdI5T0HQIrIVX","pid":28875}
+{"logId":"45582de8","timestamp":"2025-04-27 13:10:03.974","level":"info","message":"Orden 680e72fb3d671aef2ec5fe9a creada","orderType":"REGISTERED","amount":202,"pid":28875}
+{"logId":"b04eb64b","timestamp":"2025-04-27 13:10:03.975","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIZeRBPmbYGdI5TvJkV8n5j","orderId":"680e72fb3d671aef2ec5fe9a","pid":28875}
+{"logId":"4c1335a5","timestamp":"2025-04-27 13:10:05.691","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIZeQBPmbYGdI5T0H9QSfXY","pid":28875}
+{"logId":"2200efa8","timestamp":"2025-04-27 14:44:23.576","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1ibXUIFLKJl2R8ShRIETS0GkxRidnFYAiEKRumidybLc4UXxhphyCqFzv","pid":30482}
+{"logId":"1f31454e","timestamp":"2025-04-27 14:44:55.055","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIb8DBPmbYGdI5T1yQjBj5h","pid":30482}
+{"logId":"8a0309b2","timestamp":"2025-04-27 14:44:55.121","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIb8DBPmbYGdI5T1AMlrDe7","pid":30482}
+{"logId":"ee99bbdf","timestamp":"2025-04-27 14:44:55.209","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIb8DBPmbYGdI5T1XECph7Q","pid":30482}
+{"logId":"a48d17f1","timestamp":"2025-04-27 14:44:56.137","level":"info","message":"Orden 680e8938e01883464d8014a4 creada","orderType":"REGISTERED","amount":240,"pid":30482}
+{"logId":"f24699e3","timestamp":"2025-04-27 14:44:56.137","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIb8FBPmbYGdI5TWKDdq9sV","orderId":"680e8938e01883464d8014a4","pid":30482}
+{"logId":"6f62cbba","timestamp":"2025-04-27 14:44:57.325","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIb8DBPmbYGdI5T1pI8EGwm","pid":30482}
+{"logId":"f5e81e97","timestamp":"2025-04-27 22:15:06.028","level":"info","message":"Checkout session creada","sessionId":"cs_test_b1osTAN8qopirWRsc1hETGdifbRXblfb92ewUpWftj5J8LoCf4ug3YI0Qi","pid":31876}
+{"logId":"9c6be32e","timestamp":"2025-04-27 22:15:27.362","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIiAEBPmbYGdI5T28AoIen4","pid":31876}
+{"logId":"68960941","timestamp":"2025-04-27 22:15:27.413","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIiAEBPmbYGdI5T2tKykVeo","pid":31876}
+{"logId":"ec2962de","timestamp":"2025-04-27 22:15:27.478","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIiAEBPmbYGdI5T2UDqfbea","pid":31876}
+{"logId":"a4842d78","timestamp":"2025-04-27 22:15:28.445","level":"info","message":"Orden 680ef2d0c38e7cab7e7fc2c6 creada","orderType":"REGISTERED","amount":241,"pid":31876}
+{"logId":"b37f6f7b","timestamp":"2025-04-27 22:15:28.445","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIiAFBPmbYGdI5TsdWhVTWF","orderId":"680ef2d0c38e7cab7e7fc2c6","pid":31876}
+{"logId":"de5886df","timestamp":"2025-04-27 22:15:29.680","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIiAEBPmbYGdI5T2krWvCxq","pid":31876}
+{"logId":"6231dea9","timestamp":"2025-04-27 22:50:18.625","level":"info","message":"Usuario guest creado exitosamente","guestId":"680efafacbc207841d4a24dc","email":"guest-1745812218463@example.com","name":"Invitado-v3b6u8","pid":3671}
+{"logId":"b96059be","timestamp":"2025-04-27 22:50:19.696","level":"info","message":"Checkout session creada","sessionId":"cs_test_a1Xl97LJuLoRXVQ2VohQShD8ggcViRsCPiEWXkL7ulVoD9nxSBvAOYqyMk","pid":3671}
+{"logId":"4f987b78","timestamp":"2025-04-27 22:51:23.932","level":"info","message":"Usuario guest creado exitosamente","guestId":"680efb3bcbc207841d4a24e0","email":"guest-1745812283830@example.com","name":"Invitado-8po79d","pid":3671}
+{"logId":"17e7c860","timestamp":"2025-04-27 22:51:24.516","level":"info","message":"Checkout session creada","sessionId":"cs_test_a1atWY5XHo39C3xROJYqnc8fs5QLlgsWwHHTULYG6ZEC6uKjOFj3xHaVcG","pid":3671}
+{"logId":"9b6d01b4","timestamp":"2025-04-27 22:51:42.094","level":"info","message":"Webhook charge.succeeded procesado","eventId":"evt_3RIijIBPmbYGdI5T14DwpAXK","pid":3671}
+{"logId":"e1464998","timestamp":"2025-04-27 22:51:42.154","level":"info","message":"Webhook payment_intent.succeeded procesado","eventId":"evt_3RIijIBPmbYGdI5T1mX42oom","pid":3671}
+{"logId":"5590d364","timestamp":"2025-04-27 22:51:42.202","level":"info","message":"Webhook payment_intent.created procesado","eventId":"evt_3RIijIBPmbYGdI5T19dxVSW0","pid":3671}
+{"logId":"e845030a","timestamp":"2025-04-27 22:51:42.464","level":"info","message":"✅ Usuario invitado actualizado correctamente","guestId":"680efb3bcbc207841d4a24e0","pid":3671}
+{"logId":"9cb0117c","timestamp":"2025-04-27 22:51:43.277","level":"info","message":"Orden 680efb4fcbc207841d4a24e8 creada","orderType":"GUEST","amount":620,"pid":3671}
+{"logId":"9f506009","timestamp":"2025-04-27 22:51:43.278","level":"info","message":"Webhook checkout.session.completed procesado","eventId":"evt_1RIijKBPmbYGdI5TPUmRZ3Ij","orderId":"680efb4fcbc207841d4a24e8","pid":3671}
+{"logId":"21a978f0","timestamp":"2025-04-27 22:51:44.488","level":"info","message":"Webhook charge.updated procesado","eventId":"evt_3RIijIBPmbYGdI5T1XwSvQrF","pid":3671}
+{"logId":"eef29b5c","timestamp":"2025-04-27 23:20:18.829","level":"info","message":"Webhook checkout.session.expired procesado","eventId":"evt_1RIjB0BPmbYGdI5TOFtiBwt7","pid":4261}

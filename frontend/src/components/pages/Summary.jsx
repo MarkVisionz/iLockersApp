@@ -59,14 +59,15 @@ const Summary = () => {
   // Función segura para filtrar usuarios
   const getValidUsers = () => {
     try {
-      return Array.isArray(users) 
-        ? users.filter(user => user?.createdAt) 
+      return Array.isArray(users)
+        ? users.filter(user => user?.createdAt && !user.isGuest)
         : [];
     } catch (error) {
       console.error("Error filtering users:", error);
       return [];
     }
   };
+  
 
   // Función para comparar estadísticas
   const compareStats = (a, b) => {
@@ -209,7 +210,7 @@ const Summary = () => {
     try {
       const currentUsers = userStats[0]?.total || 0;
       const currentOrders = sortedOrders[0]?.total || 0;
-      const currentIncome = sortedIncome[0]?.total ? (sortedIncome[0].total / 100).toFixed(2) : "0.00";
+      const currentIncome = sortedIncome[0]?.total ? (sortedIncome[0].total).toFixed(2) : "0.00";
 
       setWidgetData([
         {

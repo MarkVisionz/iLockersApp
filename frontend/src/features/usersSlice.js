@@ -5,8 +5,10 @@ import { toast } from "react-toastify";
 
 const initialState = {
   list: [],
+  currentGuest: null,
   status: null,
   deleteStatus: null,
+  convertStatus: null,
 };
 
 // GET all users
@@ -16,8 +18,39 @@ export const usersFetch = createAsyncThunk("users/usersFetch", async () => {
     return response.data;
   } catch (error) {
     console.log(error);
+    throw error;
   }
 });
+
+// CREATE guest user
+export const createGuestUser = createAsyncThunk(
+  "users/createGuest",
+  async (contactInfo, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(`${url}/users/guest`, contactInfo);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+// CONVERT guest to regular user
+export const convertGuestToUser = createAsyncThunk(
+  "users/convertGuest",
+  async ({ guestId, email, password }, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(`${url}/users/convert-guest`, { 
+        guestId, 
+        email, 
+        password 
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
 
 // DELETE user
 export const userDelete = createAsyncThunk("users/userDelete", async (id) => {
@@ -25,10 +58,8 @@ export const userDelete = createAsyncThunk("users/userDelete", async (id) => {
     const response = await axios.delete(`${url}/users/${id}`, setHeaders());
     return response.data;
   } catch (error) {
-    console.log(error.response?.data);
-    toast.error(error.response?.data, {
-      position: "bottom-left",
-    });
+    toast.error(error.response?.data?.message || "Error al eliminar usuario");
+    throw error;
   }
 });
 
@@ -36,11 +67,19 @@ const usersSlice = createSlice({
   name: "users",
   initialState,
   reducers: {
-    // ✅ SOCKET.IO reducers
+    setCurrentGuest: (state, action) => {
+      state.currentGuest = action.payload;
+    },
+    clearCurrentGuest: (state) => {
+      state.currentGuest = null;
+    },
     userUpdated: (state, action) => {
       const index = state.list.findIndex((u) => u._id === action.payload._id);
       if (index !== -1) {
         state.list[index] = action.payload;
+      }
+      if (state.currentGuest?._id === action.payload._id) {
+        state.currentGuest = action.payload;
       }
     },
     userDeleted: (state, action) => {
@@ -62,6 +101,29 @@ const usersSlice = createSlice({
       .addCase(usersFetch.rejected, (state) => {
         state.status = "rejected";
       })
+      .addCase(createGuestUser.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(createGuestUser.fulfilled, (state, action) => {
+        state.currentGuest = action.payload;
+        state.status = "success";
+      })
+      .addCase(createGuestUser.rejected, (state, action) => {
+        state.status = "failed";
+        toast.error(action.payload?.message || "Error al crear usuario invitado");
+      })
+      .addCase(convertGuestToUser.pending, (state) => {
+        state.convertStatus = "loading";
+      })
+      .addCase(convertGuestToUser.fulfilled, (state, action) => {
+        state.convertStatus = "success";
+        state.currentGuest = null;
+        toast.success("¡Cuenta convertida a usuario regular!");
+      })
+      .addCase(convertGuestToUser.rejected, (state, action) => {
+        state.convertStatus = "failed";
+        toast.error(action.payload?.message || "Error al convertir usuario");
+      })
       .addCase(userDelete.pending, (state) => {
         state.deleteStatus = "pending";
       })
@@ -71,9 +133,6 @@ const usersSlice = createSlice({
         );
         state.list = newList;
         state.deleteStatus = "success";
-        toast.error("User Deleted!", {
-          position: "bottom-left",
-        });
       })
       .addCase(userDelete.rejected, (state) => {
         state.deleteStatus = "rejected";
@@ -81,7 +140,12 @@ const usersSlice = createSlice({
   },
 });
 
-// ✅ export actions para usar con socket listeners
-export const { userUpdated, userDeleted, userAdded } = usersSlice.actions;
+export const { 
+  setCurrentGuest,
+  clearCurrentGuest,
+  userUpdated, 
+  userDeleted, 
+  userAdded 
+} = usersSlice.actions;
 
 export default usersSlice.reducer;

@@ -14,6 +14,8 @@ const initialState = {
     loading: false,
     error: null,
   },
+  guestOrders: [],
+  currentOrder: null,
 };
 
 const handleError = (error, rejectWithValue) => {
@@ -23,6 +25,31 @@ const handleError = (error, rejectWithValue) => {
 };
 
 // Thunks para operaciones asíncronas
+export const createGuestOrder = createAsyncThunk(
+  "orders/createGuestOrder",
+  async (orderData, { rejectWithValue }) => {
+    try {
+      const res = await axios.post(`${url}/orders`, orderData);
+      toast.success("Orden creada exitosamente");
+      return res.data;
+    } catch (error) {
+      return handleError(error, rejectWithValue);
+    }
+  }
+);
+
+export const fetchGuestOrders = createAsyncThunk(
+  "orders/fetchGuestOrders",
+  async (guestId, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(`${url}/orders/guest/${guestId}`);
+      return res.data;
+    } catch (error) {
+      return handleError(error, rejectWithValue);
+    }
+  }
+);
+
 export const ordersFetch = createAsyncThunk(
   "orders/ordersFetch",
   async (_, { rejectWithValue }) => {
@@ -109,11 +136,19 @@ const ordersSlice = createSlice({
   name: "orders",
   initialState,
   reducers: {
-    // Reducers para actualizaciones via socket
+    setCurrentOrder: (state, action) => {
+      state.currentOrder = action.payload;
+    },
+    clearGuestOrders: (state) => {
+      state.guestOrders = [];
+    },
     socketOrderAdded: (state, action) => {
       const exists = state.list.some(o => o._id === action.payload._id);
       if (!exists) {
         state.list.unshift(action.payload);
+      }
+      if (action.payload.isGuestOrder) {
+        state.guestOrders.unshift(action.payload);
       }
     },
     socketOrderUpdated: (state, action) => {
@@ -121,11 +156,19 @@ const ordersSlice = createSlice({
       if (index !== -1) {
         state.list[index] = action.payload;
       }
+      const guestIndex = state.guestOrders.findIndex(o => o._id === action.payload._id);
+      if (guestIndex !== -1) {
+        state.guestOrders[guestIndex] = action.payload;
+      }
     },
     socketOrderStatusChanged: (state, action) => {
       const order = state.list.find(o => o._id === action.payload._id);
       if (order) {
         order.delivery_status = action.payload.status;
+      }
+      const guestOrder = state.guestOrders.find(o => o._id === action.payload._id);
+      if (guestOrder) {
+        guestOrder.delivery_status = action.payload.status;
       }
     },
     socketStatsUpdated: (state, action) => {
@@ -133,13 +176,35 @@ const ordersSlice = createSlice({
       state.stats[type] = data;
       state.stats.loading = false;
     },
-    // Reducer para forzar recarga de datos
     invalidateOrdersCache: (state) => {
       state.status = null;
     }
   },
   extraReducers: (builder) => {
     builder
+      .addCase(createGuestOrder.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(createGuestOrder.fulfilled, (state, action) => {
+        state.list.unshift(action.payload);
+        state.guestOrders.unshift(action.payload);
+        state.status = "succeeded";
+      })
+      .addCase(createGuestOrder.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
+      })
+      .addCase(fetchGuestOrders.pending, (state) => {
+        state.status = "loading";
+      })
+      .addCase(fetchGuestOrders.fulfilled, (state, action) => {
+        state.guestOrders = action.payload;
+        state.status = "succeeded";
+      })
+      .addCase(fetchGuestOrders.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
+      })
       .addCase(ordersFetch.pending, (state) => {
         state.status = "loading";
         state.error = null;
@@ -157,11 +222,19 @@ const ordersSlice = createSlice({
         if (index !== -1) {
           state.list[index] = action.payload;
         }
+        const guestIndex = state.guestOrders.findIndex(o => o._id === action.payload._id);
+        if (guestIndex !== -1) {
+          state.guestOrders[guestIndex] = action.payload;
+        }
       })
       .addCase(ordersDelete.fulfilled, (state, action) => {
         const order = state.list.find(o => o._id === action.payload._id);
         if (order) {
           order.delivery_status = "cancelled";
+        }
+        const guestOrder = state.guestOrders.find(o => o._id === action.payload._id);
+        if (guestOrder) {
+          guestOrder.delivery_status = "cancelled";
         }
       })
       .addMatcher(
@@ -201,6 +274,8 @@ const ordersSlice = createSlice({
 });
 
 export const { 
+  setCurrentOrder,
+  clearGuestOrders,
   socketOrderAdded,
   socketOrderUpdated,
   socketOrderStatusChanged,

@@ -3,15 +3,13 @@ import setupOrdersSocketListeners from "./ordersSocketListeners";
 import setupLaundrySocketListeners from "./laundryNoteSocketListeners";
 import setupServiceSocketListeners from "./ServiceSocketListeners";
 import setupUsersSocketListeners from "./UsersSocketListeners";
-import socket from "../socket"; // Importar socket si necesitas verificaciones
+import socket from "../socket";
 
 const setupAllSocketListeners = (dispatch) => {
-  // Verificación de conexión del socket (opcional)
   if (!socket?.connected) {
     console.warn('Socket not connected during setup');
   }
 
-  // Configuración de listeners con validación
   const listeners = [
     setupProductsSocketListeners,
     setupOrdersSocketListeners,
@@ -20,7 +18,6 @@ const setupAllSocketListeners = (dispatch) => {
     setupUsersSocketListeners
   ].filter(Boolean);
 
-  // Ejecutar setup y recolectar cleanups
   const cleanups = listeners.map(setup => {
     try {
       return setup(dispatch);
@@ -30,7 +27,6 @@ const setupAllSocketListeners = (dispatch) => {
     }
   }).filter(Boolean);
 
-  // Función de limpieza consolidada
   return () => {
     cleanups.forEach(cleanup => {
       try {

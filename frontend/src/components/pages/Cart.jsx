@@ -6,16 +6,9 @@ import {
   removeFromCart,
   getTotals,
 } from "../../features/cartSlice";
+import { createGuestUser } from "../../features/usersSlice";
 import styled from "styled-components";
-import {
-  AiOutlinePlus,
-  AiOutlineMinus,
-  AiOutlineShoppingCart,
-  AiOutlineDelete,
-  AiOutlineMenu,
-  AiOutlineClose,
-  AiOutlineUp,
-} from "react-icons/ai";
+import { AiOutlinePlus, AiOutlineMinus, AiOutlineShoppingCart, AiOutlineDelete, AiOutlineClose, AiOutlineUp } from "react-icons/ai";
 import { useEffect, useState, useCallback, memo } from "react";
 import PayButton from "../PayButton";
 import { useNavigate } from "react-router-dom";
@@ -23,11 +16,21 @@ import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import Pagination from "../admin/list/SummaryHelpers/pagination";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductFilters from "../admin/list/ListHelpers/ProductHelpers/ProductFilter";
+import GuestCheckoutModal from "../GuestCheckoutModal";
+import axios from "axios";
+import { url } from "../../features/api";
+
+// Variantes de animación
+const cartVariants = { hidden: { y: 50, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: "spring", damping: 25 } }, exit: { y: 50, opacity: 0 } };
+const itemVariants = { hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0, transition: { duration: 0.2 } }, exit: { opacity: 0, x: 10, transition: { duration: 0.2 } } };
+
+const itemsPerPage = 10;
 
 const Cart = memo(() => {
   const { items: products, status } = useSelector((state) => state.products);
   const cart = useSelector((state) => state.cart);
   const auth = useSelector((state) => state.auth);
+  const { currentGuest } = useSelector((state) => state.users);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -36,150 +39,195 @@ const Cart = memo(() => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [sortConfig, setSortConfig] = useState({
-    field: "",
-    direction: "ascending",
-  });
+  const [sortConfig, setSortConfig] = useState({ field: "", direction: "ascending" });
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const itemsPerPage = 6;
+  const [guestModalOpen, setGuestModalOpen] = useState(false);
+  const [checkoutAsGuest, setCheckoutAsGuest] = useState(false);
+  const [hasCheckedOut, setHasCheckedOut] = useState(false);
+  const [hasAttemptedCheckout, setHasAttemptedCheckout] = useState(false);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Variantes de animación para el carrito y los ítems
-  const cartVariants = {
-    hidden: { y: 50, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: { type: "spring", damping: 25 },
-    },
-    exit: { y: 50, opacity: 0 },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
-    exit: { opacity: 0, x: 10, transition: { duration: 0.2 } },
-  };
-
-  // Optimizar funciones con useCallback
   const handleManualQuantityChange = useCallback((productId, value) => {
     const parsed = parseInt(value);
-    setQuantities((prev) => ({
-      ...prev,
-      [productId]: isNaN(parsed) || parsed < 1 ? 1 : parsed,
-    }));
+    setQuantities((prev) => ({ ...prev, [productId]: isNaN(parsed) || parsed < 1 ? 1 : parsed }));
   }, []);
 
   const handleClickQuantity = useCallback((productId, type) => {
     setQuantities((prev) => {
       const current = prev[productId] || 1;
-      const newQty =
-        type === "increase" ? current + 1 : Math.max(1, current - 1);
+      const newQty = type === "increase" ? current + 1 : Math.max(1, current - 1);
       return { ...prev, [productId]: newQty };
     });
   }, []);
 
-  const handleAddToCart = useCallback(
-    (product) => {
-      const quantity = quantities[product._id] || 1;
-      for (let i = 0; i < quantity; i++) {
-        dispatch(addToCart(product));
-      }
-      setQuantities((prev) => ({ ...prev, [product._id]: 1 }));
-    },
-    [quantities, dispatch]
-  );
+  const handleAddToCart = useCallback((product) => {
+    const quantity = quantities[product._id] || 1;
+    for (let i = 0; i < quantity; i++) {
+      dispatch(addToCart(product));
+    }
+    setQuantities((prev) => ({ ...prev, [product._id]: 1 }));
+  }, [quantities, dispatch]);
 
-  const handleRemove = useCallback(
-    (item) => dispatch(removeFromCart(item)),
-    [dispatch]
-  );
-  const handleIncrease = useCallback(
-    (item) => dispatch(addToCart(item)),
-    [dispatch]
-  );
-  const handleDecrease = useCallback(
-    (item) => dispatch(decreaseCart(item)),
-    [dispatch]
-  );
+  const handleRemove = useCallback((item) => dispatch(removeFromCart(item)), [dispatch]);
+  const handleIncrease = useCallback((item) => dispatch(addToCart(item)), [dispatch]);
+  const handleDecrease = useCallback((item) => dispatch(decreaseCart(item)), [dispatch]);
   const handleClearCart = useCallback(() => dispatch(clearCart()), [dispatch]);
-  const handleScrollTop = useCallback(
-    () => window.scrollTo({ top: 0, behavior: "smooth" }),
-    []
-  );
+  const handleScrollTop = useCallback(() => window.scrollTo({ top: 0, behavior: "smooth" }), []);
 
-  // Detectar cambio de tamaño para mostrar el CartSidebar en escritorio
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 769) {
-        setCartVisible(true);
+  const getGuestId = useCallback(async () => {
+    try {
+      const contactInfo = { 
+        email: `guest-${Date.now()}@example.com`,
+        name: `Invitado-${Math.random().toString(36).substring(2, 8)}`,
+        phone: `+52${Math.floor(1000000000 + Math.random() * 9000000000)}`
+      };
+      const response = await dispatch(createGuestUser(contactInfo)).unwrap();
+      return response.guestId || response._id;
+    } catch (error) {
+      console.error("Error al crear guest:", error);
+      setError(error.message || "No pudimos crear una sesión temporal.");
+      throw new Error("GUEST_CREATION_FAILED");
+    }
+  }, [dispatch]);
+
+  const handleCheckout = useCallback(async () => {
+    if (hasCheckedOut || cart.cartItems.length === 0 || hasAttemptedCheckout) return;
+  
+    setIsLoading(true);
+    setError(null);
+    setHasAttemptedCheckout(true);
+  
+    try {
+      let guestIdValue = null;
+  
+      if (checkoutAsGuest) {
+        guestIdValue = await getGuestId(); // 🔥 generamos guestId, pero ya no generamos contact
       }
-    };
-
-    window.addEventListener("resize", handleResize);
-    handleResize();
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  // Mostrar botón "Volver arriba" en móviles
-  useEffect(() => {
-    const handleScroll = () => {
-      const isMobile = window.innerWidth <= 768;
-      if (isMobile) {
-        const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        const windowHeight = window.innerHeight;
-        const documentHeight = document.documentElement.scrollHeight;
-
-        if (scrollTop + windowHeight >= documentHeight - 100) {
-          setShowScrollTop(true);
-        } else {
-          setShowScrollTop(false);
+  
+      const response = await axios.post(
+        `${url}/stripe/create-checkout-session`,
+        {
+          cartItems: cart.cartItems.map(item => ({
+            id: item._id,
+            name: item.name,
+            price: item.price,
+            cartQuantity: item.cartQuantity,
+            image: item.image,
+          })),
+          userId: auth._id || null,
+          guestId: checkoutAsGuest ? guestIdValue : null, // 🔥 enviamos solo el guestId
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000,
         }
+      );
+  
+      if (response.data.url) {
+        setHasCheckedOut(true);
+        window.location.href = response.data.url;
       } else {
-        setShowScrollTop(false);
+        throw new Error("No se recibió la URL de Stripe");
       }
-    };
+    } catch (error) {
+      console.error("Error en checkout:", error);
+      setError(error.message || "Error al iniciar el pago. Intenta de nuevo.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    cart.cartItems,
+    auth._id,
+    checkoutAsGuest,
+    hasCheckedOut,
+    hasAttemptedCheckout,
+    getGuestId
+  ]);
+  
 
-    window.addEventListener("scroll", handleScroll);
-    window.addEventListener("resize", handleScroll);
-    handleScroll();
+  const handleCheckoutClick = () => {
+    if (cart.cartItems.length === 0) {
+      setError("El carrito está vacío");
+      return;
+    }
+    if (auth._id) {
+      handleCheckout();
+    } else {
+      setGuestModalOpen(true);
+    }
+  };
 
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
-    };
-  }, []);
+  const handleLoginRedirect = () => {
+    setGuestModalOpen(false);
+    navigate("/login");
+  };
 
-  // Actualizar totales del carrito
+  const handleGuestContinue = () => {
+    setGuestModalOpen(false);
+    setCheckoutAsGuest(true);
+    setHasCheckedOut(false);
+    setHasAttemptedCheckout(false);
+  };
+
+  const handleRetryCheckout = () => {
+    setError(null);
+    setHasCheckedOut(false);
+    setHasAttemptedCheckout(false);
+    handleCheckout();
+  };
+
+  useEffect(() => {
+    if (checkoutAsGuest && !hasCheckedOut && cart.cartItems.length > 0 && !isLoading && !hasAttemptedCheckout) {
+      handleCheckout();
+    }
+  }, [
+    checkoutAsGuest,
+    hasCheckedOut,
+    cart.cartItems,
+    isLoading,
+    hasAttemptedCheckout,
+    handleCheckout,
+  ]);
+
   useEffect(() => {
     dispatch(getTotals());
   }, [cart.cartItems, dispatch]);
 
-  // Filtrado y ordenamiento de productos
   const filteredProducts = products
-    .filter((product) => {
-      const matchesName = product.name
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        !categoryFilter ||
-        product.category?.toLowerCase().includes(categoryFilter.toLowerCase());
+    .filter(product => {
+      const matchesName = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = !categoryFilter || product.category?.toLowerCase().includes(categoryFilter.toLowerCase());
       return matchesName && matchesCategory;
     })
     .sort((a, b) => {
       const { field, direction } = sortConfig;
       if (!field) return 0;
-
       let aValue = a[field];
       let bValue = b[field];
-
       if (typeof aValue === "string") aValue = aValue.toLowerCase();
       if (typeof bValue === "string") bValue = bValue.toLowerCase();
-
       if (aValue < bValue) return direction === "ascending" ? -1 : 1;
       if (aValue > bValue) return direction === "ascending" ? 1 : -1;
       return 0;
     });
+
+    useEffect(() => {
+      const handleScroll = () => {
+        if (window.scrollY > 300) {
+          setShowScrollTop(true);
+        } else {
+          setShowScrollTop(false);
+        }
+      };
+    
+      window.addEventListener("scroll", handleScroll);
+    
+      return () => {
+        window.removeEventListener("scroll", handleScroll);
+      };
+    }, []);
+    
 
   const totalFiltered = filteredProducts.length;
   const paginatedProducts = filteredProducts.slice(
@@ -189,6 +237,19 @@ const Cart = memo(() => {
 
   return (
     <HomeWrapper>
+      <GuestCheckoutModal
+        isOpen={guestModalOpen}
+        onLogin={handleLoginRedirect}
+        onGuest={handleGuestContinue}
+        onClose={() => setGuestModalOpen(false)}
+      />
+      {error && (
+        <ErrorMessageWrapper>
+          <ErrorMessage message={error} />
+          <RetryButton onClick={handleRetryCheckout}>Reintentar</RetryButton>
+        </ErrorMessageWrapper>
+      )}
+      {isLoading && <LoadingSpinner message="Iniciando pago..." />}
       <Header>
         <h2>Explora nuestros productos</h2>
         <p>Agrega tu ropa sin salir de casa</p>
@@ -226,7 +287,6 @@ const Cart = memo(() => {
               animate="visible"
               exit="exit"
               variants={cartVariants}
-              cartVisible={cartVisible}
             >
               <MobileCloseButton
                 onClick={() => setCartVisible(false)}
@@ -270,7 +330,6 @@ const Cart = memo(() => {
                               $ {(item.price * item.cartQuantity).toFixed(2)}
                             </Price>
                           </ItemInfo>
-
                           <Quantity>
                             <QtyButton
                               onClick={() => handleDecrease(item)}
@@ -300,15 +359,21 @@ const Cart = memo(() => {
                     <span>Total:</span>
                     <span>$ {cart.cartTotalAmount.toFixed(2)}</span>
                   </TotalRow>
-                  {auth._id ? (
-                    <PayButton cartItems={cart.cartItems}>
-                      Pagar ahora
-                    </PayButton>
-                  ) : (
-                    <LoginBtn onClick={() => navigate("/login")}>
-                      Inicia sesión para pagar
-                    </LoginBtn>
-                  )}
+                  {cart.cartItems.length > 0 &&
+                    (auth._id || checkoutAsGuest ? (
+                      <PayButton
+                        cartItems={cart.cartItems}
+                        isGuest={checkoutAsGuest}
+                        onCheckout={handleCheckout}
+                        disabled={isLoading}
+                      >
+                        Pagar ahora
+                      </PayButton>
+                    ) : (
+                      <LoginBtn onClick={handleCheckoutClick}>
+                        Continuar para pagar
+                      </LoginBtn>
+                    ))}
                   <ClearCartBtn onClick={handleClearCart}>
                     <AiOutlineDelete /> Vaciar carrito
                   </ClearCartBtn>
@@ -333,7 +398,7 @@ const Cart = memo(() => {
 
         <Grid>
           {status === "success" ? (
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {paginatedProducts.map((product) => (
                 <motion.div
                   key={product._id}
@@ -423,8 +488,32 @@ const Cart = memo(() => {
   );
 });
 
-// Estilos organizados por secciones
-// Contenedores principales
+// Estilos (sin cambios, se mantienen igual)
+const ErrorMessageWrapper = styled.div`
+  text-align: center;
+  margin-bottom: 1rem;
+`;
+
+const RetryButton = styled.button`
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: #0056b3;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+`;
+
 const HomeWrapper = styled.div`
   padding: 2rem;
   background-color: #f4f6f8;
@@ -473,7 +562,6 @@ const Header = styled.div`
   }
 `;
 
-// CartSidebar y sus elementos
 const CartSidebar = styled.div`
   width: 300px;
   background: white;
@@ -736,7 +824,6 @@ const TotalRow = styled.div`
   }
 `;
 
-// Botones de acción en CartSidebar
 const ActionButton = styled.button`
   border: none;
   border-radius: 6px;
@@ -781,7 +868,6 @@ const ClearCartBtn = styled(ActionButton)`
   }
 `;
 
-// ToggleButton y CartBadge
 const ToggleButton = styled.button`
   display: none;
 
@@ -830,7 +916,6 @@ const CartBadge = styled.span`
   font-weight: bold;
 `;
 
-// Filtros
 const DesktopFiltersWrapper = styled.div`
   display: block;
 
@@ -849,7 +934,6 @@ const MobileFiltersWrapper = styled.div`
   }
 `;
 
-// Grid y Cards de productos
 const Grid = styled.div`
   flex: 2;
   display: grid;
@@ -1030,7 +1114,6 @@ const AddButton = styled.button`
   }
 `;
 
-// Botón "Volver arriba"
 const ScrollTopButton = styled.button`
   position: fixed;
   bottom: 5rem;

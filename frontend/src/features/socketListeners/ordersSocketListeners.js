@@ -5,6 +5,7 @@ import {
   socketOrderStatusChanged,
   socketStatsUpdated
 } from "../ordersSlice";
+import { toast } from "react-toastify";
 
 const setupOrdersSocketListeners = (dispatch) => {
   if (!socket) {
@@ -13,33 +14,66 @@ const setupOrdersSocketListeners = (dispatch) => {
   }
 
   const handleNewOrder = (order) => {
-    dispatch(socketOrderAdded(order));
+    try {
+      dispatch(socketOrderAdded(order));
+      const message = order.isGuestOrder
+        ? `Orden #${order._id.slice(-4)} creada (Invitado)`
+        : `Nueva orden #${order._id.slice(-4)} creada`;
+      toast.success(message);
+    } catch (error) {
+      console.error("Error handling new order:", error);
+    }
   };
 
   const handleUpdatedOrder = (order) => {
-    dispatch(socketOrderUpdated(order));
+    try {
+      dispatch(socketOrderUpdated(order));
+      if (order.isGuestOrder) {
+        toast.info(`Orden de invitado actualizada`);
+      }
+    } catch (error) {
+      console.error("Error handling updated order:", error);
+    }
   };
 
   const handleOrderStatusChange = ({ orderId, status }) => {
-    dispatch(socketOrderStatusChanged({ _id: orderId, status }));
+    try {
+      dispatch(socketOrderStatusChanged({ _id: orderId, status }));
+      toast.info(`Estado actualizado: ${status}`);
+    } catch (error) {
+      console.error("Error handling status change:", error);
+    }
   };
 
   const handleStatsUpdate = (stats) => {
-    dispatch(socketStatsUpdated(stats));
+    try {
+      dispatch(socketStatsUpdated(stats));
+    } catch (error) {
+      console.error("Error handling stats update:", error);
+    }
   };
 
-  // Registrar listeners
+  const handleGuestOrderNotification = (notification) => {
+    try {
+      const { orderId, message } = notification;
+      toast.info(`Orden #${orderId.slice(-4)}: ${message}`);
+    } catch (error) {
+      console.error("Error handling guest notification:", error);
+    }
+  };
+
   socket.on("orderCreated", handleNewOrder);
   socket.on("orderUpdated", handleUpdatedOrder);
   socket.on("orderStatusChanged", handleOrderStatusChange);
   socket.on("statsUpdated", handleStatsUpdate);
+  socket.on("guestOrderNotification", handleGuestOrderNotification);
 
-  // Función de limpieza
   return () => {
     socket.off("orderCreated", handleNewOrder);
     socket.off("orderUpdated", handleUpdatedOrder);
     socket.off("orderStatusChanged", handleOrderStatusChange);
     socket.off("statsUpdated", handleStatsUpdate);
+    socket.off("guestOrderNotification", handleGuestOrderNotification);
   };
 };
 

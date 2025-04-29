@@ -69,7 +69,7 @@ const AllTimeData = () => {
       totalOrders,
       cancelledOrders,
       completedOrders,
-      totalEarnings: (totalEarnings / 100).toLocaleString("es-MX", {
+      totalEarnings: (totalEarnings).toLocaleString("es-MX", {
         style: "currency",
         currency: "MXN",
       })

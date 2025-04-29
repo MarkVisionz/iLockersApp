@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const admin = require("firebase-admin");
+const User = require("../models/user");
 
 // Configuración opcional de Firebase (solo si existen las variables)
 if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
@@ -80,6 +81,47 @@ const auth = async (req, res, next) => {
   }
 };
 
+// Middleware para validar guestId
+const guestAuth = async (req, res, next) => {
+  try {
+    const guestId = req.params.guestId || req.body.guestId || req.query.guestId;
+    if (!guestId) {
+      return res.status(400).json({
+        success: false,
+        message: "GuestId es requerido",
+        code: "MISSING_GUEST_ID",
+      });
+    }
+
+    const guest = await User.findOne({ guestId, isGuest: true });
+    if (!guest) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario guest no encontrado",
+        code: "GUEST_NOT_FOUND",
+      });
+    }
+
+    if (guest.guestExpiresAt < new Date()) {
+      return res.status(403).json({
+        success: false,
+        message: "Sesión de guest expirada",
+        code: "GUEST_EXPIRED",
+      });
+    }
+
+    req.guest = guest;
+    next();
+  } catch (err) {
+    console.error("Error en guestAuth:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: "Error en validación de guest",
+      code: "GUEST_AUTH_ERROR",
+    });
+  }
+};
+
 // For User Profile
 const isUser = async (req, res, next) => {
   try {
@@ -149,6 +191,7 @@ const isAdmin = async (req, res, next) => {
 
 module.exports = {
   auth,
+  guestAuth,
   isAdmin,
   isUser,
 };
