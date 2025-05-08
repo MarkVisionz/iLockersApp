@@ -15,7 +15,6 @@ if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
 
 const auth = async (req, res, next) => {
   try {
-    // 1. Obtener token
     const token =
       req.header("x-auth-token") ||
       (req.headers.authorization && req.headers.authorization.split(" ")[1]);
@@ -28,7 +27,22 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // 2. Intentar con Firebase primero (si está configurado)
+    const jwtSecretKey = process.env.JWT_SECRET_KEY;
+    if (!jwtSecretKey) throw new Error("Falta JWT_SECRET_KEY en .env");
+
+    try {
+      // ✅ PRIMERO intentar como JWT
+      const decoded = jwt.verify(token, jwtSecretKey);
+      req.user = {
+        ...decoded,
+        authProvider: decoded.authProvider || "password",
+      };
+      return next();
+    } catch (jwtError) {
+      console.log("JWT inválido, intentando Firebase...");
+    }
+
+    // Si no fue JWT válido, intentar como token de Firebase
     if (admin.apps.length) {
       try {
         const decodedToken = await admin.auth().verifyIdToken(token);
@@ -40,46 +54,60 @@ const auth = async (req, res, next) => {
             code: "INVALID_PROVIDER",
           });
         }
+
+        // 🔥 Buscar usuario real
+        if (!decodedToken.email) {
+          return res.status(401).json({
+            success: false,
+            message: "Token inválido (falta email)",
+            code: "INVALID_FIREBASE_TOKEN",
+          });
+        }
+
+        const userInDb = await User.findOne({ email: decodedToken.email });
+        if (!userInDb) {
+          return res.status(404).json({
+            success: false,
+            message: "Usuario no encontrado",
+            code: "USER_NOT_FOUND",
+          });
+        }
+
         req.user = {
-          _id: decodedToken.uid,
-          email: decodedToken.email,
-          isAdmin: decodedToken.isAdmin || false,
+          _id: userInDb._id,
+          email: userInDb.email,
+          isAdmin: userInDb.isAdmin,
           authProvider: decodedToken.firebase.sign_in_provider,
+          isVerified: userInDb.isVerified,
         };
+
         return next();
       } catch (firebaseError) {
-        // Continuar con JWT si Firebase falla
+        console.error("Error validando token Firebase:", firebaseError.message);
+        return res.status(401).json({
+          success: false,
+          message: "Token inválido",
+          code: "INVALID_TOKEN",
+        });
       }
     }
 
-    // 3. Intentar con JWT
-    const jwtSecretKey = process.env.JWT_SECRET_KEY;
-    if (!jwtSecretKey) throw new Error("Falta JWT_SECRET_KEY en .env");
-    const decoded = jwt.verify(token, jwtSecretKey);
-    req.user = {
-      ...decoded,
-      authProvider: decoded.authProvider || "password",
-    };
-    return next();
+    // Si no se pudo autenticar de ninguna forma
+    return res.status(401).json({
+      success: false,
+      message: "No se pudo autenticar el token",
+      code: "AUTH_FAILED",
+    });
   } catch (err) {
     console.error("Error en autenticación:", err.message);
-    const response = {
+    return res.status(401).json({
       success: false,
       message: "Autenticación fallida",
       code: "AUTH_ERROR",
-    };
-    if (err.name === "TokenExpiredError" || err.code === "auth/id-token-expired") {
-      response.message = "Token expirado. Por favor inicia sesión nuevamente.";
-      response.code = "TOKEN_EXPIRED";
-      return res.status(401).json(response);
-    }
-    if (err.name === "JsonWebTokenError" || err.code === "auth/argument-error") {
-      response.message = "Token inválido.";
-      response.code = "INVALID_TOKEN";
-    }
-    return res.status(401).json(response);
+    });
   }
 };
+
 
 // Middleware para validar guestId
 const guestAuth = async (req, res, next) => {

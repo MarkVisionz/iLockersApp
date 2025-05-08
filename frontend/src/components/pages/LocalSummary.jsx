@@ -53,7 +53,7 @@ const LocalSummary = () => {
       icon: <FaChartBar />,
       digits: incomeCurrent,
       isMoney: true,
-      title: "Ganancias",
+      title: "Ventas",
       color: "rgb(253, 181, 40)",
       bgColor: "rgb(253, 181, 40, 0.12)",
       percentage: incomePercentage,

@@ -24,7 +24,7 @@ import { url } from "../../features/api";
 const cartVariants = { hidden: { y: 50, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: "spring", damping: 25 } }, exit: { y: 50, opacity: 0 } };
 const itemVariants = { hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0, transition: { duration: 0.2 } }, exit: { opacity: 0, x: 10, transition: { duration: 0.2 } } };
 
-const itemsPerPage = 10;
+const itemsPerPage = 6;
 
 const Cart = memo(() => {
   const { items: products, status } = useSelector((state) => state.products);

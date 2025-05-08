@@ -155,9 +155,14 @@ router.get("/", auth, async (req, res) => {
     const { new: isNew, userId, status } = req.query;
     let query = {};
 
-    // Si se especifica un userId (usado cuando admin ve perfil de otro usuario)
-    if (userId) {
-      // Verificar que sea admin si está pidiendo órdenes de otro usuario
+    // ✅ NUEVO: si es admin y no se pasa userId => traer TODAS las órdenes
+    if (req.user.isAdmin && !userId) {
+      if (status) {
+        query.delivery_status = status;
+      }
+    }
+    // 🧑‍💼 Si se especifica un userId (admin viendo perfil ajeno)
+    else if (userId) {
       if (userId !== req.user._id && !req.user.isAdmin) {
         return res.status(403).send("No autorizado para ver órdenes de otros usuarios");
       }
@@ -168,29 +173,18 @@ router.get("/", auth, async (req, res) => {
       query = {
         $or: [
           { userId: userId },
-          { 
-            "contact.email": user.email,
-            isGuestOrder: true 
-          }
+          { "contact.email": user.email, isGuestOrder: true }
         ]
       };
     } 
-    // Si no se especifica userId (usuario viendo su propio perfil)
+    // 👤 Usuario viendo sus propias órdenes
     else {
       query = {
         $or: [
           { userId: req.user._id },
-          { 
-            "contact.email": req.user.email,
-            isGuestOrder: true 
-          }
+          { "contact.email": req.user.email, isGuestOrder: true }
         ]
       };
-    }
-
-    // Filtrar por estado si se especifica
-    if (status) {
-      query.delivery_status = status;
     }
 
     const orders = isNew
@@ -203,6 +197,7 @@ router.get("/", auth, async (req, res) => {
     res.status(500).send(err.message);
   }
 });
+
 
 // Obtener una orden específica
 router.get("/findOne/:id", auth, async (req, res) => {

@@ -1,0 +1,4 @@
+{"logId":"786bdedc","timestamp":"2025-04-29 10:16:22.078","level":"info","message":"Usuario eliminado","userId":"680d8d1c1fa3000dc10b36ec","pid":11693}
+{"logId":"ba408020","timestamp":"2025-04-29 10:16:38.193","level":"info","message":"Usuario eliminado","userId":"664e322707cc19cc3dd31c97","pid":11693}
+{"logId":"fbdd6c83","timestamp":"2025-04-29 15:07:17.026","level":"info","message":"Checkout session creada","sessionId":"cs_test_a10baYQIvE7IxCP00KfCpC0lHm7vXyJI8a7fLsQxowLKq2aW4fUDABNuU4","pid":11693}
+{"logId":"d23b9c49","timestamp":"2025-04-29 15:12:15.519","level":"info","message":"Checkout session creada","sessionId":"cs_test_a1zYSGS5pKstLo6M1P4Ews8Adi8820LWOj6yQBxbEmKKXHyHlG4nrXV32V","pid":11693}

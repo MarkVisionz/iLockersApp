@@ -156,8 +156,6 @@ const NotesSummary = () => {
           itemsPerPage={itemsPerPage}
         />
       )}
-
-      {/* <ColorPalette></ColorPalette> */}
     </>
   );
 };

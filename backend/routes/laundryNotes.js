@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const moment = require("moment");
 
-// CREATE A NOTE
+// ✅ CREATE A NOTE
 router.post("/", async (req, res) => {
   const {
     name,
@@ -11,7 +11,7 @@ router.post("/", async (req, res) => {
     date,
     services,
     observations,
-    abono,
+    abonos,
     suavitelDesired,
     total,
     note_status,
@@ -19,6 +19,7 @@ router.post("/", async (req, res) => {
     paidAt,
     deliveredAt,
     phoneNumber,
+    method,
   } = req.body;
 
   try {
@@ -28,7 +29,7 @@ router.post("/", async (req, res) => {
       date,
       services,
       observations,
-      abono,
+      abonos: Array.isArray(abonos) ? abonos : [],
       suavitelDesired,
       total,
       note_status: note_status || "pendiente",
@@ -36,6 +37,7 @@ router.post("/", async (req, res) => {
       paidAt,
       deliveredAt,
       phoneNumber,
+      method: note_status === "pagado" ? method : null,
     });
 
     const savedLaundryNote = await laundryNote.save();
@@ -48,6 +50,77 @@ router.post("/", async (req, res) => {
   } catch (error) {
     console.error("Error saving laundry note:", error.message);
     res.status(500).send({ message: error.message });
+  }
+});
+
+// ✅ EDIT NOTE
+router.put("/:id", async (req, res) => {
+  try {
+    console.log("PUT /notes/:id called:", { id: req.params.id, body: req.body });
+
+    const note = await LaundryNote.findById(req.params.id);
+    if (!note) {
+      console.log("Note not found for ID:", req.params.id);
+      return res.status(404).send("Note not found...");
+    }
+
+    const { note_status, cleaning_status, newAbono, method } = req.body;
+
+    // ✅ Actualizar status de pago
+    if (note_status) {
+      console.log("Updating note_status to:", note_status);
+      if (note_status === "pagado" && note.note_status !== "pendiente") {
+        return res.status(400).send("La nota debe estar Pendiente para marcar como Pagada.");
+      }
+      if (note_status === "entregado" && note.note_status !== "pagado") {
+        return res.status(400).send("La nota debe estar Pagada para marcar como Entregada.");
+      }
+      if (note_status === "pagado") {
+        const totalAbonado = (note.abonos || []).reduce((acc, ab) => acc + ab.amount, 0) + (newAbono ? newAbono.amount : 0);
+        if (totalAbonado < note.total) {
+          return res.status(400).send(`Falta pagar $${(note.total - totalAbonado).toFixed(2)}.`);
+        }
+        if (!note.paidAt) {
+          note.paidAt = new Date();
+          note.method = method || note.method;
+        }
+      }
+      if (note_status === "entregado" && !note.deliveredAt) {
+        note.deliveredAt = new Date();
+        note.cleaning_status = "entregado"; // Actualizar cleaning_status
+      }
+      note.note_status = note_status;
+    }
+
+    // ✅ Actualizar status de limpieza
+    if (cleaning_status) {
+      console.log("Updating cleaning_status to:", cleaning_status);
+      note.cleaning_status = cleaning_status;
+    }
+
+    // ✅ Agregar abono si existe
+    if (newAbono && newAbono.amount && newAbono.method) {
+      note.abonos.push({
+        amount: newAbono.amount,
+        method: newAbono.method,
+        date: newAbono.date || new Date(),
+      });
+    }
+
+    const updatedNote = await note.save();
+    console.log("Note updated:", updatedNote);
+
+    if (req.io) {
+      console.log("Emitting noteUpdated:", JSON.stringify(updatedNote, null, 2));
+      req.io.emit("noteUpdated", updatedNote.toJSON());
+    } else {
+      console.error("Socket.IO not available (req.io undefined)");
+    }
+
+    res.status(200).send(updatedNote);
+  } catch (err) {
+    console.error("Error updating note:", err.message);
+    res.status(500).send(err);
   }
 });
 
@@ -85,51 +158,6 @@ router.post("/validate-password", (req, res) => {
   const { password } = req.body;
   const isValid = password === process.env.ADMIN_PASSWORD;
   return res.status(200).json({ valid: isValid });
-});
-
-// EDIT NOTE
-router.put("/:id", async (req, res) => {
-  try {
-    console.log("PUT /notes/:id called:", { id: req.params.id, body: req.body });
-    const note = await LaundryNote.findById(req.params.id);
-    if (!note) {
-      console.log("Note not found for ID:", req.params.id);
-      return res.status(404).send("Note not found...");
-    }
-
-    const { note_status, cleaning_status } = req.body;
-
-    if (note_status) {
-      console.log("Updating note_status to:", note_status);
-      if (note_status === "pagado" && !note.paidAt) {
-        note.paidAt = new Date();
-      }
-      if (note_status === "entregado" && !note.deliveredAt) {
-        note.deliveredAt = new Date();
-      }
-      note.note_status = note_status;
-    }
-
-    if (cleaning_status) {
-      console.log("Updating cleaning_status to:", cleaning_status);
-      note.cleaning_status = cleaning_status;
-    }
-
-    const updatedNote = await note.save();
-    console.log("Note updated:", updatedNote);
-
-    if (req.io) {
-      console.log("Emitting noteUpdated:", JSON.stringify(updatedNote, null, 2));
-      req.io.emit("noteUpdated", updatedNote.toJSON()); // Asegurar formato JSON
-    } else {
-      console.error("Socket.IO not available (req.io undefined)");
-    }
-
-    res.status(200).send(updatedNote);
-  } catch (err) {
-    console.error("Error updating note:", err.message);
-    res.status(500).send(err);
-  }
 });
 
 // GET NOTE BY ID

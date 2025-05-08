@@ -4,9 +4,7 @@ import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
 import {
-  ordersFetch,
   ordersEdit,
-  ordersDelete,
 } from "../../../features/ordersSlice";
 import FilterBar from "./ListHelpers/OrderHelpers/FilterBar";
 import OrderCard from "./ListHelpers/OrderHelpers/OrderCard";
@@ -31,24 +29,28 @@ const OrdersList = () => {
   const itemsPerPage = 4;
 
   useEffect(() => {
-    if (status !== "succeeded") {
-      dispatch(ordersFetch());
+    if (status !== "succeeded") return;
+  
+    let filtered = [...list];
+  
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((order) => {
+        const name =
+          order?.contact?.name ||
+          order?.shipping?.name ||
+          order?.customer_name ||
+          "";
+        const total = order?.total?.toString() || "";
+        const id = order?._id || "";
+  
+        return (
+          name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          total.includes(searchQuery) ||
+          id.includes(searchQuery)
+        );
+      });
     }
-  }, [dispatch, status]);
-
-  useEffect(() => {
-    let filtered = list.filter((order) => {
-      const name = order?.shipping?.name || order?.customer_name || "";
-      const total = order?.total?.toString() || "";
-      const id = order?._id || "";
-
-      return (
-        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        total.includes(searchQuery) ||
-        id.includes(searchQuery)
-      );
-    });
-
+  
     if (onlyShow) {
       if (onlyShow === "day") {
         filtered = filtered.filter((order) =>
@@ -60,18 +62,20 @@ const OrdersList = () => {
         );
       }
     }
-
+  
     if (sortField.field) {
       filtered = filtered.sort((a, b) => {
         const isAscending = sortField.direction === "ascending" ? 1 : -1;
-
+  
         if (sortField.field === "date") {
           return (
             (new Date(a?.createdAt) - new Date(b?.createdAt)) * isAscending
           );
         } else if (sortField.field === "name") {
-          const nameA = a?.shipping?.name || a?.customer_name || "";
-          const nameB = b?.shipping?.name || b?.customer_name || "";
+          const nameA =
+            a?.contact?.name || a?.shipping?.name || a?.customer_name || "";
+          const nameB =
+            b?.contact?.name || b?.shipping?.name || b?.customer_name || "";
           return nameA.localeCompare(nameB) * isAscending;
         } else if (sortField.field === "status") {
           return (
@@ -79,13 +83,14 @@ const OrdersList = () => {
             isAscending
           );
         }
-
+  
         return 0;
       });
     }
-
+  
     setFilteredOrders(filtered);
-  }, [list, searchQuery, sortField, onlyShow]);
+  }, [list, searchQuery, sortField, onlyShow, status]);
+  
 
   const handleOrderDispatch = (id) => {
     dispatch(ordersEdit({ id, delivery_status: "dispatched" }));

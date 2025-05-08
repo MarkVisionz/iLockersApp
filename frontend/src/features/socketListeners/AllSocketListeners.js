@@ -6,10 +6,6 @@ import setupUsersSocketListeners from "./UsersSocketListeners";
 import socket from "../socket";
 
 const setupAllSocketListeners = (dispatch) => {
-  if (!socket?.connected) {
-    console.warn('Socket not connected during setup');
-  }
-
   const listeners = [
     setupProductsSocketListeners,
     setupOrdersSocketListeners,
@@ -17,6 +13,13 @@ const setupAllSocketListeners = (dispatch) => {
     setupServiceSocketListeners,
     setupUsersSocketListeners
   ].filter(Boolean);
+
+  if (!socket.connected) {
+    socket.on("connect", () => {
+      console.info("Socket connected, re-attaching listeners");
+      listeners.forEach(setup => setup(dispatch));
+    });
+  }  
 
   const cleanups = listeners.map(setup => {
     try {

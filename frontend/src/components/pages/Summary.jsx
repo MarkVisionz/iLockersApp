@@ -49,7 +49,7 @@ const Summary = () => {
       icon: <FaChartBar />,
       digits: "0.00",
       isMoney: true,
-      title: "Earnings",
+      title: "Sales",
       color: "rgb(253, 181, 40)",
       bgColor: "rgb(253, 181, 40, 0.12)",
       percentage: 0,

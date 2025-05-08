@@ -19,7 +19,8 @@ const initialState = {
 };
 
 const handleError = (error, rejectWithValue) => {
-  const message = error.response?.data?.message || error.message || "Error desconocido";
+  const message =
+    error.response?.data?.message || error.message || "Error desconocido";
   toast.error(message);
   return rejectWithValue(message);
 };
@@ -143,7 +144,7 @@ const ordersSlice = createSlice({
       state.guestOrders = [];
     },
     socketOrderAdded: (state, action) => {
-      const exists = state.list.some(o => o._id === action.payload._id);
+      const exists = state.list.some((o) => o._id === action.payload._id);
       if (!exists) {
         state.list.unshift(action.payload);
       }
@@ -152,21 +153,25 @@ const ordersSlice = createSlice({
       }
     },
     socketOrderUpdated: (state, action) => {
-      const index = state.list.findIndex(o => o._id === action.payload._id);
+      const index = state.list.findIndex((o) => o._id === action.payload._id);
       if (index !== -1) {
         state.list[index] = action.payload;
       }
-      const guestIndex = state.guestOrders.findIndex(o => o._id === action.payload._id);
+      const guestIndex = state.guestOrders.findIndex(
+        (o) => o._id === action.payload._id
+      );
       if (guestIndex !== -1) {
         state.guestOrders[guestIndex] = action.payload;
       }
     },
     socketOrderStatusChanged: (state, action) => {
-      const order = state.list.find(o => o._id === action.payload._id);
+      const order = state.list.find((o) => o._id === action.payload._id);
       if (order) {
         order.delivery_status = action.payload.status;
       }
-      const guestOrder = state.guestOrders.find(o => o._id === action.payload._id);
+      const guestOrder = state.guestOrders.find(
+        (o) => o._id === action.payload._id
+      );
       if (guestOrder) {
         guestOrder.delivery_status = action.payload.status;
       }
@@ -178,7 +183,7 @@ const ordersSlice = createSlice({
     },
     invalidateOrdersCache: (state) => {
       state.status = null;
-    }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -218,69 +223,76 @@ const ordersSlice = createSlice({
         state.error = action.payload;
       })
       .addCase(ordersEdit.fulfilled, (state, action) => {
-        const index = state.list.findIndex(o => o._id === action.payload._id);
+        const index = state.list.findIndex((o) => o._id === action.payload._id);
         if (index !== -1) {
           state.list[index] = action.payload;
         }
-        const guestIndex = state.guestOrders.findIndex(o => o._id === action.payload._id);
+        const guestIndex = state.guestOrders.findIndex(
+          (o) => o._id === action.payload._id
+        );
         if (guestIndex !== -1) {
           state.guestOrders[guestIndex] = action.payload;
         }
       })
       .addCase(ordersDelete.fulfilled, (state, action) => {
-        const order = state.list.find(o => o._id === action.payload._id);
+        const order = state.list.find((o) => o._id === action.payload._id);
         if (order) {
           order.delivery_status = "cancelled";
         }
-        const guestOrder = state.guestOrders.find(o => o._id === action.payload._id);
+        const guestOrder = state.guestOrders.find(
+          (o) => o._id === action.payload._id
+        );
         if (guestOrder) {
           guestOrder.delivery_status = "cancelled";
         }
       })
       .addMatcher(
-        action => [
-          fetchOrderStats.pending.type,
-          fetchIncomeStats.pending.type,
-          fetchWeekSales.pending.type
-        ].includes(action.type),
+        (action) =>
+          [
+            fetchOrderStats.pending.type,
+            fetchIncomeStats.pending.type,
+            fetchWeekSales.pending.type,
+          ].includes(action.type),
         (state) => {
           state.stats.loading = true;
           state.stats.error = null;
         }
       )
       .addMatcher(
-        action => [
-          fetchOrderStats.fulfilled.type,
-          fetchIncomeStats.fulfilled.type,
-          fetchWeekSales.fulfilled.type
-        ].includes(action.type),
+        (action) =>
+          [
+            fetchOrderStats.fulfilled.type,
+            fetchIncomeStats.fulfilled.type,
+            fetchWeekSales.fulfilled.type,
+          ].includes(action.type),
         (state, action) => {
           state.stats[action.payload.type] = action.payload.data;
           state.stats.loading = false;
         }
       )
       .addMatcher(
-        action => [
-          fetchOrderStats.rejected.type,
-          fetchIncomeStats.rejected.type,
-          fetchWeekSales.rejected.type
-        ].includes(action.type),
+        (action) =>
+          [
+            fetchOrderStats.rejected.type,
+            fetchIncomeStats.rejected.type,
+            fetchWeekSales.rejected.type,
+          ].includes(action.type),
         (state, action) => {
           state.stats.loading = false;
           state.stats.error = action.payload;
         }
       );
-  }
+  },
 });
 
-export const { 
+export const {
   setCurrentOrder,
   clearGuestOrders,
   socketOrderAdded,
   socketOrderUpdated,
   socketOrderStatusChanged,
   socketStatsUpdated,
-  invalidateOrdersCache
+  invalidateOrdersCache,
 } = ordersSlice.actions;
 
 export default ordersSlice.reducer;

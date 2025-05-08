@@ -182,7 +182,6 @@ const notesSlice = createSlice({
         state.createStatus = "pending";
       })
       .addCase(notesCreate.fulfilled, (state, action) => {
-        state.items.push(action.payload);
         state.createStatus = "success";
       })
       .addCase(notesCreate.rejected, (state) => {

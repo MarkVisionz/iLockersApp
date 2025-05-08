@@ -10,7 +10,9 @@ const Note = () => {
   const params = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentNote, fetchNoteStatus, error } = useSelector((state) => state.notes);
+  const { currentNote, fetchNoteStatus, error } = useSelector(
+    (state) => state.notes
+  );
 
   useEffect(() => {
     dispatch(fetchNoteById(params.id));
@@ -27,90 +29,220 @@ const Note = () => {
   };
 
   const renderServices = (services, parentName = "") => {
-    if (!services) return [<p key="no-services">No services available</p>];
-    return Object.entries(services).flatMap(([serviceName, details]) => {
-      const fullServiceName = parentName + serviceName;
-      if (details?.quantity > 0) {
-        const totalPrice = details.unitPrice * details.quantity;
-        return (
-          <ServiceItem key={fullServiceName}>
-            <ServiceDetails>
+    if (!services)
+      return {
+        elements: [<NoServices key="no-services">No hay servicios</NoServices>],
+        subtotal: 0,
+      };
+
+    let subtotal = 0;
+    const elements = Object.entries(services).flatMap(
+      ([serviceName, details]) => {
+        const fullServiceName = parentName + serviceName;
+        if (details?.quantity > 0) {
+          const totalPrice = details.unitPrice * details.quantity;
+          subtotal += totalPrice;
+          return (
+            <ServiceItem key={fullServiceName}>
               <ServiceName>{formatServiceName(fullServiceName)}</ServiceName>
               <ServiceInfo>
                 <ServiceQuantity>
                   x{details.quantity}{" "}
                   <UnitPrice>
-                    (${details.unitPrice ? details.unitPrice.toLocaleString("es-MX") : "N/A"} c/u)
+                    (${details.unitPrice.toLocaleString("es-MX")}/u)
                   </UnitPrice>
                 </ServiceQuantity>
-                <ServicePrice>${totalPrice ? totalPrice.toLocaleString("es-MX") : "N/A"}</ServicePrice>
+                <ServicePrice>
+                  ${totalPrice.toLocaleString("es-MX")}
+                </ServicePrice>
               </ServiceInfo>
-            </ServiceDetails>
-          </ServiceItem>
-        );
-      } else if (typeof details === "object" && details !== null) {
-        return renderServices(details, fullServiceName + " ");
+            </ServiceItem>
+          );
+        } else if (typeof details === "object" && details !== null) {
+          const { elements: nestedElements, subtotal: nestedSubtotal } =
+            renderServices(details, fullServiceName + " ");
+          subtotal += nestedSubtotal;
+          return nestedElements;
+        }
+        return null;
       }
-      return null;
-    });
+    );
+
+    return { elements, subtotal };
+  };
+
+  const renderServiceSection = (services, suavitelDesired, total) => {
+    const { elements, subtotal } = renderServices(services);
+    const suavitelCost = suavitelDesired ? total - subtotal : 0;
+
+    return (
+      <Services>
+        {elements}
+        <PriceSummary>
+          <PriceRow>
+            <PriceLabel>Subtotal:</PriceLabel>
+            <PriceValue>${subtotal.toLocaleString("es-MX")}</PriceValue>
+          </PriceRow>
+          {suavitelDesired && suavitelCost > 0 && (
+            <PriceRow>
+              <PriceLabel>Suavitel:</PriceLabel>
+              <PriceValue>${suavitelCost.toLocaleString("es-MX")}</PriceValue>
+            </PriceRow>
+          )}
+          <PriceRow isTotal>
+            <PriceLabel>Total:</PriceLabel>
+            <PriceValue>${total.toLocaleString("es-MX")}</PriceValue>
+          </PriceRow>
+        </PriceSummary>
+      </Services>
+    );
   };
 
   return (
     <StyledNote>
       {fetchNoteStatus === "pending" && !currentNote ? (
-        <LoadingSpinner message="Loading..." />
+        <LoadingWrapper>
+          <LoadingSpinner message="Cargando nota..." />
+        </LoadingWrapper>
       ) : fetchNoteStatus === "rejected" && !currentNote ? (
         <ErrorMessage>
-          Error: {error || "Failed to load note. Please try again."}
+          <ErrorText>
+            {error || "No se pudo cargar la nota. Intenta de nuevo."}
+          </ErrorText>
         </ErrorMessage>
       ) : !currentNote ? (
-        <ErrorMessage>Note not found.</ErrorMessage>
+        <ErrorMessage>
+          <ErrorText>
+            La nota solicitada no existe o no está disponible.
+          </ErrorText>
+        </ErrorMessage>
       ) : (
         <NoteContainer>
           <Header>
-            <h2>Note Details</h2>
+            <TitleContainer>
+              <FolioBadge>#</FolioBadge>
+              <FolioText>{currentNote.folio}</FolioText>
+            </TitleContainer>
             <BackButton onClick={() => navigate("/admin/notes-summary")}>
-              Back to Dashboard
+              <ArrowBackIcon size={16} />
+              Volver
             </BackButton>
           </Header>
-
-          <Status>Note Status: {renderStatusLabel(currentNote.note_status)}</Status>
+          <BadgeContainer>
+            <CleaningBadge
+              $status={
+                currentNote.note_status === "entregado"
+                  ? "entregado"
+                  : currentNote.cleaning_status
+              }
+            >
+              {currentNote.note_status === "entregado"
+                ? "Entregado"
+                : currentNote.cleaning_status === "sucia"
+                ? "Sucia"
+                : currentNote.cleaning_status === "lavado"
+                ? "Lavado"
+                : currentNote.cleaning_status === "listo_para_entregar"
+                ? "Para Entregar"
+                : ""}
+            </CleaningBadge>
+          </BadgeContainer>
+          <StatusContainer>
+            <Status>
+              <StatusLabel>Estado:</StatusLabel>
+              {renderStatusLabel(currentNote.note_status)}
+            </Status>
+          </StatusContainer>
 
           <Section>
-            <h3>Customer Details</h3>
-            <DetailItem>Folio: {currentNote.folio || "N/A"}</DetailItem>
-            <DetailItem>Customer Name: {currentNote.name || "N/A"}</DetailItem>
-            <DetailItem>Phone: {currentNote.phoneNumber || "N/A"}</DetailItem>
-            <DetailItem>
-              Date: {moment(currentNote.date).format("YYYY-MM-DD HH:mm") || "N/A"}
-            </DetailItem>
-            <DetailItem>
-              Suavitel: {currentNote.suavitelDesired ? "Yes" : "No"}
-            </DetailItem>
-          </Section>
-
-          <Section>
-            <h3>Ordered Services</h3>
-            <Services>
-              {renderServices(currentNote.services).length > 0 ? (
-                renderServices(currentNote.services)
-              ) : (
-                <p>No services available</p>
+            <SectionTitle>
+              <SectionIcon>👤</SectionIcon>
+              Cliente
+            </SectionTitle>
+            <DetailList>
+              <DetailItem>
+                <DetailLabel>Nombre:</DetailLabel>
+                <DetailValue>{currentNote.name || "N/A"}</DetailValue>
+              </DetailItem>
+              <DetailItem>
+                <DetailLabel>Teléfono:</DetailLabel>
+                <DetailValue>{currentNote.phoneNumber || "N/A"}</DetailValue>
+              </DetailItem>
+              <DetailItem>
+                <DetailLabel>Fecha:</DetailLabel>
+                <DetailValue>
+                  {moment(currentNote.date).format("DD/MM/YYYY HH:mm")}
+                </DetailValue>
+              </DetailItem>
+              <DetailItem>
+                <DetailLabel>Suavitel:</DetailLabel>
+                <DetailValue>
+                  {currentNote.suavitelDesired ? (
+                    <SuavitelYes>Sí</SuavitelYes>
+                  ) : (
+                    <SuavitelNo>No</SuavitelNo>
+                  )}
+                </DetailValue>
+              </DetailItem>
+              {currentNote.method && (
+                <DetailItem>
+                  <DetailLabel>Método de Pago:</DetailLabel>
+                  <DetailValue>
+                    {currentNote.method.charAt(0).toUpperCase() +
+                      currentNote.method.slice(1)}
+                  </DetailValue>
+                </DetailItem>
               )}
-            </Services>
+            </DetailList>
           </Section>
-
-          <TotalPrice>
-            <h3>Total:</h3>
-            <span>${currentNote.total ? currentNote.total.toLocaleString("es-MX") : "0"}</span>
-          </TotalPrice>
 
           <Section>
-            <h3>Observations</h3>
-            <DetailItem>{currentNote.observations || "None"}</DetailItem>
+            <SectionTitle>
+              <SectionIcon>🧺</SectionIcon>
+              Servicios
+            </SectionTitle>
+            {renderServiceSection(
+              currentNote.services,
+              currentNote.suavitelDesired,
+              currentNote.total
+            )}
           </Section>
 
-          {renderPaidAndDeliveredInfo(currentNote)}
+          <Section>
+            <SectionTitle>
+              <SectionIcon>📝</SectionIcon>
+              Observaciones
+            </SectionTitle>
+            <Observations>
+              {currentNote.observations || "Sin observaciones"}
+            </Observations>
+          </Section>
+
+          <Section>
+            <SectionTitle>Pago y Entrega</SectionTitle>
+            {renderPaidAndDeliveredInfo(currentNote)}
+            {currentNote.abonos?.length > 0 && (
+              <AbonosContainer>
+                <AbonosTitle>Abonos:</AbonosTitle>
+                {currentNote.abonos.map((abono, index) => (
+                  <AbonoItem key={index}>
+                    <AbonoDate>
+                      {moment(abono.date).format("DD/MM/YYYY HH:mm")}
+                    </AbonoDate>
+                    <AbonoInfo>
+                      <AbonoAmount>
+                        ${abono.amount.toLocaleString("es-MX")}
+                      </AbonoAmount>
+                      <AbonoMethod>
+                        {abono.method.charAt(0).toUpperCase() +
+                          abono.method.slice(1)}
+                      </AbonoMethod>
+                    </AbonoInfo>
+                  </AbonoItem>
+                ))}
+              </AbonosContainer>
+            )}
+          </Section>
         </NoteContainer>
       )}
     </StyledNote>
@@ -118,31 +250,16 @@ const Note = () => {
 };
 
 const renderStatusLabel = (status) => {
-  const statusStyles = {
-    pendiente: {
-      color: "rgb(253, 181, 40)",
-      background: "rgba(253, 181, 40, 0.12)",
-    },
-    pagado: {
-      color: "rgb(0, 123, 255)",
-      background: "rgba(0, 123, 255, 0.12)",
-    },
-    entregado: {
-      color: "rgb(40, 167, 69)",
-      background: "rgba(40, 167, 69, 0.12)",
-    },
-  };
-
-  const { color, background } = statusStyles[status] || {
-    color: "black",
-    background: "none",
-  };
-
-  return (
-    <StatusLabel style={{ color, background }}>
-      {status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown"}
-    </StatusLabel>
-  );
+  switch (status) {
+    case "pendiente":
+      return <Pending>Pendiente</Pending>;
+    case "pagado":
+      return <Dispatched>Pagado</Dispatched>;
+    case "entregado":
+      return <Delivered>Entregado</Delivered>;
+    default:
+      return <Pending>Desconocido</Pending>;
+  }
 };
 
 const renderPaidAndDeliveredInfo = (note) => {
@@ -150,16 +267,24 @@ const renderPaidAndDeliveredInfo = (note) => {
     <>
       {note?.paidAt && (
         <PaidAtContainer>
-          <PaidAtLabel>Pagado:</PaidAtLabel>
-          <PaidAtDate>{moment(note.paidAt).format("YYYY-MM-DD HH:mm")}</PaidAtDate>
+          <PaidAtIcon>💵</PaidAtIcon>
+          <PaidAtInfo>
+            <PaidAtLabel>Pagado el:</PaidAtLabel>
+            <PaidAtDate>
+              {moment(note.paidAt).format("DD/MM/YYYY HH:mm")}
+            </PaidAtDate>
+          </PaidAtInfo>
         </PaidAtContainer>
       )}
       {note?.deliveredAt && (
         <DeliveredAtContainer>
-          <DeliveredAtLabel>Entregado:</DeliveredAtLabel>
-          <DeliveredAtDate>
-            {moment(note.deliveredAt).format("YYYY-MM-DD HH:mm")}
-          </DeliveredAtDate>
+          <DeliveredAtIcon>🚚</DeliveredAtIcon>
+          <DeliveredAtInfo>
+            <DeliveredAtLabel>Entregado el:</DeliveredAtLabel>
+            <DeliveredAtDate>
+              {moment(note.deliveredAt).format("DD/MM/YYYY HH:mm")}
+            </DeliveredAtDate>
+          </DeliveredAtInfo>
         </DeliveredAtContainer>
       )}
     </>
@@ -168,23 +293,33 @@ const renderPaidAndDeliveredInfo = (note) => {
 
 // Styled Components
 const StyledNote = styled.div`
-  margin: 2rem;
-  display: flex;
-  justify-content: center;
-  @media (max-width: 768px) {
-    margin: 1rem;
-  }
+  margin: 1.5rem auto;
+  max-width: 600px;
+  width: 95%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #333;
 `;
 
 const NoteContainer = styled.div`
-  max-width: 520px;
-  width: 90%;
-  background: linear-gradient(135deg, #ffffff 0%, #f7f8fa 100%);
-  border-radius: 10px;
+  position: relative;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
   padding: 1.5rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+
+  &:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+  }
+
   @media (max-width: 768px) {
     padding: 1rem;
+    border-radius: 6px;
   }
 `;
 
@@ -192,161 +327,422 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-
-  h2 {
-    font-size: 1.6rem;
-    font-weight: 600;
-    color: #4a4a4a;
-  }
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #ddd;
 `;
 
-const Status = styled.p`
-  font-size: 1.1rem;
+const TitleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+`;
+
+const FolioBadge = styled.span`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: #007bff;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 0.9rem;
   font-weight: bold;
-  margin: 1rem 0;
 `;
 
-const Section = styled.div`
-  margin-bottom: 1.5rem;
-  h3 {
-    margin-bottom: 0.5rem;
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #333;
-  }
-`;
-
-const DetailItem = styled.p`
-  margin: 0.3rem 0;
-  font-size: 1rem;
-  color: #666;
-`;
-
-const TotalPrice = styled.div`
-  font-size: 1.8rem;
-  color: #000;
-  margin-top: 1.5rem;
+const FolioText = styled.h2`
+  font-size: 1.5rem;
   font-weight: bold;
-  margin-bottom: 1.2rem;
-  h3 {
-    font-size: 1.6rem;
+  color: #007bff;
+  margin: 0;
+
+  @media (max-width: 768px) {
+    font-size: 1.25rem;
   }
 `;
 
 const BackButton = styled.button`
-  background-color: #007bff;
-  color: white;
-  padding: 0.4rem 0.8rem;
+  background: #007bff;
+  color: #fff;
   border: none;
-  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
   border-radius: 4px;
-  font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 
   &:hover {
     background-color: #0056b3;
+    transform: scale(1.05);
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  @media (max-width: 768px) {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
   }
 `;
 
+const ArrowBackIcon = styled(({ size = 16, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M19 12H5M12 19l-7-7 7-7" />
+  </svg>
+))``;
+
+const BadgeContainer = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+`;
+
+const StatusContainer = styled.div`
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+`;
+
+const Status = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: bold;
+`;
+
+const StatusLabel = styled.span`
+  color: #888;
+`;
+
+const Pending = styled.span`
+  color: rgb(253, 181, 40);
+  background: rgba(253, 181, 40, 0.12);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1rem;
+`;
+
+const Dispatched = styled.span`
+  color: rgb(0, 123, 255);
+  background: rgba(0, 123, 255, 0.12);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1rem;
+`;
+
+const Delivered = styled.span`
+  color: rgb(40, 167, 69);
+  background: rgba(40, 167, 69, 0.12);
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1rem;
+`;
+
+const CleaningBadge = styled.span`
+  background-color: ${({ $status }) =>
+    $status === "sucia"
+      ? "#ff9800"
+      : $status === "lavado"
+      ? "#2196f3"
+      : $status === "listo_para_entregar"
+      ? "#4caf50"
+      : $status === "entregado"
+      ? "#6c757d"
+      : "#6c757d"};
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+`;
+
+const Section = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: #fff;
+  border-radius: 8px;
+`;
+
+const SectionTitle = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+`;
+
+const SectionIcon = styled.span`
+  font-size: 1.2rem;
+`;
+
+const DetailList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`;
+
+const DetailItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 1rem;
+`;
+
+const DetailLabel = styled.span`
+  color: #888;
+  font-weight: 500;
+  flex: 1;
+`;
+
+const DetailValue = styled.span`
+  color: #333;
+  font-weight: 500;
+  flex: 2;
+  text-align: right;
+`;
+
+const SuavitelYes = styled.span`
+  color: #28a745;
+  font-weight: bold;
+`;
+
+const SuavitelNo = styled.span`
+  color: #dc3545;
+  font-weight: bold;
+`;
+
 const Services = styled.div`
-  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 `;
 
 const ServiceItem = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  background-color: #f8f9fa;
-  border-radius: 8px;
   padding: 0.5rem;
-  margin-bottom: 1rem;
+  background: #fff;
+  font-size: 1rem;
 `;
 
-const ServiceDetails = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
+const ServiceName = styled.span`
+  font-weight: 500;
+  color: #333;
+  flex: 2;
 `;
 
 const ServiceInfo = styled.div`
   display: flex;
-  justify-content: space-between;
-`;
-
-const ServiceName = styled.span`
-  font-weight: bold;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  justify-content: flex-end;
 `;
 
 const ServiceQuantity = styled.span`
-  margin-right: 1rem;
-`;
-
-const ServicePrice = styled.span`
-  font-weight: bold;
+  color: #888;
+  font-size: 0.95rem;
 `;
 
 const UnitPrice = styled.span`
   color: #888;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 `;
 
-const StatusLabel = styled.span`
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-size: 14px;
+const ServicePrice = styled.span`
+  font-weight: bold;
+  color: #28a745;
+`;
+
+const NoServices = styled.p`
+  font-size: 1.2rem;
+  color: #888;
+  text-align: center;
+  padding: 0.5rem;
+  margin: 0;
+`;
+
+const PriceSummary = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #ddd;
+`;
+
+const PriceRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1rem;
+  font-weight: ${({ isTotal }) => (isTotal ? "bold" : 500)};
+  color: #333;
+`;
+
+const PriceLabel = styled.span``;
+
+const PriceValue = styled.span`
+  color: ${({ isTotal }) => (isTotal ? "#007bff" : "#333")};
+`;
+
+const Observations = styled.p`
+  font-size: 1rem;
+  color: #333;
+  line-height: 1.5;
+  padding: 0.5rem;
+  background: #fff;
+  border-radius: 4px;
+  margin: 0;
+  max-height: 100px;
+  overflow-y: auto;
 `;
 
 const PaidAtContainer = styled.div`
-  margin-top: 0.5rem;
-  padding: 0.4rem 0.8rem;
-  background-color: #f3f3f3;
-  border-radius: 5px;
   display: flex;
   align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #fff;
+  border-radius: 4px;
 `;
 
-const DeliveredAtContainer = styled.div`
-  margin-top: 0.5rem;
-  padding: 0.4rem 0.8rem;
-  background-color: #f3f3f3;
-  border-radius: 5px;
+const PaidAtIcon = styled.span`
+  font-size: 1rem;
+`;
+
+const PaidAtInfo = styled.div`
   display: flex;
-  align-items: center;
-`;
-
-const DeliveredAtLabel = styled.span`
-  font-weight: bold;
-  color: black;
-  margin-right: 0.3rem;
+  flex-direction: column;
 `;
 
 const PaidAtLabel = styled.span`
-  font-weight: bold;
-  color: black;
-  margin-right: 0.3rem;
-`;
-
-const DeliveredAtDate = styled.span`
-  color: black;
-  font-size: 0.9rem;
-  font-style: italic;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
 `;
 
 const PaidAtDate = styled.span`
-  color: black;
-  font-size: 0.9rem;
-  font-style: italic;
+  font-size: 0.95rem;
+  color: #888;
 `;
 
-const ErrorMessage = styled.div`
+const DeliveredAtContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #fff;
+  border-radius: 4px;
+`;
+
+const DeliveredAtIcon = styled.span`
+  font-size: 1rem;
+`;
+
+const DeliveredAtInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const DeliveredAtLabel = styled.span`
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+`;
+
+const DeliveredAtDate = styled.span`
+  font-size: 0.95rem;
+  color: #888;
+`;
+
+const AbonosContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+`;
+
+const AbonosTitle = styled.span`
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #333;
+`;
+
+const AbonoItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: #fff;
+  border-radius: 4px;
+  font-size: 1rem;
+`;
+
+const AbonoDate = styled.span`
+  color: #888;
+  font-size: 0.95rem;
+`;
+
+const AbonoInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const AbonoAmount = styled.span`
+  font-weight: bold;
+  color: #28a745;
+`;
+
+const AbonoMethod = styled.span`
+  color: #888;
+  background: #ddd;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.95rem;
+`;
+
+const LoadingWrapper = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
-  font-size: 1.2rem;
+  min-height: 200px;
+`;
+
+const ErrorMessage = styled.div`
+  text-align: center;
   color: #dc3545;
+  font-size: 1.2rem;
+  padding: 1.5rem;
+  margin: 1.5rem auto;
+  max-width: 500px;
+`;
+
+const ErrorText = styled.p`
+  margin: 0;
 `;
 
 export default Note;

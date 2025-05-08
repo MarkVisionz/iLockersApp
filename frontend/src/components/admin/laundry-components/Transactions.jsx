@@ -37,15 +37,13 @@ const Transactions = () => {
         const noteDate = moment(note.createdAt);
         const paymentDate = note.paidAt ? moment(note.paidAt) : null;
 
+        // Incluir notas creadas en el periodo
         if (noteDate.isBetween(startDate, endDate, undefined, "[]")) {
           acc.createdNotes.push(note);
         }
 
-        if (
-          note.note_status === "pagado" &&
-          paymentDate &&
-          paymentDate.isBetween(startDate, endDate, undefined, "[]")
-        ) {
+        // Incluir notas pagadas (cualquier nota con paidAt)
+        if (note.paidAt && paymentDate.isBetween(startDate, endDate, undefined, "[]")) {
           acc.paidNotes.push(note);
         }
 
@@ -63,19 +61,14 @@ const Transactions = () => {
   const monthlyEndDate = useMemo(() => moment().endOf("month"), []);
 
   const dailyFilteredNotes = filterNotesByPeriod(dailyStartDate, dailyEndDate);
-  const weeklyFilteredNotes = filterNotesByPeriod(
-    weeklyStartDate,
-    weeklyEndDate
-  );
-  const monthlyFilteredNotes = filterNotesByPeriod(
-    monthlyStartDate,
-    monthlyEndDate
-  );
+  const weeklyFilteredNotes = filterNotesByPeriod(weeklyStartDate, weeklyEndDate);
+  const monthlyFilteredNotes = filterNotesByPeriod(monthlyStartDate, monthlyEndDate);
 
   const calculateTotals = (filteredNotes) => {
     return filteredNotes.reduce(
       (acc, note) => {
         acc.totalSales += note.total;
+        // Sumar al cashInHand si la nota tiene paidAt
         acc.cashInHand += note.paidAt ? note.total : 0;
         return acc;
       },
@@ -90,10 +83,7 @@ const Transactions = () => {
   }, [notes]);
 
   const prepareExportData = () => {
-    const { createdNotes, paidNotes } = filterNotesByPeriod(
-      exportStartDate,
-      exportEndDate
-    );
+    const { createdNotes, paidNotes } = filterNotesByPeriod(exportStartDate, exportEndDate);
     const uniqueNotes = new Set();
     const combinedNotes = [];
 
@@ -141,9 +131,7 @@ const Transactions = () => {
   const handleExport = () => {
     if (exportSelectedPeriod === "custom") {
       if (!reportStartDate || !reportEndDate) {
-        toast.error(
-          "Por favor, selecciona ambas fechas para el reporte personalizado."
-        );
+        toast.error("Por favor, selecciona ambas fechas para el reporte personalizado.");
         return;
       }
 
@@ -161,9 +149,7 @@ const Transactions = () => {
     }
 
     const exportData = prepareExportData();
-    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format(
-      "YYYYMMDD_HHmmss"
-    )}`;
+    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format("YYYYMMDD_HHmmss")}`;
     exportToExcel(exportData, fileName);
   };
 
@@ -240,30 +226,22 @@ const Transactions = () => {
         <PeriodSection
           title="Diario"
           createdNotes={dailyFilteredNotes.createdNotes}
-          totalSales={
-            calculateTotals(dailyFilteredNotes.createdNotes).totalSales
-          }
+          totalSales={calculateTotals(dailyFilteredNotes.createdNotes).totalSales}
           cashInHand={calculateTotals(dailyFilteredNotes.paidNotes).cashInHand}
           color="#28a745"
         />
         <PeriodSection
           title="Semanal"
           createdNotes={weeklyFilteredNotes.createdNotes}
-          totalSales={
-            calculateTotals(weeklyFilteredNotes.createdNotes).totalSales
-          }
+          totalSales={calculateTotals(weeklyFilteredNotes.createdNotes).totalSales}
           cashInHand={calculateTotals(weeklyFilteredNotes.paidNotes).cashInHand}
           color="#4b70e2"
         />
         <PeriodSection
           title="Mensual"
           createdNotes={monthlyFilteredNotes.createdNotes}
-          totalSales={
-            calculateTotals(monthlyFilteredNotes.createdNotes).totalSales
-          }
-          cashInHand={
-            calculateTotals(monthlyFilteredNotes.paidNotes).cashInHand
-          }
+          totalSales={calculateTotals(monthlyFilteredNotes.createdNotes).totalSales}
+          cashInHand={calculateTotals(monthlyFilteredNotes.paidNotes).cashInHand}
           color="#6f42c1"
         />
       </PeriodsContainer>
@@ -280,7 +258,6 @@ const Transactions = () => {
                   currency: "MXN",
                 })}
               </Amount>
-
               <Time>{moment(note.createdAt).fromNow()}</Time>
             </TransactionItem>
           ))}
@@ -292,11 +269,6 @@ const Transactions = () => {
   );
 };
 
-export default Transactions;
-
-// Styled Components y helpers siguen igual...
-
-// Styled Components
 const StyledTransactions = styled.div`
   padding: 1rem;
   border-radius: 5px;
@@ -541,3 +513,5 @@ const EmptyState = styled.p`
   color: #aaa;
   margin-top: 1rem;
 `;
+
+export default Transactions;
