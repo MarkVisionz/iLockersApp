@@ -2,7 +2,11 @@ const mongoose = require("mongoose");
 
 const abonoSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
-  method: { type: String, enum: ["efectivo", "tarjeta", "transferencia"], required: true },
+  method: {
+    type: String,
+    enum: ["efectivo", "tarjeta", "transferencia"],
+    required: true,
+  },
   date: { type: Date, default: Date.now },
 });
 
@@ -34,6 +38,11 @@ const noteSchema = new mongoose.Schema(
       default: null,
     },
     phoneNumber: { type: String },
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Business",
+      required: [true, "El ID del negocio es requerido"],
+    },
   },
   { timestamps: true }
 );

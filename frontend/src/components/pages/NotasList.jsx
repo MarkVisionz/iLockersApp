@@ -5,8 +5,7 @@ import { fetchServices } from "../../features/servicesSlice";
 import ServiceButton from "../admin/ServiceButton";
 import ServiceWithSize from "../admin/ServiceWithSize";
 import ConfirmationModal from "../ConfirmationModal";
-import PaymentMethodModal from "../PaymentMethodModal"; // Componente extraído
-import { ErrorMessage } from "../LoadingAndError";
+import PaymentMethodModal from "../PaymentMethodModal";
 import { validate } from "../admin/list/validateNote";
 import moment from "moment";
 import styled, { keyframes } from "styled-components";
@@ -60,41 +59,46 @@ const LaundryNote = () => {
   );
   const loading = servicesStatus === "loading";
 
+  // Inicializar servicios
   useEffect(() => {
     dispatch(fetchServices());
   }, [dispatch]);
 
+  // Configurar precios y servicios
+  const initializeServices = useCallback(() => {
+    const { prices, servicesState } = services.reduce(
+      (acc, service) => {
+        const key = service.name.toLowerCase().replace(/\s+/g, "");
+        if (service.type === "simple") {
+          acc.prices[key] = service.price;
+          acc.servicesState[key] = 0;
+        } else if (service.type === "sized") {
+          acc.prices[key] = {};
+          acc.servicesState[key] = {};
+          service.sizes.forEach((size) => {
+            acc.prices[key][size.name] = size.price;
+            acc.servicesState[key][size.name] = 0;
+          });
+        }
+        return acc;
+      },
+      { prices: {}, servicesState: {} }
+    );
+    return { prices, services: servicesState };
+  }, [services]);
+
   useEffect(() => {
     if (services.length > 0) {
-      const { prices, servicesState } = services.reduce(
-        (acc, service) => {
-          const key = service.name.toLowerCase().replace(/\s+/g, "");
-
-          if (service.type === "simple") {
-            acc.prices[key] = service.price;
-            acc.servicesState[key] = 0;
-          } else if (service.type === "sized") {
-            acc.prices[key] = {};
-            acc.servicesState[key] = {};
-
-            service.sizes.forEach((size) => {
-              acc.prices[key][size.name] = size.price;
-              acc.servicesState[key][size.name] = 0;
-            });
-          }
-          return acc;
-        },
-        { prices: {}, servicesState: {} }
-      );
-
+      const { prices, services: servicesState } = initializeServices();
       setFormState((prev) => ({
         ...prev,
         services: servicesState,
         prices,
       }));
     }
-  }, [services]);
+  }, [services, initializeServices]);
 
+  // Calcular totales con filtrado por día
   const { filteredServices, orderTotal, remainingAmount } = useMemo(() => {
     const today = new Date().getDay();
     const filtered = {};
@@ -118,30 +122,27 @@ const LaundryNote = () => {
       if (typeof value === "object") {
         return (
           acc +
-          Object.entries(value).reduce((sizeAcc, [size, quantity]) => {
-            return sizeAcc + quantity * (formState.prices[key]?.[size] || 0);
+          Object.entries(value).reduce((sizeAcc, [size, qty]) => {
+            return sizeAcc + qty * (formState.prices[key]?.[size] || 0);
           }, 0)
         );
       }
       return acc + value * (formState.prices[key] || 0);
     }, 0);
 
-    const extrasService = services.find(
-      (s) => s.name.toLowerCase() === "extras"
-    );
     const suavitelPrice =
-      extrasService?.sizes?.find((s) => s.name === "Suavitel")?.price || 15;
-    const kilos = filtered.porkilo || filtered.promomartes || 0;
+      services
+        .find((s) => s.name.toLowerCase() === "extras")
+        ?.sizes?.find((s) => s.name === "Suavitel")?.price || 15;
+    const kilos = filtered.lavado || filtered.promomartes || 0;
     const suavitelShots = formState.suavitelDesired ? Math.ceil(kilos / 6) : 0;
     const suavitelCost = suavitelShots * suavitelPrice;
 
     const total = subtotal + suavitelCost;
-    const remaining = total - formState.abono;
-
     return {
       filteredServices: filtered,
       orderTotal: total,
-      remainingAmount: remaining,
+      remainingAmount: total - formState.abono,
     };
   }, [formState, services]);
 
@@ -194,28 +195,22 @@ const LaundryNote = () => {
   };
 
   const handlePaymentMethodSelect = (method) => {
-    if (modalType === "payment") {
-      setFormState((prev) => ({
-        ...prev,
-        isPaid: true,
-        paymentMethod: method,
-        abono: 0,
-        abonoPaymentMethod: null,
-      }));
-    } else if (modalType === "abono") {
-      setFormState((prev) => ({
-        ...prev,
-        abono: tempAbono,
-        abonoPaymentMethod: method,
-        isPaid: false,
-        paymentMethod: null,
-      }));
-    }
-    setShowPaymentModal(false);
-    setModalType(null);
-  };
-
-  const handlePaymentModalCancel = () => {
+    setFormState((prev) => ({
+      ...prev,
+      ...(modalType === "payment"
+        ? {
+            isPaid: true,
+            paymentMethod: method,
+            abono: 0,
+            abonoPaymentMethod: null,
+          }
+        : {
+            abono: tempAbono,
+            abonoPaymentMethod: method,
+            isPaid: false,
+            paymentMethod: null,
+          }),
+    }));
     setShowPaymentModal(false);
     setModalType(null);
   };
@@ -225,12 +220,12 @@ const LaundryNote = () => {
       (acc, [service, value]) => {
         if (typeof value === "object") {
           const sizes = Object.entries(value)
-            .filter(([_, quantity]) => quantity > 0)
+            .filter(([_, qty]) => qty > 0)
             .reduce(
-              (sizeAcc, [size, quantity]) => ({
+              (sizeAcc, [size, qty]) => ({
                 ...sizeAcc,
                 [size]: {
-                  quantity,
+                  quantity: qty,
                   unitPrice: formState.prices[service][size],
                 },
               }),
@@ -277,9 +272,7 @@ const LaundryNote = () => {
     }
 
     if (formState.isPaid && formState.abono > 0) {
-      toast.error(
-        "No puedes marcar la nota como pagada y agregar un abono al mismo tiempo."
-      );
+      toast.error("No puedes marcar la nota como pagada y agregar un abono.");
       setIsSubmitting(false);
       return;
     }
@@ -320,69 +313,23 @@ const LaundryNote = () => {
           phoneNumber: `${formState.countryCode}${formState.phoneNumber}`,
           paymentMethod: formState.paymentMethod || null,
         })
-      );
+      ).unwrap();
 
-      sendWhatsAppMessage();
+      const { prices, services } = initializeServices();
       setFormState({
         ...initialState,
         folio: `FOLIO-${Math.floor(Math.random() * 1000000)}`,
+        services,
+        prices,
       });
+      setTempAbono(0); 
       setShowModal(false);
-      toast.success("Nota creada exitosamente");
     } catch (error) {
       setSubmitError("Error al crear la nota");
-      console.error("Error:", error);
       toast.error("Error al crear la nota");
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const sendWhatsAppMessage = () => {
-    const formatServiceName = (name) =>
-      name
-        .replace(/([a-z])([A-Z])/g, "$1 $2")
-        .replace(/^\w/, (c) => c.toUpperCase());
-
-    const servicesText = Object.entries(prepareServicesForAPI())
-      .flatMap(([service, details]) => {
-        if (typeof details === "object" && !details.quantity) {
-          return Object.entries(details)
-            .filter(([_, subDetails]) => subDetails.quantity > 0)
-            .map(
-              ([size, subDetails]) =>
-                `• ${formatServiceName(service)} (${size}): ${
-                  subDetails.quantity
-                } x $${subDetails.unitPrice} = $${
-                  subDetails.quantity * subDetails.unitPrice
-                }`
-            );
-        } else if (details.quantity > 0) {
-          return [
-            `• ${formatServiceName(service)}: ${details.quantity} x $${
-              details.unitPrice
-            } = $${details.quantity * details.unitPrice}`,
-          ];
-        }
-        return [];
-      })
-      .join("\n");
-
-    const message = `😀 Hola, ${formState.name}!\n\n📝 Folio: ${
-      formState.folio
-    }\n🛍️ Servicios:\n${servicesText}\n💰 Total: $${orderTotal.toFixed(2)}${
-      formState.abono > 0
-        ? `\n💸 Abono: $${formState.abono.toFixed(2)} (${
-            formState.abonoPaymentMethod
-          })`
-        : ""
-    }\n🕰️ Pendiente: $${remainingAmount.toFixed(2)}\n📱 Teléfono: +${
-      formState.countryCode
-    }${formState.phoneNumber}`;
-    const url = `https://wa.me/${formState.countryCode}${
-      formState.phoneNumber
-    }?text=${encodeURIComponent(message)}`;
-    window.open(url, "_blank");
   };
 
   const renderServices = () => {
@@ -404,58 +351,67 @@ const LaundryNote = () => {
 
     return (
       <ServicesGrid>
-        <ServiceCategory>
-          <CategoryTitle>Servicios Simples</CategoryTitle>
-          <SimpleServicesContainer>
-            {simpleServices.map((service) => {
-              const key = service.name.toLowerCase().replace(/\s+/g, "");
-              return (
-                <ServiceButton
-                  key={key}
-                  displayName={service.name}
-                  price={service.price}
-                  quantity={filteredServices[key] || 0}
-                  onIncrease={() =>
-                    handleServiceChange(key, (formState.services[key] || 0) + 1)
-                  }
-                  onDecrease={() =>
-                    handleServiceChange(
-                      key,
-                      Math.max((formState.services[key] || 0) - 1, 0)
-                    )
-                  }
-                  onQuantityChange={(value) => handleServiceChange(key, value)}
-                />
-              );
-            })}
-          </SimpleServicesContainer>
-        </ServiceCategory>
+        {simpleServices.length > 0 && (
+          <ServiceCategory>
+            <CategoryTitle>Servicios Simples</CategoryTitle>
+            <SimpleServicesContainer>
+              {simpleServices.map((service) => {
+                const key = service.name.toLowerCase().replace(/\s+/g, "");
+                return (
+                  <ServiceButton
+                    key={key}
+                    displayName={service.name}
+                    price={service.price}
+                    quantity={filteredServices[key] || 0}
+                    onIncrease={() =>
+                      handleServiceChange(
+                        key,
+                        (formState.services[key] || 0) + 1
+                      )
+                    }
+                    onDecrease={() =>
+                      handleServiceChange(
+                        key,
+                        Math.max((formState.services[key] || 0) - 1, 0)
+                      )
+                    }
+                    onQuantityChange={(value) =>
+                      handleServiceChange(key, value)
+                    }
+                  />
+                );
+              })}
+            </SimpleServicesContainer>
+          </ServiceCategory>
+        )}
 
-        <ServiceCategory>
-          <CategoryTitle>Servicios por Tamaño</CategoryTitle>
-          <SizedServicesContainer>
-            {sizedServices.map((service) => {
-              const key = service.name.toLowerCase().replace(/\s+/g, "");
-              return (
-                <ServiceWithSize
-                  key={key}
-                  displayName={service.name}
-                  sizes={service.sizes.map((s) => s.name)}
-                  prices={Object.fromEntries(
-                    service.sizes.map((s) => [s.name, s.price])
-                  )}
-                  quantities={filteredServices[key] || {}}
-                  onQuantityChange={(size, value) =>
-                    handleServiceChange(key, {
-                      ...formState.services[key],
-                      [size]: Math.max(value, 0),
-                    })
-                  }
-                />
-              );
-            })}
-          </SizedServicesContainer>
-        </ServiceCategory>
+        {sizedServices.length > 0 && (
+          <ServiceCategory>
+            <CategoryTitle>Servicios por Tamaño</CategoryTitle>
+            <SizedServicesContainer>
+              {sizedServices.map((service) => {
+                const key = service.name.toLowerCase().replace(/\s+/g, "");
+                return (
+                  <ServiceWithSize
+                    key={key}
+                    displayName={service.name}
+                    sizes={service.sizes.map((s) => s.name)}
+                    prices={Object.fromEntries(
+                      service.sizes.map((s) => [s.name, s.price])
+                    )}
+                    quantities={filteredServices[key] || {}}
+                    onQuantityChange={(size, value) =>
+                      handleServiceChange(key, {
+                        ...formState.services[key],
+                        [size]: Math.max(value, 0),
+                      })
+                    }
+                  />
+                );
+              })}
+            </SizedServicesContainer>
+          </ServiceCategory>
+        )}
       </ServicesGrid>
     );
   };
@@ -538,11 +494,14 @@ const LaundryNote = () => {
                     type="number"
                     id="tempAbono"
                     name="tempAbono"
-                    value={tempAbono}
-                    onChange={(e) =>
-                      setTempAbono(Math.max(0, parseFloat(e.target.value) || 0))
-                    }
+                    value={tempAbono || ""} // Esto hace que el input esté vacío inicialmente
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      setTempAbono(isNaN(value) ? 0 : Math.max(0, value));
+                    }}
                     min="0"
+                    step="1"
+                    placeholder=""
                   />
                   <label
                     className={tempAbono ? "filled" : ""}
@@ -641,7 +600,6 @@ const LaundryNote = () => {
                 toast.error("No se puede crear una nota con total $0");
                 return;
               }
-
               const errors = validate(
                 formState.name,
                 formState.abono,
@@ -676,16 +634,10 @@ const LaundryNote = () => {
         phoneNumber={formState.phoneNumber}
         countryCode={formState.countryCode}
         onPhoneChange={(number) =>
-          setFormState((prev) => ({
-            ...prev,
-            phoneNumber: number,
-          }))
+          setFormState((prev) => ({ ...prev, phoneNumber: number }))
         }
         onCountryCodeChange={(code) =>
-          setFormState((prev) => ({
-            ...prev,
-            countryCode: code,
-          }))
+          setFormState((prev) => ({ ...prev, countryCode: code }))
         }
         loading={loading || isSubmitting}
         error={submitError}
@@ -694,9 +646,15 @@ const LaundryNote = () => {
 
       <PaymentMethodModal
         isOpen={showPaymentModal}
-        onClose={() => setShowPaymentModal(false)}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setModalType(null);
+        }}
         onSelect={handlePaymentMethodSelect}
-        onCancel={handlePaymentModalCancel}
+        onCancel={() => {
+          setShowPaymentModal(false);
+          setModalType(null);
+        }}
         title={
           modalType === "payment"
             ? "Selecciona el Método de Pago"
@@ -707,7 +665,7 @@ const LaundryNote = () => {
   );
 };
 
-// Estilos actualizados con los nuevos colores
+// Estilos
 const MainContainer = styled.div`
   display: flex;
   justify-content: center;
@@ -735,7 +693,6 @@ const HeaderSection = styled.div`
   padding: 1.5rem 2rem;
   background: linear-gradient(45deg, #4b70e2, #3a5bb8);
   color: white;
-  position: relative;
 
   @media (max-width: 768px) {
     padding: 1rem;
@@ -918,6 +875,7 @@ const PaymentSection = styled.div`
   border: 1px solid #e2e8f0;
 `;
 
+// Reemplaza el AbonoInput existente con este código
 const AbonoGroup = styled.div`
   display: flex;
   gap: 1rem;
@@ -931,6 +889,7 @@ const AbonoGroup = styled.div`
 
 const AbonoInput = styled.div`
   flex: 1;
+  position: relative;
 `;
 
 const RemoveAbonoButton = styled.button`
@@ -965,7 +924,6 @@ const ActionButton = styled.button`
       ? `
       background-color: #4b70e2;
       color: white;
-      
       &:hover {
         background-color: #3a5bb8;
       }
@@ -974,18 +932,15 @@ const ActionButton = styled.button`
       ? `
       background-color: #4caf50;
       color: white;
-      
       &:hover {
         background-color: #3d8b40;
       }
     `
-      : variant === "disabled"
-      ? `
+      : `
       background-color: #94a3b8;
       color: white;
       cursor: not-allowed;
-    `
-      : ""}
+    `}
 `;
 
 const PaymentInfo = styled.div`
@@ -995,10 +950,6 @@ const PaymentInfo = styled.div`
   color: #166534;
   font-size: 0.95rem;
   border: 1px solid #bbf7d0;
-
-  strong {
-    font-weight: 600;
-  }
 `;
 
 const CheckboxGroup = styled.div`
@@ -1154,94 +1105,5 @@ const ErrorContainer = styled.div`
   font-size: 1.2rem;
   color: #dc2626;
 `;
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-`;
-
-const ModalContent = styled.div`
-  background-color: #ffffff;
-  padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  width: 90%;
-  max-width: 500px;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  animation: ${fadeIn} 0.3s ease-out;
-`;
-
-const ModalTitle = styled.h3`
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #1e293b;
-  text-align: center;
-`;
-
-const ModalButtons = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const ModalButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: ${(props) => props.color};
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  &:hover {
-    background-color: ${(props) => darken(props.color, 0.1)};
-    transform: translateY(-2px);
-  }
-`;
-
-const CancelButton = styled.button`
-  padding: 0.75rem;
-  background-color: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  &:hover {
-    background-color: #f1f5f9;
-    color: #475569;
-  }
-`;
-
-// Helper para oscurecer colores
-const darken = (color, amount) => {
-  const hex = color.replace("#", "");
-  const num = parseInt(hex, 16);
-  const r = Math.max(0, (num >> 16) - Math.round(255 * amount));
-  const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(255 * amount));
-  const b = Math.max(0, (num & 0xff) - Math.round(255 * amount));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-};
 
 export default LaundryNote;

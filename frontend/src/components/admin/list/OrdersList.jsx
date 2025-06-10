@@ -4,7 +4,9 @@ import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
 import {
+  ordersFetch,
   ordersEdit,
+  resetError,
 } from "../../../features/ordersSlice";
 import FilterBar from "./ListHelpers/OrderHelpers/FilterBar";
 import OrderCard from "./ListHelpers/OrderHelpers/OrderCard";
@@ -16,9 +18,8 @@ const OrdersList = () => {
   const dispatch = useDispatch();
   const {
     list = [],
-    loading,
-    error,
     status,
+    error,
   } = useSelector((state) => state.orders);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,6 +29,23 @@ const OrdersList = () => {
   const [onlyShow, setOnlyShow] = useState("");
   const itemsPerPage = 4;
 
+  // Fetch orders if status is idle or failed
+  useEffect(() => {
+    if (status === "idle" || status === "failed") {
+      dispatch(ordersFetch());
+    }
+  }, [dispatch, status]);
+
+  // Debug duplicate orders
+  useEffect(() => {
+    const ids = list.map((order) => order._id);
+    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (duplicates.length) {
+      console.warn("Duplicate order IDs detected:", duplicates);
+    }
+  }, [list]);
+
+  // Filter and sort orders
   useEffect(() => {
     if (status !== "succeeded") return;
   
@@ -90,7 +108,6 @@ const OrdersList = () => {
   
     setFilteredOrders(filtered);
   }, [list, searchQuery, sortField, onlyShow, status]);
-  
 
   const handleOrderDispatch = (id) => {
     dispatch(ordersEdit({ id, delivery_status: "dispatched" }));
@@ -110,10 +127,28 @@ const OrdersList = () => {
     }
   };
 
+  const handleRetry = () => {
+    dispatch(resetError());
+    dispatch(ordersFetch());
+  };
+
   const paginatedOrders = filteredOrders.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  if (status === "loading" && !list.length) {
+    return <LoadingSpinner />;
+  }
+
+  if (status === "failed" && error) {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>{error}</ErrorMessage>
+        <RetryButton onClick={handleRetry}>Retry</RetryButton>
+      </ErrorContainer>
+    );
+  }
 
   return (
     <Container>
@@ -125,9 +160,6 @@ const OrdersList = () => {
         onlyShow={onlyShow}
         setOnlyShow={setOnlyShow}
       />
-
-      {loading && <LoadingSpinner />}
-      {error && <ErrorMessage>{error}</ErrorMessage>}
 
       <OrderContainer>
         {paginatedOrders.length ? (
@@ -173,4 +205,23 @@ const NoOrders = styled.p`
   text-align: center;
   font-style: italic;
   color: #888;
+`;
+
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const RetryButton = styled.button`
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  &:hover {
+    background-color: #0056b3;
+  }
 `;

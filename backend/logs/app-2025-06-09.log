@@ -1,0 +1,3 @@
+{"logId":"15fe5486","timestamp":"2025-06-09 20:32:28.527","level":"info","message":"Usuario guest creado exitosamente","guestId":"6847a74c320d7af1e05a94da","email":"guest-1749526348385@example.com","name":"Invitado-qfe8ux","pid":5014}
+{"logId":"b83fbe48","timestamp":"2025-06-09 20:33:04.826","level":"info","message":"Usuario guest creado exitosamente","guestId":"6847a770320d7af1e05a94dd","email":"guest-1749526384714@example.com","name":"Invitado-34qvhu","pid":5014}
+{"logId":"42067dc2","timestamp":"2025-06-09 20:33:05.318","level":"info","message":"Checkout session creada","sessionId":"cs_test_a1RXm4bUjppelqT9eBVxQ6YDCmjpC6wMim9doVtqp9ULa80pElWpX35jiM","pid":5014}

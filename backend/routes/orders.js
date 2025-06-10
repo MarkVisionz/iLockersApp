@@ -28,6 +28,70 @@ const validateGuest = async (req, res, next) => {
   next();
 };
 
+// Helper to emit stats updates
+const emitStatsUpdate = async (req, type = "all") => {
+  const previousMonth = moment()
+    .subtract(1, "months")
+    .startOf("month")
+    .toDate();
+  const last7Days = moment().subtract(7, "days").toDate();
+  try {
+    const stats = {};
+    if (type === "orders" || type === "all") {
+      stats.orders = await Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: previousMonth },
+            delivery_status: { $ne: "cancelled" },
+          },
+        },
+        { $project: { month: { $month: "$createdAt" } } },
+        { $group: { _id: "$month", total: { $sum: 1 } } },
+      ]);
+    }
+    if (type === "income" || type === "all") {
+      stats.income = await Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: previousMonth },
+            delivery_status: { $ne: "cancelled" },
+          },
+        },
+        { $project: { month: { $month: "$createdAt" }, sales: "$total" } },
+        { $group: { _id: "$month", total: { $sum: "$sales" } } },
+      ]);
+    }
+    if (type === "weekly" || type === "all") {
+      stats.weekly = await Order.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: last7Days },
+            delivery_status: { $ne: "cancelled" },
+          },
+        },
+        { $project: { day: { $dayOfWeek: "$createdAt" }, sales: "$total" } },
+        { $group: { _id: "$day", total: { $sum: "$sales" } } },
+      ]);
+    }
+    if (req.io) {
+      if (stats.orders) {
+        console.log("Emitting statsUpdated: orders", stats.orders);
+        req.io.emit("statsUpdated", { type: "orders", data: stats.orders });
+      }
+      if (stats.income) {
+        console.log("Emitting statsUpdated: income", stats.income);
+        req.io.emit("statsUpdated", { type: "income", data: stats.income });
+      }
+      if (stats.weekly) {
+        console.log("Emitting statsUpdated: weekly", stats.weekly);
+        req.io.emit("statsUpdated", { type: "weekly", data: stats.weekly });
+      }
+    }
+  } catch (err) {
+    console.error("Error emitting stats:", err.message);
+  }
+};
+
 // Create order (supports authenticated users and guests)
 router.post("/", validateGuest, async (req, res) => {
   try {
@@ -54,6 +118,7 @@ router.post("/", validateGuest, async (req, res) => {
     const savedOrder = await newOrder.save();
 
     if (req.io) {
+      console.log("Emitting orderCreated:", savedOrder._id);
       req.io.emit("orderCreated", savedOrder);
       
       // Notificación específica para guest
@@ -63,6 +128,7 @@ router.post("/", validateGuest, async (req, res) => {
           message: "¡Orden recibida! Gracias por tu compra"
         });
       }
+      await emitStatsUpdate(req, "all");
     }
 
     res.status(201).send(savedOrder);
@@ -70,6 +136,7 @@ router.post("/", validateGuest, async (req, res) => {
     if (err.name === "ValidationError") {
       return res.status(400).send(err.message);
     }
+    console.error("Error creating order:", err.message);
     res.status(500).send(err.message);
   }
 });
@@ -83,6 +150,7 @@ router.get("/guest/:guestId", guestAuth, async (req, res) => {
     }).sort({ createdAt: -1 });
     res.status(200).send(orders);
   } catch (err) {
+    console.error("Error fetching guest orders:", err.message);
     res.status(500).send(err.message);
   }
 });
@@ -96,7 +164,12 @@ router.put("/:id", isAdmin, async (req, res) => {
       { new: true }
     );
 
+    if (!updatedOrder) {
+      return res.status(404).send("Order not found");
+    }
+
     if (req.io) {
+      console.log("Emitting orderUpdated:", updatedOrder._id);
       req.io.emit("orderUpdated", updatedOrder);
 
       // Emitir notificación específica para guest
@@ -106,11 +179,13 @@ router.put("/:id", isAdmin, async (req, res) => {
           message: `Estado actualizado: ${updatedOrder.delivery_status}`,
         });
       }
+      await emitStatsUpdate(req, "all");
     }
 
     res.status(200).send(updatedOrder);
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error updating order:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -119,13 +194,20 @@ router.delete("/:id", isAdmin, async (req, res) => {
   try {
     const deletedOrder = await Order.findByIdAndDelete(req.params.id);
 
+    if (!deletedOrder) {
+      return res.status(404).send("Order not found");
+    }
+
     if (req.io) {
+      console.log("Emitting orderDeleted:", deletedOrder._id);
       req.io.emit("orderDeleted", deletedOrder);
+      await emitStatsUpdate(req, "all");
     }
 
     res.status(200).send("Order has been deleted...");
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error deleting order:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -145,11 +227,11 @@ router.get("/find/:userId", auth, async (req, res) => {
 
     res.status(200).send(orders);
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error fetching user orders:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
-// routes/order.js
 router.get("/", auth, async (req, res) => {
   try {
     const { new: isNew, userId, status } = req.query;
@@ -193,11 +275,10 @@ router.get("/", auth, async (req, res) => {
 
     res.status(200).send(orders);
   } catch (err) {
-    console.error("Error fetching orders:", err);
+    console.error("Error fetching orders:", err.message);
     res.status(500).send(err.message);
   }
 });
-
 
 // Obtener una orden específica
 router.get("/findOne/:id", auth, async (req, res) => {
@@ -215,8 +296,9 @@ router.get("/findOne/:id", auth, async (req, res) => {
     } else {
       res.status(403).send("Access denied. Not authorized...");
     }
-  } catch (error) {
-    res.status(500).send(error);
+  } catch (err) {
+    console.error("Error fetching order:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -240,15 +322,14 @@ router.get("/stats", isAdmin, async (req, res) => {
     ]);
 
     if (req.io) {
-      req.io.emit("statsUpdated", {
-        type: "orders",
-        data: orders,
-      });
+      console.log("Emitting statsUpdated: orders", orders);
+      req.io.emit("statsUpdated", { type: "orders", data: orders });
     }
 
     res.status(200).send(orders);
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error fetching order stats:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -272,15 +353,14 @@ router.get("/income/stats", isAdmin, async (req, res) => {
     ]);
 
     if (req.io) {
-      req.io.emit("statsUpdated", {
-        type: "income",
-        data: income,
-      });
+      console.log("Emitting statsUpdated: income", income);
+      req.io.emit("statsUpdated", { type: "income", data: income });
     }
 
     res.status(200).send(income);
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error fetching income stats:", err.message);
+    res.status(500).send(err.message);
   }
 });
 
@@ -301,15 +381,14 @@ router.get("/week-sales", isAdmin, async (req, res) => {
     ]);
 
     if (req.io) {
-      req.io.emit("statsUpdated", {
-        type: "weekly",
-        data: income,
-      });
+      console.log("Emitting statsUpdated: weekly", income);
+      req.io.emit("statsUpdated", { type: "weekly", data: income });
     }
 
     res.status(200).send(income);
   } catch (err) {
-    res.status(500).send(err);
+    console.error("Error fetching weekly sales:", err.message);
+    res.status(500).send(err.message);
   }
 });
 

@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import Widget from "../admin/summary-components/Widget";
+import Widget from "../admin/laundry-components/Widget";
 import { FaClipboard, FaChartBar } from "react-icons/fa";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -7,17 +7,42 @@ import Transactions from "../admin/laundry-components/Transactions";
 import AllTimeData from "../admin/laundry-components/AllTimeData";
 import NotesSummary from "../admin/list/NotesSummary";
 import moment from "moment";
-import { fetchNotesStats, fetchIncomeStats } from "../../features/notesSlice";
+import { fetchNotesStats, fetchIncomeStats, resetError } from "../../features/notesSlice";
 import { ErrorMessage, LoadingSpinner } from "../LoadingAndError";
+import socket from "../../features/socket";
+import { toast } from "react-toastify";
 
 const LocalSummary = () => {
   const dispatch = useDispatch();
   const { stats, statsStatus, error } = useSelector((state) => state.notes);
 
   useEffect(() => {
+    if (statsStatus === "idle" || statsStatus === "rejected") {
+      dispatch(fetchNotesStats());
+      dispatch(fetchIncomeStats());
+    }
+
+    // Socket.IO connection status
+    const handleConnect = () => toast.success("Conexión con el servidor establecida");
+    const handleDisconnect = () => toast.warning("Conexión con el servidor perdida");
+    const handleConnectError = (err) => toast.error(`Error de conexión: ${err.message}`);
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+    };
+  }, [dispatch, statsStatus]);
+
+  const handleRetry = () => {
+    dispatch(resetError());
     dispatch(fetchNotesStats());
     dispatch(fetchIncomeStats());
-  }, [dispatch]);
+  };
 
   const calculatePercentage = (current, previous) => {
     if (previous === 0) return current > 0 ? 100 : 0;
@@ -63,11 +88,14 @@ const LocalSummary = () => {
   return (
     <StyledSummary>
       {statsStatus === "pending" && !stats.notes?.length && !stats.income?.length ? (
-        <LoadingSpinner message={"Loading statistics..."}></LoadingSpinner>
+        <LoadingSpinner message={"Loading statistics..."} />
       ) : statsStatus === "rejected" && !stats.notes?.length && !stats.income?.length ? (
-        <ErrorMessage>
-          Error loading statistics: {error || "Please try again later"}
-        </ErrorMessage>
+        <ErrorContainer>
+          <ErrorMessage>
+            Error loading statistics: {error || "Please try again later"}
+          </ErrorMessage>
+          <RetryButton onClick={handleRetry}>Retry</RetryButton>
+        </ErrorContainer>
       ) : (
         <>
           <MainStats>
@@ -75,6 +103,9 @@ const LocalSummary = () => {
               <Title>
                 <h2>Resumen</h2>
                 <p>Cómo está funcionando tu lavandería en comparación con el mes anterior</p>
+                <SocketStatus status={socket.connected ? "connected" : "disconnected"}>
+                  {socket.connected ? "🟢 Conectado" : "🔴 Desconectado"}
+                </SocketStatus>
               </Title>
               <WidgetWrapper>
                 {data.map((data, index) => (
@@ -108,13 +139,23 @@ const StyledSummary = styled.div`
   }
 `;
 
-const LoadingMessage = styled.div`
+const ErrorContainer = styled.div`
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  height: 100%;
-  font-size: 1.2rem;
-  color: #555;
+  gap: 1rem;
+`;
+
+const RetryButton = styled.button`
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  &:hover {
+    background-color: #0056b3;
+  }
 `;
 
 const MainStats = styled.div`
@@ -134,6 +175,17 @@ const Title = styled.div`
     font-size: 14px;
     color: #ffffff;
   }
+`;
+
+const SocketStatus = styled.span`
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background-color: ${({ status }) =>
+    status === "connected" ? "#28a745" : "#dc3545"};
+  color: white;
 `;
 
 const Overview = styled.div`

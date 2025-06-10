@@ -51,6 +51,19 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "La contraseña debe tener al menos 6 caracteres"],
       select: false,
     },
+    role: {
+      type: String,
+      enum: ["customer", "owner", "employee"],
+      default: "customer",
+    },
+
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Business",
+      required: function () {
+        return this.role === "owner" || this.role === "employee";
+      },
+    },
     profileImage: {
       type: String,
       default: "",
@@ -156,6 +169,7 @@ userSchema.index(
     partialFilterExpression: { isGuest: { $eq: false } }
   }
 );
+userSchema.index({ role: 1, businessId: 1 });
 userSchema.index({ "addresses.isDefault": 1 });
 
 const User = mongoose.model("User", userSchema);

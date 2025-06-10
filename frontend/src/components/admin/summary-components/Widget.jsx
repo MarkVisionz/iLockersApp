@@ -13,7 +13,7 @@ const Widget = ({ data }) => {
       <Text>
         <h3>
           {data.digits === 0
-            ? "No data"
+            ? "0"
             : data.isMoney
             ? "$" + data.digits.toLocaleString()
             : data.digits.toLocaleString()}

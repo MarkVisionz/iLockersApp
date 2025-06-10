@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import styled from "styled-components";
 import moment from "moment";
@@ -7,19 +7,37 @@ import { toast } from "react-toastify";
 
 const LaundryStatusScreen = () => {
   const dispatch = useDispatch();
-  const { items = [], status, editStatus } = useSelector((state) => state.notes);
+  const {
+    items = [],
+    status,
+    editStatus,
+  } = useSelector((state) => state.notes);
+  const [noteLoading, setNoteLoading] = useState({}); // Per-note loading state
 
+  // Fetch notes only if status is null or rejected
   useEffect(() => {
-    if (status !== "success") {
+    if (!status || status === "rejected") {
       dispatch(notesFetch());
     }
   }, [dispatch, status]);
 
-  const notesByStatus = {
+  // Debug duplicate notes
+  useEffect(() => {
+    const ids = items.map((note) => note._id);
+    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (duplicates.length) {
+      console.warn("Duplicate note IDs detected:", duplicates);
+    }
+  }, [items]);
+
+  // Memoize notes by status
+  const notesByStatus = useMemo(() => ({
     sucia: items.filter((note) => note.cleaning_status === "sucia"),
     lavado: items.filter((note) => note.cleaning_status === "lavado"),
-    listo_para_entregar: items.filter((note) => note.cleaning_status === "listo_para_entregar"),
-  };
+    listo_para_entregar: items.filter(
+      (note) => note.cleaning_status === "listo_para_entregar"
+    ),
+  }), [items]);
 
   const handleChangeStatus = async (note, newStatus) => {
     if (note.cleaning_status === newStatus) return;
@@ -27,24 +45,27 @@ const LaundryStatusScreen = () => {
     console.log("Changing cleaning_status:", {
       folio: note.folio,
       note_status: note.note_status,
-      paidAt: note.paidAt,
       currentCleaningStatus: note.cleaning_status,
       newCleaningStatus: newStatus,
     });
 
+    setNoteLoading((prev) => ({ ...prev, [note._id]: true }));
+
     try {
       const payload = { _id: note._id, cleaning_status: newStatus };
       await dispatch(notesEdit(payload)).unwrap();
-      toast.success(`Estado actualizado a ${newStatus === "lavado" ? "Lavado" : "Listo para Entregar"}`);
-
-      if (newStatus === "listo_para_entregar" && note.phoneNumber) {
-        const msg = `👕 Hola ${note.name}, tu ropa ya está lista para recoger.`;
-        const waUrl = `https://wa.me/${note.phoneNumber.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
-        window.open(waUrl, "_blank");
-      }
+      toast.success(
+        `Estado actualizado a ${
+          newStatus === "lavado" ? "Lavado" : "Listo para Entregar"
+        }`
+      );
     } catch (error) {
       console.error("Error updating cleaning_status:", error);
-      toast.error(error.message || "Error al actualizar el estado. Intenta de nuevo.");
+      toast.error(
+        error.message || "Error al actualizar el estado. Intenta de nuevo."
+      );
+    } finally {
+      setNoteLoading((prev) => ({ ...prev, [note._id]: false }));
     }
   };
 
@@ -57,18 +78,30 @@ const LaundryStatusScreen = () => {
           notesByStatus.sucia.map((note) => (
             <NoteBox key={note._id}>
               <NoteInfo>
-                <p><strong>Folio:</strong> {note.folio}</p>
-                <p><strong>Nombre:</strong> {note.name}</p>
-                <p><strong>Total:</strong> ${note.total.toFixed(2)}</p>
-                <p><strong>Estado:</strong> {note.note_status === "pagado" ? "Pagado" : "Pendiente"}</p>
-                <p><strong>Fecha:</strong> {moment(note.date).format("YYYY-MM-DD HH:mm")}</p>
+                <p>
+                  <strong>Folio:</strong> {note.folio}
+                </p>
+                <p>
+                  <strong>Nombre:</strong> {note.name}
+                </p>
+                <p>
+                  <strong>Total:</strong> ${note.total.toFixed(2)}
+                </p>
+                <p>
+                  <strong>Estado:</strong>{" "}
+                  {note.note_status === "pagado" ? "Pagado" : "Pendiente"}
+                </p>
+                <p>
+                  <strong>Fecha:</strong>{" "}
+                  {moment(note.date).format("YYYY-MM-DD HH:mm")}
+                </p>
               </NoteInfo>
               <Button
                 onClick={() => handleChangeStatus(note, "lavado")}
-                disabled={editStatus === "pending"}
+                disabled={noteLoading[note._id] || editStatus === "pending"}
                 title="Pasar la ropa a Lavado"
               >
-                {editStatus === "pending" ? "Actualizando..." : "Pasar a Lavado"}
+                {noteLoading[note._id] ? "Actualizando..." : "Pasar a Lavado"}
               </Button>
             </NoteBox>
           ))
@@ -84,18 +117,30 @@ const LaundryStatusScreen = () => {
           notesByStatus.lavado.map((note) => (
             <NoteBox key={note._id}>
               <NoteInfo>
-                <p><strong>Folio:</strong> {note.folio}</p>
-                <p><strong>Nombre:</strong> {note.name}</p>
-                <p><strong>Total:</strong> ${note.total.toFixed(2)}</p>
-                <p><strong>Estado:</strong> {note.note_status === "pagado" ? "Pagado" : "Pendiente"}</p>
-                <p><strong>Fecha:</strong> {moment(note.date).format("YYYY-MM-DD HH:mm")}</p>
+                <p>
+                  <strong>Folio:</strong> {note.folio}
+                </p>
+                <p>
+                  <strong>Nombre:</strong> {note.name}
+                </p>
+                <p>
+                  <strong>Total:</strong> ${note.total.toFixed(2)}
+                </p>
+                <p>
+                  <strong>Estado:</strong>{" "}
+                  {note.note_status === "pagado" ? "Pagado" : "Pendiente"}
+                </p>
+                <p>
+                  <strong>Fecha:</strong>{" "}
+                  {moment(note.date).format("YYYY-MM-DD HH:mm")}
+                </p>
               </NoteInfo>
               <Button
                 onClick={() => handleChangeStatus(note, "listo_para_entregar")}
-                disabled={editStatus === "pending"}
+                disabled={noteLoading[note._id] || editStatus === "pending"}
                 title="Marcar como Listo para Entregar"
               >
-                {editStatus === "pending" ? "Actualizando..." : "Listo para Entregar"}
+                {noteLoading[note._id] ? "Actualizando..." : "Listo para Entregar"}
               </Button>
             </NoteBox>
           ))
@@ -111,15 +156,31 @@ const LaundryStatusScreen = () => {
           notesByStatus.listo_para_entregar.map((note) => (
             <NoteBox key={note._id}>
               <NoteInfo>
-                <p><strong>Folio:</strong> {note.folio}</p>
-                <p><strong>Nombre:</strong> {note.name}</p>
-                <p><strong>Total:</strong> ${note.total.toFixed(2)}</p>
-                <p><strong>Estado:</strong> {note.note_status === "pagado" ? "Pagado" : "Pendiente"}</p>
-                <p><strong>Fecha:</strong> {moment(note.date).format("YYYY-MM-DD HH:mm")}</p>
+                <p>
+                  <strong>Folio:</strong> {note.folio}
+                </p>
+                <p>
+                  <strong>Nombre:</strong> {note.name}
+                </p>
+                <p>
+                  <strong>Total:</strong> ${note.total.toFixed(2)}
+                </p>
+                <p>
+                  <strong>Estado:</strong>{" "}
+                  {note.note_status === "pagado" ? "Pagado" : "Pendiente"}
+                </p>
+                <p>
+                  <strong>Fecha:</strong>{" "}
+                  {moment(note.date).format("YYYY-MM-DD HH:mm")}
+                </p>
               </NoteInfo>
               <Button
-                onClick={() => alert("El cliente debe ser marcado como entregado en la parte de administración.")}
-                disabled={editStatus === "pending"}
+                onClick={() =>
+                  alert(
+                    "El cliente debe ser marcado como entregado en la parte de administración."
+                  )
+                }
+                disabled={noteLoading[note._id] || editStatus === "pending"}
                 title="Marcar como recogido por el cliente"
               >
                 Cliente Recogió
@@ -144,7 +205,7 @@ const Container = styled.div`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   max-width: 1200px;
   margin: 1.5rem auto;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: auto;
 
   @media (max-width: 768px) {

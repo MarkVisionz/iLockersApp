@@ -1,78 +1,62 @@
 import socket from "../socket";
-import { 
-  socketOrderAdded,
-  socketOrderUpdated,
-  socketOrderStatusChanged,
-  socketStatsUpdated
-} from "../ordersSlice";
+import { socketOrderAdded, socketOrderUpdated, socketOrderDeleted, socketStatsUpdated } from "../ordersSlice";
 import { toast } from "react-toastify";
 
 const setupOrdersSocketListeners = (dispatch) => {
   if (!socket) {
-    console.warn("Socket no está disponible");
+    console.warn('Socket connection not available');
     return () => {};
   }
 
-  const handleNewOrder = (order) => {
-    try {
-      dispatch(socketOrderAdded(order));
-      const message = order.isGuestOrder
-        ? `Orden #${order._id.slice(-4)} creada (Invitado)`
-        : `Nueva orden #${order._id.slice(-4)} creada`;
-      toast.success(message);
-    } catch (error) {
-      console.error("Error handling new order:", error);
-    }
+  // Remove existing listeners to prevent duplicates
+  socket.off("orderCreated");
+  socket.off("orderUpdated");
+  socket.off("orderDeleted");
+  socket.off("statsUpdated");
+  socket.off("guestOrderNotification");
+
+  // Handlers
+  const handleOrderCreated = (newOrder) => {
+    console.log("Socket: orderCreated", newOrder._id);
+    dispatch(socketOrderAdded(newOrder));
+    toast.success(`Nueva orden creada: ${newOrder._id}`);
   };
 
-  const handleUpdatedOrder = (order) => {
-    try {
-      dispatch(socketOrderUpdated(order));
-      if (order.isGuestOrder) {
-        toast.info(`Orden de invitado actualizada`);
-      }
-    } catch (error) {
-      console.error("Error handling updated order:", error);
-    }
+  const handleOrderUpdated = (updatedOrder) => {
+    console.log("Socket: orderUpdated", updatedOrder._id);
+    dispatch(socketOrderUpdated(updatedOrder));
+    toast.info(`Orden actualizada: ${updatedOrder._id}`);
   };
 
-  const handleOrderStatusChange = ({ orderId, status }) => {
-    try {
-      dispatch(socketOrderStatusChanged({ _id: orderId, status }));
-      toast.info(`Estado actualizado: ${status}`);
-    } catch (error) {
-      console.error("Error handling status change:", error);
-    }
+  const handleOrderDeleted = (deletedOrder) => {
+    console.log("Socket: orderDeleted", deletedOrder._id);
+    dispatch(socketOrderDeleted(deletedOrder));
+    toast.warning(`Orden eliminada: ${deletedOrder._id}`);
   };
 
-  const handleStatsUpdate = (stats) => {
-    try {
-      dispatch(socketStatsUpdated(stats));
-    } catch (error) {
-      console.error("Error handling stats update:", error);
-    }
+  const handleStatsUpdated = ({ type, data }) => {
+    console.log("Socket: statsUpdated", type);
+    dispatch(socketStatsUpdated({ type, data }));
   };
 
-  const handleGuestOrderNotification = (notification) => {
-    try {
-      const { orderId, message } = notification;
-      toast.info(`Orden #${orderId.slice(-4)}: ${message}`);
-    } catch (error) {
-      console.error("Error handling guest notification:", error);
-    }
+  const handleGuestOrderNotification = ({ orderId, message }) => {
+    console.log("Socket: guestOrderNotification", orderId);
+    toast.info(message);
   };
 
-  socket.on("orderCreated", handleNewOrder);
-  socket.on("orderUpdated", handleUpdatedOrder);
-  socket.on("orderStatusChanged", handleOrderStatusChange);
-  socket.on("statsUpdated", handleStatsUpdate);
+  // Register listeners
+  socket.on("orderCreated", handleOrderCreated);
+  socket.on("orderUpdated", handleOrderUpdated);
+  socket.on("orderDeleted", handleOrderDeleted);
+  socket.on("statsUpdated", handleStatsUpdated);
   socket.on("guestOrderNotification", handleGuestOrderNotification);
 
+  // Cleanup
   return () => {
-    socket.off("orderCreated", handleNewOrder);
-    socket.off("orderUpdated", handleUpdatedOrder);
-    socket.off("orderStatusChanged", handleOrderStatusChange);
-    socket.off("statsUpdated", handleStatsUpdate);
+    socket.off("orderCreated", handleOrderCreated);
+    socket.off("orderUpdated", handleOrderUpdated);
+    socket.off("orderDeleted", handleOrderDeleted);
+    socket.off("statsUpdated", handleStatsUpdated);
     socket.off("guestOrderNotification", handleGuestOrderNotification);
   };
 };

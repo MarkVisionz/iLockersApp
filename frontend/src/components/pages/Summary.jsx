@@ -7,19 +7,21 @@ import Chart from "../admin/summary-components/Chart";
 import Transactions from "../admin/summary-components/Transactions";
 import AllTimeData from "../admin/summary-components/AllTimeData";
 import OrdersList from "../admin/list/OrdersList";
-import socket from "../../features/socket";
 import {
+  ordersFetch,
   fetchOrderStats,
   fetchIncomeStats,
   fetchWeekSales,
+  resetError,
 } from "../../features/ordersSlice";
 import { usersFetch } from "../../features/usersSlice";
-import { LoadingSpinner } from "../LoadingAndError";
+import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
 import { toast } from "react-toastify";
+import socket from "../../features/socket";
 
 const Summary = () => {
   const dispatch = useDispatch();
-  const { stats, status: ordersStatus, error: ordersError } = useSelector(
+  const { list, stats, status: ordersStatus, stats: { status: statsStatus }, error: ordersError } = useSelector(
     (state) => state.orders
   );
   const { list: users = [], status: usersStatus, error: usersError } = useSelector(
@@ -56,7 +58,51 @@ const Summary = () => {
     },
   ]);
 
-  // Función segura para filtrar usuarios
+  // Debug duplicate orders
+  useEffect(() => {
+    const ids = list.map((order) => order._id);
+    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (duplicates.length) {
+      console.warn("Duplicate order IDs detected:", duplicates);
+    }
+  }, [list]);
+
+  useEffect(() => {
+    if (ordersStatus === "idle" || ordersStatus === "failed" || 
+        statsStatus === "idle" || statsStatus === "failed" || 
+        usersStatus === "pending" || usersStatus === "rejected") {
+      dispatch(ordersFetch());
+      dispatch(fetchOrderStats());
+      dispatch(fetchIncomeStats());
+      dispatch(fetchWeekSales());
+      dispatch(usersFetch());
+    }
+
+    // Socket.IO connection status
+    const handleConnect = () => toast.success("Conexión con el servidor establecida");
+    const handleDisconnect = () => toast.warning("Conexión con el servidor perdida");
+    const handleConnectError = (err) => toast.error(`Error de conexión: ${err.message}`);
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+    };
+  }, [dispatch, ordersStatus, statsStatus, usersStatus]);
+
+  const handleRetry = () => {
+    dispatch(resetError());
+    dispatch(ordersFetch());
+    dispatch(fetchOrderStats());
+    dispatch(fetchIncomeStats());
+    dispatch(fetchWeekSales());
+    dispatch(usersFetch());
+  };
+
   const getValidUsers = () => {
     try {
       return Array.isArray(users)
@@ -67,60 +113,7 @@ const Summary = () => {
       return [];
     }
   };
-  
 
-  // Función para comparar estadísticas
-  const compareStats = (a, b) => {
-    if (a._id === "current_month") return -1;
-    if (b._id === "current_month") return 1;
-    return 0;
-  };
-
-  useEffect(() => {
-    // Cargar datos iniciales
-    const loadData = async () => {
-      try {
-        await Promise.all([
-          dispatch(fetchOrderStats()),
-          dispatch(fetchIncomeStats()),
-          dispatch(fetchWeekSales()),
-          dispatch(usersFetch()),
-        ]);
-      } catch (error) {
-        toast.error("Error al cargar datos iniciales");
-        console.error("Error loading initial data:", error);
-      }
-    };
-
-    loadData();
-
-    // Configurar listeners de socket
-    const handleSocketConnect = () => {
-      toast.success("Conexión con el servidor establecida");
-    };
-
-    const handleSocketDisconnect = () => {
-      toast.warning("Conexión con el servidor perdida");
-    };
-
-    const handleSocketError = (error) => {
-      toast.error(`Error de conexión: ${error.message}`);
-    };
-
-    // Suscribir a eventos de conexión
-    socket.on("connect", handleSocketConnect);
-    socket.on("disconnect", handleSocketDisconnect);
-    socket.on("connect_error", handleSocketError);
-
-    return () => {
-      // Limpiar listeners de conexión
-      socket.off("connect", handleSocketConnect);
-      socket.off("disconnect", handleSocketDisconnect);
-      socket.off("connect_error", handleSocketError);
-    };
-  }, [dispatch]);
-
-  // Obtener fechas para el mes actual y anterior
   const currentMonth = currentDate.getUTCMonth();
   const currentYear = currentDate.getUTCFullYear();
 
@@ -129,7 +122,6 @@ const Summary = () => {
   const previousMonth = previousMonthDate.getUTCMonth();
   const previousYear = previousMonthDate.getUTCFullYear();
 
-  // Calcular estadísticas con manejo seguro de errores
   const { sortedOrders, sortedIncome, userStats } = useMemo(() => {
     try {
       const sortedOrders = [...(stats?.orders || [])].sort((a, b) => (a._id < b._id ? 1 : -1));
@@ -137,7 +129,6 @@ const Summary = () => {
 
       const validUsers = getValidUsers();
       
-      // Calcular usuarios por mes
       const userStats = [
         {
           _id: "current_month",
@@ -167,7 +158,7 @@ const Summary = () => {
             }
           }).length
         }
-      ].sort(compareStats);
+      ];
 
       return { sortedOrders, sortedIncome, userStats };
     } catch (error) {
@@ -183,10 +174,12 @@ const Summary = () => {
     }
   }, [stats, users, currentMonth, currentYear, previousMonth, previousYear]);
 
-  // Calcular porcentajes con manejo seguro
   const { usersPerc, ordersPerc, incomePerc } = useMemo(() => {
     const calculatePercentage = (current, previous) => {
-      return previous > 0 ? ((current - previous) / previous) * 100 : 0;
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Number.isFinite((current - previous) / previous) 
+        ? ((current - previous) / previous) * 100 
+        : 0;
     };
 
     return {
@@ -205,7 +198,6 @@ const Summary = () => {
     };
   }, [userStats, sortedOrders, sortedIncome]);
 
-  // Actualizar datos de widgets con manejo seguro
   useEffect(() => {
     try {
       const currentUsers = userStats[0]?.total || 0;
@@ -235,7 +227,7 @@ const Summary = () => {
           icon: <FaChartBar />,
           digits: currentIncome,
           isMoney: true,
-          title: "Earnings",
+          title: "Sales",
           color: "rgb(253, 181, 40)",
           bgColor: "rgb(253, 181, 40, 0.12)",
           percentage: incomePerc,
@@ -246,18 +238,25 @@ const Summary = () => {
     }
   }, [userStats, sortedOrders, sortedIncome, usersPerc, ordersPerc, incomePerc]);
 
-  // Renderizado condicional
-  if ((ordersStatus === "loading" && !stats?.orders?.length) || usersStatus === "loading") {
+  if ((statsStatus === "loading" && !stats.orders.length && !stats.income.length) || 
+      usersStatus === "pending" && !users.length) {
     return <LoadingSpinner message={"Loading statistics..."} />;
   }
 
-  if ((ordersStatus === "failed" && !stats?.orders?.length) || usersStatus === "rejected") {
+  if ((statsStatus === "failed" && !stats.orders.length && !stats.income.length) || 
+      usersStatus === "rejected" && !users.length) {
     return (
-      <LoadingMessage>
-        Error loading data: {ordersError || usersError || "Please try again later"}
-      </LoadingMessage>
+      <ErrorContainer>
+        <ErrorMessage>
+          Error loading data: {ordersError || usersError || "Please try again later"}
+        </ErrorMessage>
+        <RetryButton onClick={handleRetry}>Retry</RetryButton>
+      </ErrorContainer>
     );
   }
+
+  // Filter orders for OrdersList
+  const activeOrders = list.filter(order => order.delivery_status !== "cancelled");
 
   return (
     <StyledSummary>
@@ -265,7 +264,7 @@ const Summary = () => {
         <Overview>
           <Title>
             <h2>Overview</h2>
-            <p>How your Laundry is performing compared to the previous month</p>
+            <p>How your Laundry is performing compared to the previous month (Users excludes guests)</p>
             <SocketStatus status={socket.connected ? "connected" : "disconnected"}>
               {socket.connected ? "🟢 Conectado" : "🔴 Desconectado"}
             </SocketStatus>
@@ -276,8 +275,8 @@ const Summary = () => {
             ))}
           </WidgetWrapper>
         </Overview>
-        <Chart data={stats?.weekly || []} />
-        <OrdersList />
+        <Chart />
+        <OrdersList orders={activeOrders} />
       </MainStats>
       <SideStats>
         <Transactions />
@@ -287,10 +286,8 @@ const Summary = () => {
   );
 };
 
-// Estilos (se mantienen igual)
 export default Summary;
 
-// Estilos
 const StyledSummary = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -305,13 +302,24 @@ const StyledSummary = styled.div`
   }
 `;
 
-const LoadingMessage = styled.div`
+const ErrorContainer = styled.div`
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  height: 100%;
-  font-size: 1.2rem;
-  color: #555;
+  gap: 1rem;
+`;
+
+const RetryButton = styled.button`
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  &:hover {
+    background-color: #0056b3;
+  }
 `;
 
 const MainStats = styled.div`

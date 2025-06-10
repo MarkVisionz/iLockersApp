@@ -5,13 +5,13 @@ import { toast } from "react-toastify";
 
 const initialState = {
   list: [],
-  status: null,
+  status: "idle",
   error: null,
   stats: {
     orders: [],
     income: [],
     weekly: [],
-    loading: false,
+    status: "idle",
     error: null,
   },
   guestOrders: [],
@@ -25,7 +25,7 @@ const handleError = (error, rejectWithValue) => {
   return rejectWithValue(message);
 };
 
-// Thunks para operaciones asíncronas
+// Thunks
 export const createGuestOrder = createAsyncThunk(
   "orders/createGuestOrder",
   async (orderData, { rejectWithValue }) => {
@@ -120,13 +120,9 @@ export const ordersDelete = createAsyncThunk(
   "orders/ordersDelete",
   async (id, { rejectWithValue }) => {
     try {
-      const res = await axios.put(
-        `${url}/orders/${id}`,
-        { delivery_status: "cancelled" },
-        setHeaders()
-      );
-      toast.info("Orden cancelada correctamente");
-      return res.data;
+      const res = await axios.delete(`${url}/orders/${id}`, setHeaders());
+      toast.info("Orden eliminada correctamente");
+      return { _id: id };
     } catch (error) {
       return handleError(error, rejectWithValue);
     }
@@ -144,45 +140,63 @@ const ordersSlice = createSlice({
       state.guestOrders = [];
     },
     socketOrderAdded: (state, action) => {
-      const exists = state.list.some((o) => o._id === action.payload._id);
+      const newOrder = action.payload;
+      const orderId = String(newOrder._id);
+      const exists = state.list.some((o) => String(o._id) === orderId);
       if (!exists) {
-        state.list.unshift(action.payload);
+        state.list.unshift(newOrder);
       }
-      if (action.payload.isGuestOrder) {
-        state.guestOrders.unshift(action.payload);
+      if (newOrder.isGuestOrder) {
+        const guestExists = state.guestOrders.some((o) => String(o._id) === orderId);
+        if (!guestExists) {
+          state.guestOrders.unshift(newOrder);
+        }
       }
     },
     socketOrderUpdated: (state, action) => {
-      const index = state.list.findIndex((o) => o._id === action.payload._id);
+      const updatedOrder = action.payload;
+      const orderId = String(updatedOrder._id);
+      const index = state.list.findIndex((o) => String(o._id) === orderId);
       if (index !== -1) {
-        state.list[index] = action.payload;
+        state.list[index] = updatedOrder;
       }
       const guestIndex = state.guestOrders.findIndex(
-        (o) => o._id === action.payload._id
+        (o) => String(o._id) === orderId
       );
       if (guestIndex !== -1) {
-        state.guestOrders[guestIndex] = action.payload;
+        state.guestOrders[guestIndex] = updatedOrder;
       }
     },
     socketOrderStatusChanged: (state, action) => {
-      const order = state.list.find((o) => o._id === action.payload._id);
+      const { _id, status } = action.payload;
+      const orderId = String(_id);
+      const order = state.list.find((o) => String(o._id) === orderId);
       if (order) {
-        order.delivery_status = action.payload.status;
+        order.delivery_status = status;
       }
       const guestOrder = state.guestOrders.find(
-        (o) => o._id === action.payload._id
+        (o) => String(o._id) === orderId
       );
       if (guestOrder) {
-        guestOrder.delivery_status = action.payload.status;
+        guestOrder.delivery_status = status;
       }
+    },
+    socketOrderDeleted: (state, action) => {
+      const orderId = String(action.payload._id);
+      state.list = state.list.filter((o) => String(o._id) !== orderId);
+      state.guestOrders = state.guestOrders.filter((o) => String(o._id) !== orderId);
     },
     socketStatsUpdated: (state, action) => {
       const { type, data } = action.payload;
       state.stats[type] = data;
-      state.stats.loading = false;
+      state.stats.status = "succeeded";
     },
     invalidateOrdersCache: (state) => {
-      state.status = null;
+      state.status = "idle";
+    },
+    resetError: (state) => {
+      state.error = null;
+      state.stats.error = null;
     },
   },
   extraReducers: (builder) => {
@@ -191,9 +205,17 @@ const ordersSlice = createSlice({
         state.status = "loading";
       })
       .addCase(createGuestOrder.fulfilled, (state, action) => {
-        state.list.unshift(action.payload);
-        state.guestOrders.unshift(action.payload);
+        const orderId = String(action.payload._id);
+        const exists = state.list.some((o) => String(o._id) === orderId);
+        if (!exists) {
+          state.list.unshift(action.payload);
+        }
+        const guestExists = state.guestOrders.some((o) => String(o._id) === orderId);
+        if (!guestExists) {
+          state.guestOrders.unshift(action.payload);
+        }
         state.status = "succeeded";
+        state.error = null;
       })
       .addCase(createGuestOrder.rejected, (state, action) => {
         state.status = "failed";
@@ -203,8 +225,18 @@ const ordersSlice = createSlice({
         state.status = "loading";
       })
       .addCase(fetchGuestOrders.fulfilled, (state, action) => {
-        state.guestOrders = action.payload;
+        const uniqueOrders = [];
+        const seenIds = new Set();
+        for (const order of action.payload) {
+          const orderId = String(order._id);
+          if (!seenIds.has(orderId)) {
+            seenIds.add(orderId);
+            uniqueOrders.push(order);
+          }
+        }
+        state.guestOrders = uniqueOrders;
         state.status = "succeeded";
+        state.error = null;
       })
       .addCase(fetchGuestOrders.rejected, (state, action) => {
         state.status = "failed";
@@ -215,36 +247,50 @@ const ordersSlice = createSlice({
         state.error = null;
       })
       .addCase(ordersFetch.fulfilled, (state, action) => {
-        state.list = action.payload;
+        const uniqueOrders = [];
+        const seenIds = new Set();
+        for (const order of action.payload) {
+          const orderId = String(order._id);
+          if (!seenIds.has(orderId)) {
+            seenIds.add(orderId);
+            uniqueOrders.push(order);
+          }
+        }
+        state.list = uniqueOrders;
         state.status = "succeeded";
+        state.error = null;
       })
       .addCase(ordersFetch.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload;
       })
       .addCase(ordersEdit.fulfilled, (state, action) => {
-        const index = state.list.findIndex((o) => o._id === action.payload._id);
+        const orderId = String(action.payload._id);
+        const index = state.list.findIndex((o) => String(o._id) === orderId);
         if (index !== -1) {
           state.list[index] = action.payload;
         }
         const guestIndex = state.guestOrders.findIndex(
-          (o) => o._id === action.payload._id
+          (o) => String(o._id) === orderId
         );
         if (guestIndex !== -1) {
           state.guestOrders[guestIndex] = action.payload;
         }
+        state.error = null;
+      })
+      .addCase(ordersDelete.pending, (state) => {
+        state.status = "loading";
       })
       .addCase(ordersDelete.fulfilled, (state, action) => {
-        const order = state.list.find((o) => o._id === action.payload._id);
-        if (order) {
-          order.delivery_status = "cancelled";
-        }
-        const guestOrder = state.guestOrders.find(
-          (o) => o._id === action.payload._id
-        );
-        if (guestOrder) {
-          guestOrder.delivery_status = "cancelled";
-        }
+        const orderId = String(action.payload._id);
+        state.list = state.list.filter((o) => String(o._id) !== orderId);
+        state.guestOrders = state.guestOrders.filter((o) => String(o._id) !== orderId);
+        state.status = "succeeded";
+        state.error = null;
+      })
+      .addCase(ordersDelete.rejected, (state, action) => {
+        state.status = "failed";
+        state.error = action.payload;
       })
       .addMatcher(
         (action) =>
@@ -254,7 +300,7 @@ const ordersSlice = createSlice({
             fetchWeekSales.pending.type,
           ].includes(action.type),
         (state) => {
-          state.stats.loading = true;
+          state.stats.status = "loading";
           state.stats.error = null;
         }
       )
@@ -267,7 +313,8 @@ const ordersSlice = createSlice({
           ].includes(action.type),
         (state, action) => {
           state.stats[action.payload.type] = action.payload.data;
-          state.stats.loading = false;
+          state.stats.status = "succeeded";
+          state.stats.error = null;
         }
       )
       .addMatcher(
@@ -278,7 +325,7 @@ const ordersSlice = createSlice({
             fetchWeekSales.rejected.type,
           ].includes(action.type),
         (state, action) => {
-          state.stats.loading = false;
+          state.stats.status = "failed";
           state.stats.error = action.payload;
         }
       );
@@ -291,8 +338,10 @@ export const {
   socketOrderAdded,
   socketOrderUpdated,
   socketOrderStatusChanged,
+  socketOrderDeleted,
   socketStatsUpdated,
   invalidateOrdersCache,
+  resetError,
 } = ordersSlice.actions;
 
 export default ordersSlice.reducer;

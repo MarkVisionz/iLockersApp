@@ -73,6 +73,11 @@ const serviceSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Business",
+    required: [true, "El ID del negocio es requerido"],
+  },
 });
 
 serviceSchema.index({ name: 1 });
@@ -87,7 +92,7 @@ serviceSchema.index({ createdAt: -1 });
 //   next();
 // });
 
-serviceSchema.pre("save", function(next) {
+serviceSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   // Limpieza condicional de campos
   if (this.type === "simple") {
@@ -95,7 +100,7 @@ serviceSchema.pre("save", function(next) {
   } else if (this.type === "sized") {
     this.price = undefined;
   }
-  
+
   next();
 });
 
