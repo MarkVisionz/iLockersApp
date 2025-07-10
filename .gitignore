@@ -32,11 +32,3 @@ backend/utils/firebase-admin.json
 # Archivos de IDE
 .vscode/
 .idea/
-
-# Archivos de pruebas o cobertura
-/coverage.DS_Store
-backend/.DS_Store
-backend/utils/firebase-admin.json
-node_modules/
-.env
-dist/n
