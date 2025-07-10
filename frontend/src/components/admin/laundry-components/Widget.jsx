@@ -1,65 +1,77 @@
 import styled from "styled-components";
 
 const Widget = ({ data }) => {
+  if (!data) {
+    console.warn("Widget received no data");
+    return null;
+  }
+
+  const { icon, digits = 0, isMoney, title, color, bgColor, percentage = 0 } = data;
+
   return (
     <StyledWidget>
-      <Icon color={data.color} bgcolor={data.bgColor}>
-        {data.icon}
+      <Icon color={color} bgColor={bgColor}>
+        {icon}
       </Icon>
       <Text>
         <h3>
-          {data.isMoney
-            ? "$" + data.digits?.toLocaleString()
-            : data.digits?.toLocaleString()}
+          {isMoney
+            ? `$${digits.toLocaleString("es-MX")}`
+            : digits.toLocaleString()}
         </h3>
-        <p>{data.title}</p>
+        <p>{title}</p>
       </Text>
-      {data.percentage < 0 ? (
-        <>
-          <Percentage isPositive={false}>
-            {Math.floor(data.percentage) + "%"}
-          </Percentage>
-        </>
-      ) : (
-        <>
-          <Percentage isPositive={true}>
-            {Math.floor(data.percentage) + "%"}
-          </Percentage>
-        </>
-      )}
+      <Percentage isPositive={percentage >= 0}>
+        {percentage >= 0
+          ? `+${Math.floor(percentage)}%`
+          : `${Math.floor(percentage)}%`}
+      </Percentage>
     </StyledWidget>
   );
 };
 
-export default Widget;
-
 const StyledWidget = styled.div`
   display: flex;
   align-items: center;
+  background: #fff;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex: 1;
+  min-width: 200px;
+  @media (max-width: 768px) {
+    min-width: 100%;
+  }
 `;
 
 const Icon = styled.div`
-  margin-right: 0.5rem;
+  margin-right: 0.75rem;
   padding: 0.5rem;
   color: ${({ color }) => color};
-  background: ${({ bgcolor }) => bgcolor};
-  border-radius: 3px;
-  font-size: 20px;
+  background: ${({ bgColor }) => bgColor};
+  border-radius: 4px;
+  font-size: 1.5rem;
 `;
 
 const Text = styled.div`
+  flex: 1;
   h3 {
-    font-weight: 900;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #333;
+    margin: 0;
   }
   p {
-    font-size: 14px;
-    color: rgb(234, 234, 255, 0.68);
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0.25rem 0 0;
   }
 `;
 
 const Percentage = styled.div`
-  margin-left: 0.5rem;
-  font-size: 14px;
-  color: ${({ isPositive }) =>
-    isPositive ? "rgb(114, 225, 40)" : "rgb(255, 77, 73)"};
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: ${({ isPositive }) => (isPositive ? "#00d532" : "#dc3545")};
 `;
+
+export default Widget;

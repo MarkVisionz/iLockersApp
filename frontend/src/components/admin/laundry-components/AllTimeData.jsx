@@ -1,53 +1,78 @@
-import { useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
 import styled from "styled-components";
-import { notesFetch } from "../../../features/notesSlice"; // Asegúrate de tener este thunk
+import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
+import { useMemo } from "react";
 
-const AllTimeData = () => {
-  const dispatch = useDispatch();
+const AllTimeData = ({ businessId }) => {
+  const { items: notes = [], status, error } = useSelector((state) => state.notes);
+  const { businesses } = useSelector((state) => state.auth);
 
-  useEffect(() => {
-    dispatch(notesFetch());
-  }, [dispatch]);
+  const isValidBusiness = businesses.some((b) => b._id === businessId);
 
-  const { items: notes, loading: notesLoading, error: notesError } = useSelector((state) => state.notes);
+  const filteredNotes = useMemo(() => {
+    const filtered = notes.filter((note) => note.businessId === businessId);
+    console.log(`Filtered ${filtered.length} notes for AllTimeData, businessId: ${businessId}`);
+    return filtered;
+  }, [notes, businessId]);
 
-  // Calcular el total de notas creadas
-  const totalNotes = notes.length;
+  const totalNotes = filteredNotes.length;
 
-  // Calcular el total de servicios (supongamos que cada nota tiene un campo 'services' que es un array)
-  const totalServices = notes.reduce((acc, note) => acc + note.services.length, 0);
+  const totalServices = filteredNotes.reduce(
+    (acc, note) => acc + (note.services?.length || 0),
+    0
+  );
 
-  // Calcular las ganancias totales
-  const calculateEarnings = () => {
-    let totalEarnings = 0;
-    notes.forEach((note) => {
-      totalEarnings += note.total;
-    });
-    return (totalEarnings).toLocaleString("en-US", { style: "currency", currency: "USD" });
-  };
+  const totalEarnings = filteredNotes.reduce(
+    (acc, note) => acc + (note.total || 0),
+    0
+  );
+
+  if (!isValidBusiness) {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>Negocio no encontrado o no autorizado</ErrorMessage>
+      </ErrorContainer>
+    );
+  }
+
+  if (status === "pending" && !filteredNotes.length) {
+    return <LoadingSpinner message="Cargando datos históricos..." />;
+  }
+
+  if (status === "rejected") {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>
+          Error al cargar datos: {error || "Por favor intenta de nuevo"}
+        </ErrorMessage>
+      </ErrorContainer>
+    );
+  }
 
   return (
     <Container>
-      <Title>All Time Data</Title>
+      <Title>Datos Históricos</Title>
       <Content>
-        {notesLoading ? (
-          <Loading>Loading...</Loading>
-        ) : notesError ? (
-          <Error>Error: {notesError}</Error>
+        {filteredNotes.length === 0 ? (
+          <NoData>No hay datos históricos disponibles</NoData>
         ) : (
           <>
             <Info>
-              <InfoTitle>Notas Creadas</InfoTitle>
+              <InfoTitle>Notas creadas</InfoTitle>
               <InfoData>{totalNotes}</InfoData>
             </Info>
             <Info>
-              <InfoTitle>Servicios</InfoTitle>
+              <InfoTitle>Servicios totales</InfoTitle>
               <InfoData>{totalServices}</InfoData>
             </Info>
             <Info>
-              <InfoTitle>Earnings</InfoTitle>
-              <InfoData>{calculateEarnings()}</InfoData>
+              <InfoTitle>Ganancias totales</InfoTitle>
+              <InfoData>
+                {totalEarnings.toLocaleString("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                })}
+              </InfoData>
             </Info>
           </>
         )}
@@ -56,51 +81,60 @@ const AllTimeData = () => {
   );
 };
 
-export default AllTimeData;
-
 const Container = styled.div`
-  background-color: rgb(48, 51, 78);
-  color: rgba(234, 234, 255, 0.87);
+  background: #fff;
+  color: #333;
   margin-top: 1.5rem;
-  border-radius: 5px;
-  padding: 1rem;
-  font-size: 14px;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
 const Title = styled.h3`
   margin-bottom: 1rem;
+  color: #333;
 `;
 
 const Content = styled.div`
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
 `;
 
 const Info = styled.div`
   display: flex;
-  margin-top: 1rem;
-  padding: 0.5rem;
-  border-radius: 3px;
-  background: rgba(38, 198, 249, 0.12);
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 4px;
+  background: #f8f9fa;
   &:nth-child(even) {
-    background: rgba(102, 108, 255, 0.12);
+    background: #e9ecef;
   }
 `;
 
 const InfoTitle = styled.div`
   flex: 1;
+  font-weight: 600;
 `;
 
 const InfoData = styled.div`
   flex: 1;
   font-weight: 700;
+  text-align: right;
 `;
 
-const Loading = styled.p`
-  margin-top: 1rem;
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
 `;
 
-const Error = styled.p`
-  margin-top: 1rem;
-  color: red;
+const NoData = styled.p`
+  text-align: center;
+  color: #666;
+  margin: 1rem 0;
 `;
+
+export default AllTimeData;

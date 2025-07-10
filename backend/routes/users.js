@@ -1,371 +1,422 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const User = require("../models/user");
-const { auth, isUser, isAdmin } = require("../middleware/auth");
-const moment = require("moment");
-const bcrypt = require("bcrypt");
-const Order = require("../models/order");
-const logger = require("../utils/logger");
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const admin = require('firebase-admin');
+const moment = require('moment');
+const logger = require('../utils/logger');
 
-// Mejorado: Endpoint para crear usuarios guest con manejo de errores más robusto
-router.post("/guest", async (req, res) => {
-  try {
-    const { email, phone, name } = req.body;
+const User = require('../models/user');
+const LaundryNote = require('../models/laundryNote');
+const { auth, isUser, isAdmin, guestAuth } = require('../middleware/auth');
 
-    // Datos mínimos para guest
-    const guestData = {
-      isGuest: true,
-      authProvider: "guest",
-      // Usar undefined en lugar de null para campos opcionales
-      email: email && typeof email === "string" && email.trim() ? email.trim().toLowerCase() : undefined,
-      name: name && typeof name === "string" && name.trim() ? name.trim() : "Invitado",
-      phone: phone && typeof phone === "string" && phone.trim() ? phone.trim() : undefined
-    };
+const generateVerificationToken = (userId) =>
+  jwt.sign({ userId, type: 'verify' }, process.env.JWT_SECRET_KEY, { expiresIn: '24h' });
 
-    // Validación manual de teléfono si se proporciona
-    if (guestData.phone && !/^\+?\d{10,15}$/.test(guestData.phone)) {
-      return res.status(400).json({
-        code: "INVALID_PHONE",
-        message: "Formato de teléfono inválido. Use +52 seguido de 10 dígitos",
-      });
-    }
-
-    // Validación manual de email si se proporciona
-    if (guestData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestData.email)) {
-      return res.status(400).json({
-        code: "INVALID_EMAIL",
-        message: "Formato de email inválido",
-      });
-    }
-
-    // Crear usuario guest
-    const guest = new User(guestData);
-    const savedGuest = await guest.save();
-
-    logger.info(`Usuario guest creado exitosamente`, {
-      guestId: savedGuest._id,
-      email: savedGuest.email,
-      name: savedGuest.name
-    });
-
-    res.status(201).json({
-      success: true,
-      guestId: savedGuest._id, // Cambiado para usar _id en lugar de guestId
-      expiresAt: savedGuest.guestExpiresAt,
-      email: savedGuest.email,
-      name: savedGuest.name,
-    });
-  } catch (err) {
-    // Log detallado del error
-    logger.error("Error detallado en create-guest", {
-      errorName: err.name,
-      errorMessage: err.message,
-      errorCode: err.code,
-      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-      bodyData: req.body
-    });
-
-    // Manejo específico de errores de MongoDB
-    if (err.name === "MongoError" && err.code === 11000) {
-      return res.status(409).json({
-        code: "DUPLICATE_KEY",
-        message: "El email o guestId ya está en uso",
-        field: err.keyValue ? Object.keys(err.keyValue)[0] : "desconocido"
-      });
-    }
-
-    // Manejo de errores de validación de Mongoose
-    if (err.name === "ValidationError") {
-      const errors = Object.values(err.errors).map(e => ({
-        field: e.path,
-        message: e.message
-      }));
-      return res.status(400).json({
-        code: "VALIDATION_ERROR",
-        message: "Error de validación",
-        errors
-      });
-    }
-
-    // Error genérico
-    res.status(500).json({
-      code: "SERVER_ERROR",
-      message: "Error interno del servidor al crear usuario guest",
-      detail: process.env.NODE_ENV === "development" ? err.message : undefined
-    });
-  }
-});
-
-// Convert guest to regular user
-router.post("/convert-guest", async (req, res) => {
-  try {
-    const { guestId, email, password } = req.body;
-
-    const guest = await User.findOne({ guestId, isGuest: true });
-    if (!guest) {
-      return res.status(404).json({
-        success: false,
-        message: "Guest no encontrado",
-        code: "GUEST_NOT_FOUND",
-      });
-    }
-
-    await guest.convertToRegular(email, password);
-
-    await Order.updateMany(
-      { guestId },
-      { $set: { userId: guest._id, isGuestOrder: false } }
-    );
-
-    logger.info("Usuario guest convertido a regular", { guestId, userId: guest._id });
-
-    res.status(200).json({
-      success: true,
-      message: "¡Cuenta registrada exitosamente!",
-      userId: guest._id,
-    });
-  } catch (err) {
-    logger.error("Error en convert-guest", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-    });
-    res.status(500).json({
-      success: false,
-      message: err.message,
-      code: "CONVERSION_ERROR",
-    });
-  }
-});
-
-// GET ALL USERS
-router.get("/", isAdmin, async (req, res) => {
-  try {
-    const users = await User.find().select("-password").sort({ _id: -1 });
-    res.status(200).send(users);
-  } catch (err) {
-    logger.error("Error al obtener usuarios", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-    });
-    res.status(500).send(err);
-  }
-});
-
-// DELETE USER
-router.delete("/:id", isAdmin, async (req, res) => {
-  try {
-    const deletedUser = await User.findByIdAndDelete(req.params.id);
-    if (!deletedUser)
-      return res.status(404).json({ message: "Usuario no encontrado" });
-
-    logger.info("Usuario eliminado", { userId: req.params.id });
-    res.status(200).send(deletedUser);
-  } catch (err) {
-    logger.error("Error al eliminar usuario", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-    });
-    res.status(500).send(err);
-  }
-});
-
-// GET USER BY ID
-router.get("/find/:id", isUser, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select("-password");
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    res.status(200).json({
+const signJwt = (user) =>
+  jwt.sign(
+    {
       _id: user._id,
-      name: user.name,
       email: user.email,
       isAdmin: user.isAdmin,
-      profileImage: user.profileImage,
       authProvider: user.authProvider,
+      isVerified: user.isVerified,
+      role: user.role,
+    },
+    process.env.JWT_SECRET_KEY
+  );
+
+// 🔄 Convertir usuario invitado a regular
+router.post('/convert-guest', guestAuth, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { email, password, role } = req.body;
+
+    if (!email || !password || !['customer', 'owner'].includes(role)) {
+      throw new Error('Campos inválidos');
+    }
+
+    const existingUser = await User.findOne({ email, isGuest: false }).session(session);
+    if (existingUser) throw new Error('El correo ya está en uso');
+
+    const user = await User.findByIdAndUpdate(
+      req.guest._id,
+      {
+        email: email.trim().toLowerCase(),
+        password: await bcrypt.hash(password, 10),
+        isGuest: false,
+        authProvider: 'password',
+        isVerified: false,
+        role,
+        registrationStep: role === 'owner' ? 'email_verification' : 'completed',
+        $unset: { guestExpiresAt: '' },
+      },
+      { new: true, session }
+    );
+
+    await LaundryNote.updateMany(
+      { guestId: req.guest._id },
+      { $set: { userId: user._id, isGuestOrder: false }, $unset: { guestId: '' } },
+      { session }
+    );
+
+    const verificationToken = generateVerificationToken(user._id);
+
+    await session.commitTransaction();
+    res.status(200).json({
+      success: true,
+      token: signJwt(user),
+      user,
+      requiresVerification: true,
     });
-  } catch (err) {
-    logger.error("Error al obtener usuario por ID", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-    });
-    res.status(500).json({ message: "Error interno del servidor" });
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Error en convert-guest:', { message: error.message });
+    res.status(500).json({ success: false, message: 'Error al convertir usuario', code: 'CONVERSION_ERROR' });
+  } finally {
+    session.endSession();
   }
 });
 
-// UPDATE USER
-router.put("/:id", isUser, async (req, res) => {
+// 🔐 Registro con Firebase/email/password
+router.post('/firebase-register', async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const {
-      name,
-      email,
-      newPassword,
-      currentPassword,
-      profileImage,
-      authProvider,
-      fromResetFlow,
-    } = req.body;
+    const { email, name, password, role, firebaseUid } = req.body;
 
-    const user = await User.findById(req.params.id).select("+password");
-
-    if (!user) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+    if (!email || !name || !password || !['customer', 'owner'].includes(role)) {
+      throw new Error('Faltan campos requeridos o rol inválido');
     }
 
-    if (fromResetFlow && authProvider === "password") {
-      if (!["google.com", "facebook.com"].includes(user.authProvider)) {
-        return res.status(400).json({
-          message:
-            "Este flujo solo aplica para usuarios autenticados con Google o Facebook",
-        });
-      }
+    let user = await User.findOne({ email }).session(session);
 
-      user.authProvider = "password";
-      const updatedUser = await user.save();
+    if (user && !user.isGuest) {
+      throw new Error('El correo ya está registrado');
+    }
 
-      logger.info(
-        `Usuario cambió authProvider a "password" mediante fromResetFlow`,
-        { userId: user._id }
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "Método de autenticación actualizado correctamente",
-        data: {
-          _id: updatedUser._id,
-          name: updatedUser.name,
-          email: updatedUser.email,
-          isAdmin: updatedUser.isAdmin,
-          profileImage: updatedUser.profileImage,
-          authProvider: updatedUser.authProvider,
+    if (user?.isGuest) {
+      user = await User.findByIdAndUpdate(
+        user._id,
+        {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password: await bcrypt.hash(password, 10),
+          isVerified: false,
+          isGuest: false,
+          authProvider: 'password',
+          role,
+          registrationStep: role === 'owner' ? 'email_verification' : 'completed',
+          firebaseUid,
+          $unset: { guestExpiresAt: '' },
         },
+        { new: true, session }
+      );
+    } else {
+      user = new User({
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        password: await bcrypt.hash(password, 10),
+        isVerified: false,
+        isGuest: false,
+        authProvider: 'password',
+        role,
+        registrationStep: role === 'owner' ? 'email_verification' : 'completed',
+        firebaseUid
+      });
+      await user.save({ session });
+    }
+
+    await LaundryNote.updateMany(
+      { 'contact.email': email, userId: null, isGuestOrder: true },
+      { $set: { userId: user._id, isGuestOrder: false }, $unset: { guestId: '' } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    res.status(201).json({
+      success: true,
+      token: signJwt(user),
+      user,
+      requiresVerification: true,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Register Error:', { message: error.message });
+    res.status(500).json({ success: false, message: error.message || 'Error al registrar usuario' });
+  } finally {
+    session.endSession();
+  }
+});
+
+// 🔑 Login con Firebase
+router.post('/firebase-login', async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { token, name: userName } = req.body;
+    if (!token) throw new Error('Token requerido');
+
+    const decoded = await admin.auth().verifyIdToken(token, true);
+    const { email, email_verified } = decoded;
+    const authProvider = decoded.firebase?.sign_in_provider || 'password';
+    const isOAuth = ['google.com', 'facebook.com'].includes(authProvider);
+    const isVerified = isOAuth || email_verified;
+
+    if (!isVerified && authProvider === 'password') {
+      throw new Error('Email no verificado');
+    }
+
+    let user = await User.findOne({ email }).session(session);
+    const displayName = userName || decoded.name || email.split('@')[0];
+    let isNew = false;
+
+    if (!user) {
+      user = new User({
+        name: displayName,
+        email,
+        password: 'firebase_oauth',
+        isVerified,
+        isGuest: false,
+        authProvider,
+        role: 'customer',
+        registrationStep: 'completed',
+      });
+      await user.save({ session });
+      isNew = true;
+    } else if (user.isGuest) {
+      user = await User.findByIdAndUpdate(
+        user._id,
+        {
+          authProvider,
+          isGuest: false,
+          isVerified,
+          name: displayName,
+          password: 'firebase_oauth',
+          $unset: { guestExpiresAt: '' },
+        },
+        { new: true, session }
+      );
+    } else if (userName && user.name !== userName) {
+      user = await User.findByIdAndUpdate(user._id, { name: userName }, { new: true, session });
+    }
+
+    await LaundryNote.updateMany(
+      { 'contact.email': email, userId: null, isGuestOrder: true },
+      { $set: { userId: user._id, isGuestOrder: false }, $unset: { guestId: '' } },
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    if (isNew && req.io) {
+      req.io.emit('userCreated', {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        authProvider: user.authProvider,
+        role: user.role,
       });
     }
 
-    if (email && email !== user.email) {
-      const emailInUse = await User.findOne({ email });
-      if (emailInUse) {
-        return res.status(400).json({ message: "Ese correo ya está en uso." });
-      }
-    }
-
-    if (authProvider && authProvider !== user.authProvider) {
-      if (
-        authProvider === "password" &&
-        ["google.com", "facebook.com"].includes(user.authProvider)
-      ) {
-        if (!newPassword) {
-          return res.status(400).json({
-            message:
-              "Se requiere una nueva contraseña para cambiar a autenticación por email/contraseña",
-          });
-        }
-        user.authProvider = "password";
-      } else {
-        return res.status(403).json({
-          message: "Cambio de método de autenticación no permitido",
-        });
-      }
-    }
-
-    if (newPassword) {
-      if (user.authProvider !== "password") {
-        return res.status(403).json({
-          message:
-            "No puedes cambiar la contraseña en este método de autenticación",
-        });
-      }
-
-      if (!currentPassword) {
-        return res.status(400).json({
-          message: "Debes ingresar tu contraseña actual para cambiarla",
-        });
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res
-          .status(401)
-          .json({ message: "Contraseña actual incorrecta" });
-      }
-
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(newPassword, salt);
-    }
-
-    user.name = name && name.trim() ? name.trim() : user.name;
-    user.email = email && email.trim() ? email.trim().toLowerCase() : user.email;
-    user.profileImage = profileImage || user.profileImage;
-
-    const updatedUser = await user.save();
-
-    logger.info("Usuario actualizado", { userId: user._id });
-
-    res.status(200).json({
-      success: true,
-      message: "Perfil actualizado correctamente",
-      data: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        isAdmin: updatedUser.isAdmin,
-        profileImage: updatedUser.profileImage,
-        authProvider: updatedUser.authProvider,
-      },
-    });
-  } catch (err) {
-    logger.error("Error al actualizar usuario", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
-    });
-    res.status(500).json({
-      success: false,
-      message: "Error al actualizar el perfil",
-      error: err.message,
-    });
+    res.status(200).json({ success: true, token: signJwt(user), user });
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Login Error:', { message: error.message });
+    res.status(500).json({ success: false, message: error.message || 'Error en login' });
+  } finally {
+    session.endSession();
   }
 });
 
-// GET USER STATS
-router.get("/stats", isAdmin, async (req, res) => {
-  const previousMonth = moment()
-    .month(moment().month() - 1)
-    .set("date", 1)
-    .format("YYYY-MM-DD HH:mm:ss");
+// 📩 Verificación de email
+router.post('/verify-email', async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const users = await User.aggregate([
-      {
-        $match: { createdAt: { $gte: new Date(previousMonth) } },
-      },
-      {
-        $project: {
-          month: { $month: "$createdAt" },
-        },
-      },
-      {
-        $group: {
-          _id: "$month",
-          total: { $sum: 1 },
-        },
-      },
-    ]);
+    const { email } = req.body;
+    const user = await User.findOne({ email }).session(session);
+    
+    if (!user) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    }
 
-    res.status(200).send(users);
-  } catch (err) {
-    logger.error("Error al obtener estadísticas de usuarios", {
-      message: err.message,
-      name: err.name,
-      stack: err.stack,
+    const firebaseUser = await admin.auth().getUserByEmail(email);
+    
+    if (!firebaseUser.emailVerified) {
+      await session.abortTransaction();
+      return res.status(400).json({ success: false, message: 'Email no verificado en Firebase' });
+    }
+
+    const nextStep = user.role === 'owner' ? 'business_setup' : 'completed';
+    
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      { 
+        isVerified: true,
+        registrationStep: nextStep,
+        lastLogin: new Date()
+      },
+      { new: true, session }
+    );
+
+    const tokenJWT = signJwt(updatedUser);
+
+    await session.commitTransaction();
+    res.status(200).json({ 
+      success: true, 
+      token: tokenJWT, 
+      user: updatedUser,
+      nextStep
     });
-    res.status(500).send(err);
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Verify Email Error:', { message: error.message });
+    res.status(500).json({ success: false, message: error.message || 'Error al verificar email' });
+  } finally {
+    session.endSession();
+  }
+});
+
+// 🔄 Convertir usuario invitado a regular
+router.post('/convert-guest', guestAuth, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { email, password, role } = req.body;
+
+    if (!email || !password || !['customer', 'owner'].includes(role)) {
+      throw new Error('Campos inválidos');
+    }
+
+    const existingUser = await User.findOne({ email, isGuest: false }).session(session);
+    if (existingUser) throw new Error('El correo ya está en uso');
+
+    const user = await User.findByIdAndUpdate(
+      req.guest._id,
+      {
+        email: email.trim().toLowerCase(),
+        password: await bcrypt.hash(password, 10),
+        isGuest: false,
+        authProvider: 'password',
+        isVerified: false,
+        role,
+        registrationStep: role === 'owner' ? 'email_verification' : 'completed',
+        $unset: { guestExpiresAt: '' },
+      },
+      { new: true, session }
+    );
+
+    await LaundryNote.updateMany(
+      { guestId: req.guest._id },
+      { $set: { userId: user._id, isGuestOrder: false }, $unset: { guestId: '' } },
+      { session }
+    );
+
+    const verificationToken = generateVerificationToken(user._id);
+    // TODO: enviar email
+
+    await session.commitTransaction();
+    res.status(200).json({
+      success: true,
+      token: signJwt(user),
+      user,
+      requiresVerification: true,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    logger.error('Error en convert-guest:', { message: error.message });
+    res.status(500).json({ success: false, message: 'Error al convertir usuario', code: 'CONVERSION_ERROR' });
+  } finally {
+    session.endSession();
+  }
+});
+
+// 👤 CRUD y stats
+router.get('/', isAdmin, async (req, res) => {
+  const users = await User.find().select('-password').sort({ _id: -1 });
+  res.status(200).json({ success: true, users });
+});
+
+router.delete('/:id', isAdmin, async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+  if (user.isAdmin) {
+    return res.status(403).json({ success: false, message: 'No puedes eliminar un administrador' });
+  }
+
+  await User.deleteOne({ _id: user._id });
+  res.status(200).json({ success: true, message: 'Usuario eliminado' });
+});
+
+router.put('/:id', isUser, async (req, res) => {
+  const { name, email, newPassword, currentPassword, profileImage } = req.body;
+  const user = await User.findById(req.params.id).select('+password');
+
+  if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+  if (email && email !== user.email) {
+    const emailInUse = await User.findOne({ email });
+    if (emailInUse) return res.status(400).json({ success: false, message: 'Email en uso' });
+    user.email = email.trim().toLowerCase();
+  }
+
+  if (newPassword && user.authProvider === 'password') {
+    if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ success: false, message: 'Contraseña actual inválida' });
+    }
+    user.password = await bcrypt.hash(newPassword, 10);
+  }
+
+  if (name) user.name = name.trim();
+  if (profileImage) user.profileImage = profileImage;
+
+  await user.save();
+
+  res.status(200).json({ success: true, user });
+});
+
+router.get('/stats', isAdmin, async (req, res) => {
+  const previousMonth = moment().subtract(1, 'month').startOf('month').toDate();
+
+  const stats = await User.aggregate([
+    { $match: { createdAt: { $gte: previousMonth } } },
+    { $project: { month: { $month: '$createdAt' } } },
+    { $group: { _id: '$month', total: { $sum: 1 } } },
+  ]);
+
+  res.status(200).json({ success: true, stats });
+});
+
+// GET /api/users/:id - Obtener datos de un usuario específico
+router.get('/:id', auth, async (req, res, next) => {
+  try {
+    // Verificar que el usuario autenticado solo pueda acceder a sus propios datos
+    if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
+      return next(createError(403, 'Acceso denegado'));
+    }
+
+    const user = await User.findById(req.params.id)
+      .populate('businesses')
+      .select('-password -verificationToken -resetPasswordToken -resetPasswordExpires');
+
+    if (!user) {
+      return next(createError(404, 'Usuario no encontrado'));
+    }
+
+    res.json({ user });
+  } catch (error) {
+    next(createError(500, 'Error al obtener usuario'));
   }
 });
 

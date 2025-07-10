@@ -1,12 +1,14 @@
-// src/components/Auth/Register.jsx
-import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useFirebaseRegisterForm } from "./Hooks/useFirebaseRegisterForm";
-import { LoadingSpinner, ErrorMessage } from "../LoadingAndError";
-import styled from "styled-components";
 import { FiEye, FiEyeOff } from "react-icons/fi";
-import { useSelector } from "react-redux";
+import { Link } from "react-router-dom";
+import { useFirebaseRegisterForm } from "../auth/Hooks/useFirebaseRegisterForm";
+import { LoginBackground } from "../LoginBackground";
+import { ErrorMessage, LoadingSpinner } from "../LoadingAndError";
+import GoogleLoginButton from "../auth/GoogleLoginButton";
+import FacebookLoginButton from "../auth/FacebookLoginButton";
+import AppleLoginButton from "../auth/AppleLoginButton";
+import styled from "styled-components";
+
 
 import {
   BackgroundWrapper,
@@ -18,93 +20,56 @@ import {
   TogglePasswordButton,
 } from "./StyledForm";
 
-import { LoginBackground } from "../LoginBackground";
-import GoogleLoginButton from "./GoogleLoginButton";
-import AppleLoginButton from "./AppleLoginButton";
-import FacebookLoginButton from "./FacebookLoginButton";
-
-const Register = () => {
-  const navigate = useNavigate();
-  const verificationEmail = useSelector((state) => state.auth.verificationEmail);
-
+const BusinessRegister = () => {
   const {
     formData,
     errors,
     touched,
-    isSubmitting,
     showPassword,
-    setShowPassword,
+    isSubmitting,
     handleInputChange,
     handleBlur,
     handleSubmit,
-  } = useFirebaseRegisterForm("customer"); // 👈 Asegurar role="customer"
-
-  useEffect(() => {
-    if (verificationEmail) {
-      navigate("/verify-email");
-    }
-  }, [verificationEmail, navigate]);
-
-  const hasFieldErrors = Object.keys(errors).some(
-    (key) => key !== "form" && errors[key]
-  );
+    setShowPassword,
+  } = useFirebaseRegisterForm("owner");
 
   return (
     <LoginBackground>
       <BackgroundWrapper>
         <PageWrapper>
-          <motion.div
-            key="form"
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <Form
-              onSubmit={handleSubmit}
-              className={errors.form || hasFieldErrors ? "shake" : ""}
-              aria-label="Formulario de registro"
-            >
-              <Title>Crear cuenta</Title>
-              <Subtitle>Regístrate para comenzar con Easy Laundry</Subtitle>
+          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
+            <Form onSubmit={handleSubmit} aria-label="Business Register Form">
+              <Title>Registrar Lavandería</Title>
+              <Subtitle>Únete como propietario</Subtitle>
 
               <FloatingInput>
                 <input
                   type="text"
                   name="name"
-                  id="name"
                   value={formData.name}
                   onChange={handleInputChange}
                   onBlur={handleBlur}
                   placeholder=" "
-                  aria-required="true"
                   aria-invalid={!!errors.name}
-                  aria-describedby={errors.name ? "name-error" : undefined}
                   className={formData.name ? "filled" : ""}
                 />
-                <label htmlFor="name">Nombre completo</label>
-                {errors.name && (
-                  <ErrorMessage id="name-error" message={errors.name} />
-                )}
+                <label htmlFor="name">Nombre Completo</label>
+                {touched.name && errors.name && <ErrorMessage message={errors.name} />}
               </FloatingInput>
 
               <FloatingInput>
                 <input
                   type="email"
                   name="email"
-                  id="email"
                   value={formData.email}
                   onChange={handleInputChange}
                   onBlur={handleBlur}
                   placeholder=" "
-                  aria-required="true"
                   aria-invalid={!!errors.email}
-                  aria-describedby={errors.email ? "email-error" : undefined}
                   className={formData.email ? "filled" : ""}
                 />
-                <label htmlFor="email">Correo electrónico</label>
-                {errors.email && (
-                  <ErrorMessage id="email-error" message={errors.email} />
-                )}
+                <label htmlFor="email">Correo Electrónico</label>
+                {touched.email && errors.email && <ErrorMessage message={errors.email} />}
               </FloatingInput>
 
               <FloatingInput>
@@ -112,54 +77,31 @@ const Register = () => {
                   <input
                     type={showPassword ? "text" : "password"}
                     name="password"
-                    id="password"
                     value={formData.password}
                     onChange={handleInputChange}
                     onBlur={handleBlur}
                     placeholder=" "
-                    aria-required="true"
                     aria-invalid={!!errors.password}
-                    aria-describedby={
-                      errors.password ? "password-error" : undefined
-                    }
                     className={formData.password ? "filled" : ""}
                   />
                   <label htmlFor="password">Contraseña</label>
-                  <TogglePasswordButton
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label={
-                      showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
-                    }
-                  >
+                  <TogglePasswordButton type="button" onClick={() => setShowPassword(!showPassword)}>
                     {showPassword ? <FiEyeOff /> : <FiEye />}
                   </TogglePasswordButton>
                 </PasswordWrapper>
-                {errors.password && (
-                  <ErrorMessage id="password-error" message={errors.password} />
-                )}
+                {touched.password && errors.password && <ErrorMessage message={errors.password} />}
               </FloatingInput>
 
-              <ButtonLogin disabled={isSubmitting} type="submit">
-                {isSubmitting ? (
-                  <LoadingSpinner message="Registrando..." />
-                ) : (
-                  "Crear cuenta"
-                )}
+              <ButtonLogin type="submit" disabled={isSubmitting}>
+                {isSubmitting ? <LoadingSpinner message="Registrando..." /> : "Crear cuenta de negocio"}
               </ButtonLogin>
-              
-              <SignupPrompt>
-                ¿Tienes un negocio?{" "}
-                <Link to="/register-business">Regístrate como propietario</Link>
-              </SignupPrompt>
 
               {errors.form && <ErrorMessage message={errors.form} />}
 
-              <Divider>o continúa con </Divider>
-
-              <GoogleLoginButton role="customer" />
-              <FacebookLoginButton role="customer" />
-              <AppleLoginButton role="customer" />
+              <Divider>o continúa con</Divider>
+              <GoogleLoginButton role="owner" />
+              <FacebookLoginButton role="owner" />
+              <AppleLoginButton role="owner" />
 
               <SignupPrompt>
                 ¿Ya tienes una cuenta? <Link to="/login">Inicia sesión</Link>
@@ -172,9 +114,9 @@ const Register = () => {
   );
 };
 
-export default Register;
+export default BusinessRegister;
 
-// Estilos locales (mantenidos exactamente igual)
+
 const Title = styled.h2`
   font-size: 1.6rem;
   text-align: center;
@@ -184,31 +126,6 @@ const Subtitle = styled.p`
   text-align: center;
   font-size: 0.95rem;
   color: #888;
-`;
-
-const Divider = styled.div`
-  text-align: center;
-  color: #aaa;
-  font-size: 0.85rem;
-  position: relative;
-
-  &::before,
-  &::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: 40%;
-    height: 1px;
-    background: #ddd;
-  }
-
-  &::before {
-    left: 0;
-  }
-
-  &::after {
-    right: 0;
-  }
 `;
 
 const FloatingInput = styled.label`
@@ -295,5 +212,30 @@ const FloatingInput = styled.label`
     margin-top: 0.25rem;
     font-size: 0.8rem;
     color: #dc3545;
+  }
+`;
+
+const Divider = styled.div`
+  text-align: center;
+  color: #aaa;
+  font-size: 0.85rem;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: #ddd;
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
   }
 `;

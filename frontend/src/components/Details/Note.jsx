@@ -15,8 +15,8 @@ const Note = () => {
   );
 
   useEffect(() => {
-    dispatch(fetchNoteById(params.id));
-  }, [dispatch, params.id]);
+    dispatch(fetchNoteById({ id: params.id, businessId: params.businessId }));
+  }, [dispatch, params.id, params.businessId]);
 
   const formatServiceName = (name) => {
     const formattedName = name
@@ -28,52 +28,58 @@ const Note = () => {
     return formattedName.replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
-  const renderServices = (services, parentName = "") => {
-    if (!services)
+  const renderServices = (services, suavitelShots, suavitelPrice) => {
+    if (!services || !Array.isArray(services) || services.length === 0) {
       return {
         elements: [<NoServices key="no-services">No hay servicios</NoServices>],
         subtotal: 0,
       };
+    }
 
     let subtotal = 0;
-    const elements = Object.entries(services).flatMap(
-      ([serviceName, details]) => {
-        const fullServiceName = parentName + serviceName;
-        if (details?.quantity > 0) {
-          const totalPrice = details.unitPrice * details.quantity;
-          subtotal += totalPrice;
-          return (
-            <ServiceItem key={fullServiceName}>
-              <ServiceName>{formatServiceName(fullServiceName)}</ServiceName>
-              <ServiceInfo>
-                <ServiceQuantity>
-                  x{details.quantity}{" "}
-                  <UnitPrice>
-                    (${details.unitPrice.toLocaleString("es-MX")}/u)
-                  </UnitPrice>
-                </ServiceQuantity>
-                <ServicePrice>
-                  ${totalPrice.toLocaleString("es-MX")}
-                </ServicePrice>
-              </ServiceInfo>
-            </ServiceItem>
-          );
-        } else if (typeof details === "object" && details !== null) {
-          const { elements: nestedElements, subtotal: nestedSubtotal } =
-            renderServices(details, fullServiceName + " ");
-          subtotal += nestedSubtotal;
-          return nestedElements;
-        }
-        return null;
-      }
-    );
+    const elements = services.map((service, index) => {
+      const totalPrice = service.price * service.quantity;
+      subtotal += totalPrice;
+      return (
+        <ServiceItem key={`${service.serviceId}-${index}`}>
+          <ServiceName>{formatServiceName(service.name)}</ServiceName>
+          <ServiceInfo>
+            <ServiceQuantity>
+              x{service.quantity}{" "}
+              <UnitPrice>(${service.price.toLocaleString("es-MX")}/u)</UnitPrice>
+            </ServiceQuantity>
+            <ServicePrice>
+              ${totalPrice.toLocaleString("es-MX")}
+            </ServicePrice>
+          </ServiceInfo>
+        </ServiceItem>
+      );
+    });
+
+    if (suavitelShots > 0) {
+      const suavitelTotal = suavitelShots * suavitelPrice;
+      elements.push(
+        <ServiceItem key="suavitel">
+          <ServiceName>Suavitel</ServiceName>
+          <ServiceInfo>
+            <ServiceQuantity>
+              x{suavitelShots}{" "}
+              <UnitPrice>(${suavitelPrice.toLocaleString("es-MX")}/shot)</UnitPrice>
+            </ServiceQuantity>
+            <ServicePrice>
+              ${suavitelTotal.toLocaleString("es-MX")}
+            </ServicePrice>
+          </ServiceInfo>
+        </ServiceItem>
+      );
+      subtotal += suavitelTotal;
+    }
 
     return { elements, subtotal };
   };
 
-  const renderServiceSection = (services, suavitelDesired, total) => {
-    const { elements, subtotal } = renderServices(services);
-    const suavitelCost = suavitelDesired ? total - subtotal : 0;
+  const renderServiceSection = (services, suavitelDesired, suavitelShots, suavitelPrice, total) => {
+    const { elements, subtotal } = renderServices(services, suavitelShots, suavitelPrice);
 
     return (
       <Services>
@@ -83,12 +89,6 @@ const Note = () => {
             <PriceLabel>Subtotal:</PriceLabel>
             <PriceValue>${subtotal.toLocaleString("es-MX")}</PriceValue>
           </PriceRow>
-          {suavitelDesired && suavitelCost > 0 && (
-            <PriceRow>
-              <PriceLabel>Suavitel:</PriceLabel>
-              <PriceValue>${suavitelCost.toLocaleString("es-MX")}</PriceValue>
-            </PriceRow>
-          )}
           <PriceRow isTotal>
             <PriceLabel>Total:</PriceLabel>
             <PriceValue>${total.toLocaleString("es-MX")}</PriceValue>
@@ -123,7 +123,7 @@ const Note = () => {
               <FolioBadge>#</FolioBadge>
               <FolioText>{currentNote.folio}</FolioText>
             </TitleContainer>
-            <BackButton onClick={() => navigate("/admin/notes-summary")}>
+            <BackButton onClick={() => navigate(`/owner/local-summary/${currentNote.businessId}`)}>
               <ArrowBackIcon size={16} />
               Volver
             </BackButton>
@@ -166,7 +166,7 @@ const Note = () => {
               </DetailItem>
               <DetailItem>
                 <DetailLabel>Teléfono:</DetailLabel>
-                <DetailValue>{currentNote.phoneNumber || "N/A"}</DetailValue>
+                <DetailValue>+{currentNote.phoneNumber || "N/A"}</DetailValue>
               </DetailItem>
               <DetailItem>
                 <DetailLabel>Fecha:</DetailLabel>
@@ -204,6 +204,8 @@ const Note = () => {
             {renderServiceSection(
               currentNote.services,
               currentNote.suavitelDesired,
+              currentNote.suavitelShots || 0,
+              currentNote.suavitelPrice || 15,
               currentNote.total
             )}
           </Section>

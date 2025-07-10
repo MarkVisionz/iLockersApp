@@ -4,6 +4,7 @@ import setupLaundrySocketListeners from "./laundryNoteSocketListeners";
 import setupServiceSocketListeners from "./ServiceSocketListeners";
 import setupUsersSocketListeners from "./UsersSocketListeners";
 import socket from "../socket";
+import setupBusinessSocketListeners from "./BusinessSocketListeners";
 
 const setupAllSocketListeners = (dispatch) => {
   const listeners = [
@@ -11,7 +12,8 @@ const setupAllSocketListeners = (dispatch) => {
     setupOrdersSocketListeners,
     setupLaundrySocketListeners,
     setupServiceSocketListeners,
-    setupUsersSocketListeners
+    setupUsersSocketListeners,
+    setupBusinessSocketListeners,
   ].filter(Boolean);
 
   if (!socket.connected) {

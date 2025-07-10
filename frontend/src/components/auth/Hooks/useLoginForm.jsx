@@ -2,11 +2,10 @@ import { useState } from "react";
 import { validateEmail } from "../../../features/validators";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth as firebaseAuth } from "../../../features/firebase-config";
-import axios from "axios";
-import { url } from "../../../features/api";
+import { loginWithFirebaseToken } from "../../../services/authApiService";
 import { loginUserSuccess } from "../../../features/authSlice";
 
-export const useLoginForm = (dispatch, navigate) => {
+export const useLoginForm = (dispatch, navigate, onLoginSuccess) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({ email: "", password: "", form: "" });
   const [touched, setTouched] = useState({ email: false, password: false });
@@ -53,9 +52,8 @@ export const useLoginForm = (dispatch, navigate) => {
   };
 
   const handleBackendError = (error) => {
-    const res = error?.response?.data;
-    const msg = res?.message || "Error desconocido";
-    console.log("Backend error:", { error, res, msg }); // Log temporal para depuración
+    const msg = error.message || "Error desconocido";
+    console.log("Backend error:", { error, msg });
 
     if (msg.includes("bloqueada")) {
       setErrors({ email: "", password: "", form: msg });
@@ -65,8 +63,8 @@ export const useLoginForm = (dispatch, navigate) => {
         password: "",
         form: "Correo ya registrado con otro método de autenticación",
       });
-    } else if (res?.remainingAttempts !== undefined) {
-      setRemainingAttempts(res.remainingAttempts);
+    } else if (error.data?.remainingAttempts !== undefined) {
+      setRemainingAttempts(error.data.remainingAttempts);
       setErrors({
         email: "",
         password: "Contraseña incorrecta",
@@ -76,7 +74,7 @@ export const useLoginForm = (dispatch, navigate) => {
       setErrors({
         email: "",
         password: "Contraseña incorrecta",
-        form: "Correo o contraseña incorrectos",
+        form: msg || "Correo o contraseña incorrectos",
       });
     } else {
       setErrors({
@@ -95,10 +93,15 @@ export const useLoginForm = (dispatch, navigate) => {
   };
 
   const handleFirebaseLogin = async () => {
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      console.log("Validación del formulario fallida");
+      return;
+    }
 
     try {
       setIsSubmitting(true);
+      console.log("Iniciando login con Firebase:", { email: formData.email });
+
       const userCredential = await signInWithEmailAndPassword(
         firebaseAuth,
         formData.email,
@@ -107,21 +110,26 @@ export const useLoginForm = (dispatch, navigate) => {
       const user = userCredential.user;
       const token = await user.getIdToken(true);
 
-      const response = await axios.post(`${url}/auth/firebase-login`, {
-        token,
-        name: user.displayName || formData.email.split("@")[0],
+      const response = await loginWithFirebaseToken(token, user.displayName || formData.email.split("@")[0]);
+      console.log("Login exitoso:", {
+        token: response.token ? `Presente (${response.token.substring(0, 20)}...)` : "Ausente",
+        userId: response.user?._id,
+        role: response.user?.role,
+        defaultBusiness: response.user?.defaultBusiness,
+        businesses: response.user?.businesses,
+        authProvider: response.user?.authProvider,
+        fullResponse: response,
       });
 
-      localStorage.setItem("token", response.data.token);
-      dispatch(loginUserSuccess(response.data.token));
+      dispatch(loginUserSuccess({ token: response.token, user: response.user }));
+      onLoginSuccess(response.user);
       resetForm();
-      navigate("/cart");
     } catch (error) {
       console.log("Firebase error:", {
         code: error.code,
         message: error.message,
         details: error,
-      }); // Log mejorado para depuración
+      });
       switch (error.code) {
         case "auth/user-not-found":
           setErrors({
@@ -155,7 +163,7 @@ export const useLoginForm = (dispatch, navigate) => {
           setErrors({
             email: "",
             password: "",
-            form: "Correo o contraseña incorrectos", // Más específico que "Credenciales inválidas"
+            form: "Correo o contraseña incorrectos",
           });
           break;
         default:

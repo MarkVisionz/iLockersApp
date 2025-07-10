@@ -1,30 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
+import { useDispatch, useSelector } from "react-redux";
 import { FloatingInput, FloatingFileInput } from "./CommonStyled";
-import { useDispatch } from "react-redux";
-import { bulkCreateServices } from "../../features/servicesSlice";
+import {
+  createService,
+  bulkCreateServices,
+} from "../../features/servicesSlice";
 
 const CreateService = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { businessId: paramBusinessId } = useParams();
+  const { businesses, isAdmin } = useSelector((state) => state.auth);
+  const { createStatus, bulkStatus, error } = useSelector(
+    (state) => state.services
+  );
+
+  const [selectedBusinessId, setSelectedBusinessId] = useState(
+    paramBusinessId || ""
+  );
   const [newService, setNewService] = useState({
     name: "",
     type: "simple",
     price: "",
+    unit: "pza",
     sizes: [],
     availableDays: [],
   });
-  const [newSize, setNewSize] = useState({ name: "", price: "" });
+  const [newSize, setNewSize] = useState({ name: "", price: "", unit: "pza" });
   const [bulkServices, setBulkServices] = useState([]);
   const [fileKey, setFileKey] = useState(Date.now());
   const [excelUploaded, setExcelUploaded] = useState(false);
-  const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
+
+  const validUnits = ["kg", "g", "pza", "ml", "l", "unidad"];
+
+  useEffect(() => {
+    if (paramBusinessId && businesses.some((b) => b._id === paramBusinessId)) {
+      setSelectedBusinessId(paramBusinessId);
+    } else if (businesses.length > 0) {
+      setSelectedBusinessId(businesses[0]._id);
+    } else {
+      setFormError("No hay negocios disponibles para crear servicios.");
+    }
+  }, [businesses, paramBusinessId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -43,15 +68,19 @@ const CreateService = () => {
 
   const addSize = () => {
     if (!newSize.name || !newSize.price) {
-      setError("Por favor, completa el nombre y precio de la talla.");
+      setFormError("Por favor, completa el nombre y precio de la talla.");
       return;
     }
     if (newSize.name.length > 30) {
-      setError("El nombre de la talla no puede exceder los 30 caracteres.");
+      setFormError("El nombre de la talla no puede exceder los 30 caracteres.");
       return;
     }
     if (Number(newSize.price) < 0) {
-      setError("El precio no puede ser negativo.");
+      setFormError("El precio no puede ser negativo.");
+      return;
+    }
+    if (!validUnits.includes(newSize.unit)) {
+      setFormError("Unidad inválida para la talla.");
       return;
     }
 
@@ -59,14 +88,15 @@ const CreateService = () => {
       id: uuidv4(),
       name: newSize.name.trim(),
       price: Number(newSize.price),
+      unit: newSize.unit,
     };
 
     setNewService((prev) => ({
       ...prev,
       sizes: [...prev.sizes, size],
     }));
-    setNewSize({ name: "", price: "" });
-    setError(null);
+    setNewSize({ name: "", price: "", unit: "pza" });
+    setFormError(null);
   };
 
   const removeSize = (id) => {
@@ -78,37 +108,52 @@ const CreateService = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(null);
+    setFormError(null);
 
     try {
+      if (!selectedBusinessId) throw new Error("Selecciona un negocio");
+      if (!businesses.some((b) => b._id === selectedBusinessId))
+        throw new Error("Negocio no válido");
       if (!newService.name.trim()) throw new Error("El nombre es obligatorio.");
       if (newService.name.length > 50)
         throw new Error("El nombre no puede exceder los 50 caracteres.");
       if (newService.type === "simple" && !newService.price)
         throw new Error("El precio es obligatorio para servicios simples.");
+      if (newService.type === "simple" && !validUnits.includes(newService.unit))
+        throw new Error("Unidad inválida para el servicio.");
       if (newService.type === "sized" && newService.sizes.length === 0)
-        throw new Error("Debe agregar al menos una talla para servicios con tallas.");
+        throw new Error(
+          "Debe agregar al menos una talla para servicios con tallas."
+        );
 
       const payload = {
+        businessId: selectedBusinessId,
         name: newService.name.trim(),
         type: newService.type,
         availableDays: newService.availableDays,
-        price: newService.type === "simple" ? Number(newService.price) : undefined,
+        price:
+          newService.type === "simple" ? Number(newService.price) : undefined,
+        unit: newService.type === "simple" ? newService.unit : undefined,
         sizes: newService.type === "sized" ? newService.sizes : undefined,
       };
 
-      await dispatch(bulkCreateServices([payload])).unwrap();
+      await dispatch(
+        createService({ data: payload, businessId: selectedBusinessId })
+      ).unwrap();
       toast.success("Servicio creado exitosamente.");
       setNewService({
         name: "",
         type: "simple",
         price: "",
+        unit: "pza",
         sizes: [],
         availableDays: [],
       });
+      navigate(`/owner/services/${selectedBusinessId}`);
     } catch (err) {
-      setError(err.message || "Error al crear el servicio.");
-      toast.error(err.message || "Error al crear el servicio.");
+      const errorMessage = err.message || "Error al crear el servicio.";
+      setFormError(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -121,27 +166,52 @@ const CreateService = () => {
         const formatted = results.data
           .filter((row) => row.name && row.type)
           .map((row) => ({
+            businessId: selectedBusinessId,
             name: row.name.trim(),
-            type: row.type === "simple" || row.type === "sized" ? row.type : "simple",
+            type:
+              row.type === "simple" || row.type === "sized"
+                ? row.type
+                : "simple",
+            unit:
+              row.type === "simple" && validUnits.includes(row.unit)
+                ? row.unit
+                : "pza",
             sizes:
               row.type === "sized" && row.sizes
                 ? row.sizes
                     .split(";")
                     .map((s) => {
-                      const [name, price] = s.split(":");
-                      return name && price && name.length <= 30 && Number(price) >= 0
-                        ? { id: uuidv4(), name: name.trim(), price: Number(price) }
+                      const [name, price, unit] = s.split(":");
+                      return name &&
+                        price &&
+                        name.length <= 30 &&
+                        Number(price) >= 0 &&
+                        (!unit || validUnits.includes(unit))
+                        ? {
+                            id: uuidv4(),
+                            name: name.trim(),
+                            price: Number(price),
+                            unit: unit || "pza",
+                          }
                         : null;
                     })
                     .filter(Boolean)
                 : [],
             availableDays: row.availableDays
-              ? row.availableDays.split(",").map(Number).filter((d) => d >= 0 && d <= 6)
+              ? row.availableDays
+                  .split(",")
+                  .map(Number)
+                  .filter((d) => d >= 0 && d <= 6)
               : [],
-            price: row.type === "simple" && row.price ? Number(row.price) : undefined,
+            price:
+              row.type === "simple" && row.price
+                ? Number(row.price)
+                : undefined,
           }));
         setBulkServices(formatted);
-        toast.info("Archivo CSV cargado, presiona 'Subir servicios' para continuar.");
+        toast.info(
+          "Archivo CSV cargado, presiona 'Subir servicios' para continuar."
+        );
       },
     });
   };
@@ -160,17 +230,32 @@ const CreateService = () => {
       const formatted = data
         .filter((row) => row.name && row.type)
         .map((row) => ({
+          businessId: selectedBusinessId,
           name: row.name.toString().trim(),
-          type: row.type === "simple" || row.type === "sized" ? row.type : "simple",
+          type:
+            row.type === "simple" || row.type === "sized" ? row.type : "simple",
+          unit:
+            row.type === "simple" && validUnits.includes(row.unit)
+              ? row.unit
+              : "pza",
           sizes:
             row.type === "sized" && row.sizes
               ? row.sizes
                   .toString()
                   .split(";")
                   .map((s) => {
-                    const [name, price] = s.split(":");
-                    return name && price && name.length <= 30 && Number(price) >= 0
-                      ? { id: uuidv4(), name: name.trim(), price: Number(price) }
+                    const [name, price, unit] = s.split(":");
+                    return name &&
+                      price &&
+                      name.length <= 30 &&
+                      Number(price) >= 0 &&
+                      (!unit || validUnits.includes(unit))
+                      ? {
+                          id: uuidv4(),
+                          name: name.trim(),
+                          price: Number(price),
+                          unit: unit || "pza",
+                        }
                       : null;
                   })
                   .filter(Boolean)
@@ -182,11 +267,14 @@ const CreateService = () => {
                 .map(Number)
                 .filter((d) => d >= 0 && d <= 6)
             : [],
-          price: row.type === "simple" && row.price ? Number(row.price) : undefined,
+          price:
+            row.type === "simple" && row.price ? Number(row.price) : undefined,
         }));
 
       setBulkServices(formatted);
-      toast.info("Archivo Excel cargado, presiona 'Subir servicios' para continuar.");
+      toast.info(
+        "Archivo Excel cargado, presiona 'Subir servicios' para continuar."
+      );
     };
 
     reader.readAsBinaryString(file);
@@ -194,13 +282,28 @@ const CreateService = () => {
 
   const uploadBulkServices = async () => {
     if (!bulkServices.length) return;
+    if (
+      !selectedBusinessId ||
+      !businesses.some((b) => b._id === selectedBusinessId)
+    ) {
+      toast.error("Selecciona un negocio válido antes de subir servicios.");
+      return;
+    }
     try {
-      await dispatch(bulkCreateServices(bulkServices)).unwrap();
+      await dispatch(
+        bulkCreateServices({
+          services: bulkServices,
+          businessId: selectedBusinessId,
+        })
+      ).unwrap();
+      toast.success("Servicios subidos exitosamente.");
       setBulkServices([]);
       setFileKey(Date.now());
       setExcelUploaded(false);
+      navigate(`/owner/services/${selectedBusinessId}`);
     } catch (err) {
-      toast.error("Error al subir servicios en masa.");
+      const errorMessage = err.message || "Error al subir servicios en masa.";
+      toast.error(errorMessage);
     }
   };
 
@@ -220,7 +323,21 @@ const CreateService = () => {
     >
       <FormContainer>
         <h3>Crear un Servicio</h3>
-        {error && <ErrorMessage message={error} />}
+
+        <select
+          value={selectedBusinessId}
+          onChange={(e) => setSelectedBusinessId(e.target.value)}
+          disabled={paramBusinessId}
+        >
+          <option value="">Selecciona un negocio</option>
+          {businesses.map((b) => (
+            <option key={b._id} value={b._id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+
+        {(formError || error) && <ErrorMessage message={formError || error} />}
         <StyledForm onSubmit={handleSubmit}>
           <FloatingInput>
             <input
@@ -248,18 +365,39 @@ const CreateService = () => {
           </FloatingInput>
 
           {newService.type === "simple" && (
-            <FloatingInput>
-              <input
-                type="number"
-                name="price"
-                value={newService.price}
-                onChange={handleInputChange}
-                min="0"
-                step="0.01"
-                required
-              />
-              <label className={newService.price ? "filled" : ""}>Precio</label>
-            </FloatingInput>
+            <>
+              <FloatingInput>
+                <input
+                  type="number"
+                  name="price"
+                  value={newService.price}
+                  onChange={handleInputChange}
+                  min="0"
+                  step="0.01"
+                  required
+                />
+                <label className={newService.price ? "filled" : ""}>
+                  Precio
+                </label>
+              </FloatingInput>
+              <FloatingInput>
+                <select
+                  name="unit"
+                  value={newService.unit}
+                  onChange={handleInputChange}
+                  required
+                >
+                  {validUnits.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+                <label className={newService.unit ? "filled" : ""}>
+                  Unidad
+                </label>
+              </FloatingInput>
+            </>
           )}
 
           {newService.type === "sized" && (
@@ -269,22 +407,46 @@ const CreateService = () => {
                   type="text"
                   placeholder=""
                   value={newSize.name}
-                  onChange={(e) => setNewSize({ ...newSize, name: e.target.value })}
+                  onChange={(e) =>
+                    setNewSize({ ...newSize, name: e.target.value })
+                  }
                   maxLength="30"
                 />
-                <label className={newSize.name ? "filled" : ""}>Nombre Talla</label>
+                <label className={newSize.name ? "filled" : ""}>
+                  Nombre Talla
+                </label>
               </FloatingInput>
               <FloatingInput>
                 <input
                   type="number"
                   placeholder=""
                   value={newSize.price}
-                  onChange={(e) => setNewSize({ ...newSize, price: e.target.value })}
+                  onChange={(e) =>
+                    setNewSize({ ...newSize, price: e.target.value })
+                  }
                   min="0"
                   step="0.01"
                 />
-                <label className={newSize.price ? "filled" : ""}>Precio Talla</label>
+                <label className={newSize.price ? "filled" : ""}>
+                  Precio Talla
+                </label>
               </FloatingInput>
+              <FloatingInput>
+                <select
+                  value={newSize.unit}
+                  onChange={(e) =>
+                    setNewSize({ ...newSize, unit: e.target.value })
+                  }
+                >
+                  {validUnits.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+                <label className={newSize.unit ? "filled" : ""}>Unidad</label>
+              </FloatingInput>
+
               <AddButton
                 type="button"
                 onClick={addSize}
@@ -297,7 +459,9 @@ const CreateService = () => {
               <SizeList>
                 {newService.sizes.map((size) => (
                   <SizeItem key={size.id}>
-                    <span>{size.name} (${size.price})</span>
+                    <span>
+                      {size.name} (${size.price}, {size.unit})
+                    </span>
                     <RemoveButton
                       type="button"
                       onClick={() => removeSize(size.id)}
@@ -315,32 +479,39 @@ const CreateService = () => {
           <DaySelector>
             <h4>Días Disponibles:</h4>
             <DayGrid>
-              {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map((day, index) => (
-                <DayLabel key={index}>
-                  <input
-                    type="checkbox"
-                    checked={newService.availableDays.includes(index)}
-                    onChange={() => toggleDay(index)}
-                  />
-                  {day}
-                </DayLabel>
-              ))}
+              {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(
+                (day, index) => (
+                  <DayLabel key={index}>
+                    <input
+                      type="checkbox"
+                      checked={newService.availableDays.includes(index)}
+                      onChange={() => toggleDay(index)}
+                    />
+                    {day}
+                  </DayLabel>
+                )
+              )}
             </DayGrid>
           </DaySelector>
 
           <AnimatedButton
             type="submit"
+            disabled={createStatus === "loading"}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            Crear
+            {createStatus === "loading" ? "Creando..." : "Crear"}
           </AnimatedButton>
         </StyledForm>
 
         <Divider />
         <BackButton
-          onClick={() => navigate("/admin/services")}
+          onClick={() =>
+            navigate(
+              `/owner/services/${selectedBusinessId || paramBusinessId || ""}`
+            )
+          }
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
@@ -372,12 +543,12 @@ const CreateService = () => {
             <AnimatedButton
               type="button"
               onClick={uploadBulkServices}
-              disabled={!bulkServices.length}
+              disabled={!bulkServices.length || bulkStatus === "loading"}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={{ duration: 0.3 }}
             >
-              Subir servicios
+              {bulkStatus === "loading" ? "Subiendo..." : "Subir servicios"}
             </AnimatedButton>
             <CancelButton
               type="button"
@@ -392,7 +563,8 @@ const CreateService = () => {
           </ButtonGroup>
         </BulkUploadGroup>
         <SmallText>
-          Formato: name,type,price,sizes (Nombre:Precio;Nombre:Precio),availableDays (0,1,3)
+          Formato:
+          name,type,price,sizes(Nombre:Precio;Nombre:Precio),availableDays(0,1,3),category,description
         </SmallText>
 
         {bulkServices.length > 0 && (
@@ -402,9 +574,12 @@ const CreateService = () => {
               {bulkServices.slice(0, 5).map((service, idx) => (
                 <li key={idx}>
                   {service.name} - {service.type}
-                  {service.type === "simple" && ` - $${service.price}`}
+                  {service.type === "simple" && ` - $${service.price}, ${service.unit}`}
                   {service.type === "sized" &&
-                    ` - ${service.sizes.map((s) => `${s.name}:$${s.price}`).join(", ")}`}
+                    ` - ${service.sizes
+                      .map((s) => `${s.name}:$${s.price}:${s.unit}`)
+                      .join(", ")}`}
+                  {service.description && ` - ${service.description}`}
                 </li>
               ))}
               {bulkServices.length > 5 && (

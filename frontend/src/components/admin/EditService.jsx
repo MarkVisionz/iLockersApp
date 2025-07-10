@@ -1,29 +1,41 @@
-import { useState } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Button,
-} from "@mui/material";
+import { useState, useEffect } from "react";
+import { Dialog, DialogTitle, DialogContent, Button } from "@mui/material";
 import styled from "styled-components";
 import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import { v4 as uuidv4 } from "uuid";
-import { serviceAPI } from "../../services/serviceApi";
+import { useDispatch, useSelector } from "react-redux";
+import { updateService, resetUpdateStatus } from "../../features/servicesSlice";
 import { FloatingInput } from "./CommonStyled";
 
-const EditService = ({ service, onClose }) => {
+const EditService = ({ service, businessId, onClose }) => {
+  const dispatch = useDispatch();
+  const { updateStatus, error } = useSelector((state) => state.services);
   const [formData, setFormData] = useState({
     name: service.name || "",
     type: service.type || "simple",
     price: service.price ? String(service.price) : "",
+    unit: service.unit || "pza",
     sizes: service.sizes || [],
     availableDays: service.availableDays || [],
   });
-
-  const [newSize, setNewSize] = useState({ name: "", price: "" });
+  const [newSize, setNewSize] = useState({ name: "", price: "", unit: "pza" });
   const [formError, setFormError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const validUnits = ["kg", "g", "pza", "ml", "l", "unidad"];
+
+  useEffect(() => {
+    if (updateStatus === "succeeded") {
+      toast.success("Servicio actualizado exitosamente");
+      onClose();
+      dispatch(resetUpdateStatus());
+    } else if (updateStatus === "failed" && error) {
+      setFormError(error);
+      toast.error(error);
+      dispatch(resetUpdateStatus());
+    }
+  }, [updateStatus, error, onClose, dispatch]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -45,14 +57,16 @@ const EditService = ({ service, onClose }) => {
       setFormError("Por favor, completa el nombre y precio de la talla.");
       return;
     }
-
     if (newSize.name.length > 30) {
       setFormError("El nombre de la talla no puede exceder los 30 caracteres.");
       return;
     }
-
     if (isNaN(newSize.price) || Number(newSize.price) < 0) {
       setFormError("El precio debe ser un número positivo.");
+      return;
+    }
+    if (!validUnits.includes(newSize.unit)) {
+      setFormError("Unidad inválida para la talla.");
       return;
     }
 
@@ -64,11 +78,12 @@ const EditService = ({ service, onClose }) => {
           id: uuidv4(),
           name: newSize.name.trim(),
           price: parseFloat(newSize.price),
+          unit: newSize.unit,
         },
       ],
     }));
 
-    setNewSize({ name: "", price: "" });
+    setNewSize({ name: "", price: "", unit: "pza" });
     setFormError(null);
   };
 
@@ -82,54 +97,45 @@ const EditService = ({ service, onClose }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError(null);
+    setLoading(true);
 
     try {
       if (!formData.name.trim()) throw new Error("El nombre es obligatorio");
       if (formData.name.length > 50)
         throw new Error("El nombre no puede exceder 50 caracteres");
+      if (formData.type === "simple" && (!formData.price || isNaN(formData.price) || Number(formData.price) < 0))
+        throw new Error("Precio inválido para servicio simple");
+      if (formData.type === "simple" && !validUnits.includes(formData.unit))
+        throw new Error("Unidad inválida para el servicio");
+      if (formData.type === "sized" && (!formData.sizes || formData.sizes.length === 0))
+        throw new Error("Debe agregar al menos una talla");
 
       const payload = {
+        businessId,
         name: formData.name.trim(),
         type: formData.type,
         availableDays: formData.availableDays,
-      };
-
-      if (formData.type === "simple") {
-        if (!formData.price || isNaN(formData.price) || formData.price < 0) {
-          throw new Error("Precio inválido para servicio simple");
-        }
-        payload.price = Number(formData.price);
-      } else {
-        if (!formData.sizes || formData.sizes.length === 0) {
-          throw new Error("Debe agregar al menos una talla");
-        }
-
-        payload.sizes = formData.sizes.map((size) => ({
+        price: formData.type === "simple" ? Number(formData.price) : undefined,
+        unit: formData.type === "simple" ? formData.unit : undefined,
+        sizes: formData.type === "sized" ? formData.sizes.map((size) => ({
           id: size.id || uuidv4(),
           name: size.name.trim(),
           price: Number(size.price),
-        }));
-      }
+          unit: size.unit || "pza",
+        })) : undefined,
+      };
 
-      await serviceAPI.updateService(service._id, payload);
-      toast.success("Servicio actualizado exitosamente");
-      onClose();
+      await dispatch(updateService({ id: service._id, data: payload, businessId })).unwrap();
     } catch (err) {
       const errorMessage =
-        err.response?.data?.message ||
-        (err.response?.data?.errors
-          ? Object.values(err.response.data.errors)
-              .map((e) => e.message || e)
-              .join(", ")
-          : err.message);
-
+        err.message ||
+        (err.errors ? Object.values(err.errors).map((e) => e.message).join(", ") : "Error al actualizar el servicio");
       setFormError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -140,7 +146,7 @@ const EditService = ({ service, onClose }) => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3 }}
         >
-          {formError && <ErrorMessage>{formError}</ErrorMessage>}
+          {(formError || error) && <ErrorMessage>{formError || error}</ErrorMessage>}
           <StyledForm
             onSubmit={handleSubmit}
             initial={{ x: -50, opacity: 0 }}
@@ -173,18 +179,35 @@ const EditService = ({ service, onClose }) => {
             </FloatingInput>
 
             {formData.type === "simple" && (
-              <FloatingInput>
-                <input
-                  type="number"
-                  name="price"
-                  value={formData.price}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  required
-                />
-                <label className={formData.price ? "filled" : ""}>Precio</label>
-              </FloatingInput>
+              <>
+                <FloatingInput>
+                  <input
+                    type="number"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                  <label className={formData.price ? "filled" : ""}>Precio</label>
+                </FloatingInput>
+                <FloatingInput>
+                  <select
+                    name="unit"
+                    value={formData.unit}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    {validUnits.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {unit}
+                      </option>
+                    ))}
+                  </select>
+                  <label className={formData.unit ? "filled" : ""}>Unidad</label>
+                </FloatingInput>
+              </>
             )}
 
             {formData.type === "sized" && (
@@ -218,6 +241,21 @@ const EditService = ({ service, onClose }) => {
                       Precio Talla
                     </label>
                   </FloatingInput>
+                  <FloatingInput>
+                    <select
+                      value={newSize.unit}
+                      onChange={(e) =>
+                        setNewSize({ ...newSize, unit: e.target.value })
+                      }
+                    >
+                      {validUnits.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
+                    <label className={newSize.unit ? "filled" : ""}>Unidad</label>
+                  </FloatingInput>
                 </div>
                 <AddButton
                   type="button"
@@ -227,7 +265,7 @@ const EditService = ({ service, onClose }) => {
                 >
                   + Agregar Talla
                 </AddButton>
-                
+
                 {formData.sizes.length > 0 && (
                   <>
                     <h4>Tallas Actuales:</h4>
@@ -235,7 +273,7 @@ const EditService = ({ service, onClose }) => {
                       {formData.sizes.map((size) => (
                         <SizeItem key={size.id}>
                           <span>
-                            {size.name} (${size.price})
+                            {size.name} (${size.price}, {size.unit})
                           </span>
                           <RemoveButton
                             type="button"
@@ -272,11 +310,9 @@ const EditService = ({ service, onClose }) => {
             </DaySelector>
 
             <ButtonsContainer>
-              <CloseButton onClick={onClose}>
-                Cancelar
-              </CloseButton>
-              <SubmitButton type="submit">
-                {loading ? "Guardando..." : "Guardar Cambios"}
+              <CloseButton onClick={onClose}>Cancelar</CloseButton>
+              <SubmitButton type="submit" disabled={loading || updateStatus === "loading"}>
+                {loading || updateStatus === "loading" ? "Guardando..." : "Guardar Cambios"}
               </SubmitButton>
             </ButtonsContainer>
           </StyledForm>
@@ -325,7 +361,7 @@ const SizeInputGroup = styled.div`
 
   .size-inputs {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1rem;
   }
 `;

@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { motion } from "framer-motion";
 import EditService from "../../../EditService";
 
-const ServiceCard = ({ service, setServices, setError, setLoading, handleDelete, loading }) => {
+const ServiceCard = ({ service, businessId, handleDelete, loading }) => {
   const [showEdit, setShowEdit] = useState(false);
 
   const handleEditClick = (e) => {
@@ -60,18 +60,13 @@ const ServiceCard = ({ service, setServices, setError, setLoading, handleDelete,
       {showEdit && (
         <EditService
           service={service}
-          setServices={setServices}
-          setError={setError}
-          setLoading={setLoading}
+          businessId={businessId}
           onClose={() => setShowEdit(false)}
         />
       )}
     </CardContainer>
   );
 };
-
-// Styled Components (los mismos que antes)
-export default ServiceCard;
 
 // Styled Components
 const CardContainer = styled.div`
@@ -172,3 +167,5 @@ const ActionButton = styled(motion.button)`
     outline: none;
   }
 `;
+
+export default ServiceCard;

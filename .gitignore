@@ -1,4 +1,40 @@
+# Archivos de sistema
 .DS_Store
+
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de entorno
+.env
+.env.local
+.env.development
+.env.production
+
+# Credenciales sensibles
+backend/utils/firebase-admin.json
+
+# Compilación frontend
+/build
+/dist
+
+# Logs del backend
+/backend/logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
+
+# Archivos de IDE
+.vscode/
+.idea/
+
+# Archivos de pruebas o cobertura
+/coverage.DS_Store
 backend/.DS_Store
 backend/utils/firebase-admin.json
 node_modules/

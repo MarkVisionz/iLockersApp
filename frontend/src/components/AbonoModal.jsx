@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import PaymentMethodModal from './PaymentMethodModal';
 import { FiDollarSign, FiX } from 'react-icons/fi';
@@ -15,7 +15,21 @@ const AbonoModal = ({
   const [abonoPaymentMethod, setAbonoPaymentMethod] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    // Reiniciar estados al abrir el modal o cambiar la nota
+    if (isOpen) {
+      setAbonoAmount('');
+      setAbonoPaymentMethod(null);
+      setShowPaymentModal(false);
+    }
+  }, [isOpen, currentNote]);
+
+  const handleClose = () => {
+    setAbonoAmount('');
+    setAbonoPaymentMethod(null);
+    setShowPaymentModal(false);
+    onClose();
+  };
 
   const handleConfirm = () => {
     if (!abonoAmount || parseFloat(abonoAmount) <= 0) {
@@ -27,6 +41,9 @@ const AbonoModal = ({
       return;
     }
     onConfirm(parseFloat(abonoAmount), abonoPaymentMethod);
+    setAbonoAmount(''); // Reiniciar después de confirmar
+    setAbonoPaymentMethod(null);
+    setShowPaymentModal(false);
   };
 
   const handlePaymentMethodSelect = (method) => {
@@ -38,10 +55,12 @@ const AbonoModal = ({
   const totalAbonado = currentNote?.abonos?.reduce((acc, ab) => acc + ab.amount, 0) || 0;
   const restante = currentNote?.total - totalAbonado;
 
+  if (!isOpen) return null;
+
   return (
     <ModalOverlay>
       <ModalContent>
-        <CloseButton onClick={onClose} aria-label="Cerrar modal">
+        <CloseButton onClick={handleClose} aria-label="Cerrar modal">
           <FiX size={20} />
         </CloseButton>
         <ModalTitle>Agregar Abono</ModalTitle>
@@ -58,7 +77,7 @@ const AbonoModal = ({
               placeholder=" "
             />
             <label className={abonoAmount ? "filled" : ""}>
-              Cantidad a Abonar (Máx: ${restante.toFixed(2)})
+              Cantidad a Abonar (Máx: ${restante?.toFixed(2) || '0.00'})
             </label>
           </FloatingInput>
         </InputGroup>
@@ -77,7 +96,7 @@ const AbonoModal = ({
           <ConfirmButton onClick={handleConfirm}>
             Confirmar
           </ConfirmButton>
-          <CancelButton onClick={onClose}>
+          <CancelButton onClick={handleClose}>
             Cancelar
           </CancelButton>
         </ActionButtons>

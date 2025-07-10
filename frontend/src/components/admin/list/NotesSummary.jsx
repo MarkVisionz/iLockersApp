@@ -3,16 +3,24 @@ import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { notesFetch, notesEdit, notesDelete } from "../../../features/notesSlice";
+import {
+  notesFetch,
+  notesEdit,
+  notesDelete,
+} from "../../../features/notesSlice";
 import Filters from "./SummaryHelpers/filters";
 import Pagination from "./SummaryHelpers/pagination";
 import NoteList from "./SummaryHelpers/NoteList";
-import ColorPalette from "../../ColorPalette";
+import { toast } from "react-toastify";
+import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
 
-const NotesSummary = () => {
+const NotesSummary = ({ businessId }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { items = [], status } = useSelector((state) => state.notes);
+  const { items = [], status, error } = useSelector((state) => state.notes);
+  const { businesses } = useSelector((state) => state.auth);
+
+  const isValidBusiness = businesses.some((b) => b._id === businessId);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -20,20 +28,40 @@ const NotesSummary = () => {
   const [sortOrder, setSortOrder] = useState("desc");
   const [filterOption, setFilterOption] = useState("");
   const [specificDate, setSpecificDate] = useState("");
+
   const itemsPerPage = 4;
 
   useEffect(() => {
-    if (status !== "success") {
-      dispatch(notesFetch());
+    console.log("NotesSummary useEffect - Debug:", {
+      businessId,
+      businesses: businesses.map((b) => b._id),
+      isValidBusiness,
+    });
+
+    if (!isValidBusiness || !businessId) {
+      console.warn(`Invalid businessId: ${businessId}`);
+      return;
     }
-  }, [dispatch, status]);
+
+    if (status === "idle" || status === "rejected") {
+      console.log(`Dispatching notesFetch for businessId: ${businessId}`);
+      dispatch(notesFetch({ businessId }));
+    }
+  }, [dispatch, status, businessId, isValidBusiness]);
+
+  const businessNotes = useMemo(() => {
+    const notes = items.filter((note) => note.businessId === businessId);
+    console.log(`Filtered ${notes.length} notes for businessId: ${businessId}`);
+    return notes;
+  }, [items, businessId]);
 
   const filteredNotes = useMemo(() => {
-    let filtered = items.filter(
-      (note) =>
-        note.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        note.total.toString().includes(searchQuery) ||
-        note.folio.includes(searchQuery)
+    let filtered = businessNotes.filter((note) =>
+      [
+        note.name?.toLowerCase() || "",
+        note.total?.toString() || "",
+        note.folio || "",
+      ].some((field) => field.includes(searchQuery.toLowerCase()))
     );
 
     if (filterOption) {
@@ -41,46 +69,47 @@ const NotesSummary = () => {
       const selectedDate = moment(specificDate).startOf("day");
 
       filtered = filtered.filter((note) => {
-        const noteDate = moment(note.date);
+        const noteDate = moment(note.createdAt);
         const notePaidAt = note.paidAt ? moment(note.paidAt) : null;
 
-        if (filterOption === "day") {
-          return noteDate.isSame(today, "day");
-        } else if (filterOption === "createdOnDate") {
-          return specificDate && noteDate.isSame(selectedDate, "day");
-        } else if (filterOption === "paidOnDate") {
-          return (
-            specificDate && notePaidAt && notePaidAt.isSame(selectedDate, "day")
-          );
-        } else if (filterOption === "createdAndPaidOnDate") {
-          return (
-            noteDate.isSame(selectedDate, "day") ||
-            (notePaidAt && notePaidAt.isSame(selectedDate, "day"))
-          );
-        } else {
-          return note.note_status === filterOption;
+        switch (filterOption) {
+          case "day":
+            return noteDate.isSame(today, "day");
+          case "createdOnDate":
+            return specificDate && noteDate.isSame(selectedDate, "day");
+          case "paidOnDate":
+            return specificDate && notePaidAt?.isSame(selectedDate, "day");
+          case "createdAndPaidOnDate":
+            return (
+              specificDate &&
+              (noteDate.isSame(selectedDate, "day") ||
+                notePaidAt?.isSame(selectedDate, "day"))
+            );
+          default:
+            return note.note_status === filterOption;
         }
       });
     }
 
     return filtered;
-  }, [items, searchQuery, filterOption, specificDate]);
+  }, [businessNotes, searchQuery, filterOption, specificDate]);
 
   const sortedNotes = useMemo(() => {
-    const notesToSort = [...filteredNotes];
-    return notesToSort.sort((a, b) => {
-      let aField, bField;
+    if (!sortField) return filteredNotes;
+    return [...filteredNotes].sort((a, b) => {
+      let aField =
+        sortField === "createdAt" ? moment(a.createdAt) : a[sortField];
+      let bField =
+        sortField === "createdAt" ? moment(b.createdAt) : b[sortField];
 
-      if (sortField === "date") {
-        aField = moment(a.date);
-        bField = moment(b.date);
-      } else if (sortField === "name") {
-        aField = a.name.toLowerCase(); // Convertir a minúsculas para una comparación insensible a mayúsculas
-        bField = b.name.toLowerCase();
-      } else {
-        aField = a[sortField];
-        bField = b[sortField];
+      if (sortField === "name") {
+        aField = aField?.toLowerCase() || "";
+        bField = bField?.toLowerCase() || "";
       }
+
+      if (!aField && !bField) return 0;
+      if (!aField) return 1;
+      if (!bField) return -1;
 
       return sortOrder === "desc"
         ? aField < bField
@@ -97,10 +126,10 @@ const NotesSummary = () => {
       (currentPage - 1) * itemsPerPage,
       currentPage * itemsPerPage
     );
-  }, [sortedNotes, currentPage, itemsPerPage]);
+  }, [sortedNotes, currentPage]);
 
   const toggleSortOrder = () => {
-    setSortOrder((prevOrder) => (prevOrder === "asc" ? "desc" : "asc"));
+    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
   };
 
   const handleNoteDispatch = (id) => {
@@ -109,24 +138,79 @@ const NotesSummary = () => {
         _id: id,
         note_status: "pagado",
         paidAt: moment().toISOString(),
+        businessId,
       })
-    );
+    ).then((result) => {
+      if (notesEdit.fulfilled.match(result)) {
+        toast.success("Nota marcada como pagada");
+      } else {
+        toast.error(result.payload || "Error al marcar como pagada");
+      }
+    });
   };
 
   const handleNoteDeliver = (id) => {
-    dispatch(notesEdit({ _id: id, note_status: "entregado" }));
+    dispatch(
+      notesEdit({
+        _id: id,
+        note_status: "entregado",
+        businessId,
+      })
+    ).then((result) => {
+      if (notesEdit.fulfilled.match(result)) {
+        toast.success("Nota marcada como entregada");
+      } else {
+        toast.error(result.payload || "Error al marcar como entregada");
+      }
+    });
   };
 
-  const handleNoteView = (id) => {
-    navigate(`/note/${id}`);
+  const handleNoteView = (id, businessId) => {
+    navigate(`/note/${id}/${businessId}`);
   };
 
   const handleDelete = (id) => {
-    dispatch(notesDelete(id));
+    dispatch(notesDelete({ id, businessId })).then((result) => {
+      if (notesDelete.fulfilled.match(result)) {
+        toast.success("Nota eliminada");
+      } else {
+        toast.error(result.payload || "Error al eliminar nota");
+      }
+    });
   };
 
+  if (!businessId) {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>No se proporcionó un ID de negocio válido</ErrorMessage>
+      </ErrorContainer>
+    );
+  }
+
+  if (!isValidBusiness) {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>Negocio no encontrado o no autorizado</ErrorMessage>
+      </ErrorContainer>
+    );
+  }
+
+  if (status === "pending" && !businessNotes.length) {
+    return <LoadingSpinner message="Cargando notas..." />;
+  }
+
+  if (status === "rejected") {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>
+          Error al cargar notas: {error || "Por favor intenta de nuevo"}
+        </ErrorMessage>
+      </ErrorContainer>
+    );
+  }
+
   return (
-    <>
+    <StyledNotesSummary>
       <Filters
         sortField={sortField}
         setSortField={setSortField}
@@ -140,13 +224,25 @@ const NotesSummary = () => {
         setSearchQuery={setSearchQuery}
       />
 
-      <NoteList
-        notes={paginatedNotes}
-        onView={handleNoteView}
-        onDispatch={handleNoteDispatch}
-        onDeliver={handleNoteDeliver}
-        onDelete={handleDelete}
-      />
+      {paginatedNotes.length === 0 ? (
+        <NoDataMessage>
+          <p>Tu negocio está listo, pero aún no tienes notas registradas.</p>
+          <CreateNoteButton
+            onClick={() => navigate("/laundry-note", { state: { businessId } })}
+          >
+            Crear tu primera nota
+          </CreateNoteButton>
+        </NoDataMessage>
+      ) : (
+        <NoteList
+          notes={paginatedNotes}
+          businessId={businessId}
+          onView={handleNoteView}
+          onDispatch={handleNoteDispatch}
+          onDeliver={handleNoteDeliver}
+          onDelete={handleDelete}
+        />
+      )}
 
       {sortedNotes.length > itemsPerPage && (
         <Pagination
@@ -156,9 +252,43 @@ const NotesSummary = () => {
           itemsPerPage={itemsPerPage}
         />
       )}
-    </>
+    </StyledNotesSummary>
   );
 };
 
-export default NotesSummary;
+const StyledNotesSummary = styled.div`
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+`;
 
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+`;
+
+const NoDataMessage = styled.p`
+  text-align: center;
+  color: #666;
+  margin: 2rem 0;
+`;
+
+const CreateNoteButton = styled.button`
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 1rem;
+  &:hover {
+    background-color: #0056b3;
+  }
+`;
+
+export default NotesSummary;

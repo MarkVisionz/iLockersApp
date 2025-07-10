@@ -12,6 +12,7 @@ const FilterBar = ({
   setSortConfig,
   navigate,
   hideCreateButton = false,
+  businessId, // Nueva prop para businessId
 }) => {
   const isMobile = useMediaQuery("(max-width: 600px)");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -57,9 +58,9 @@ const FilterBar = ({
           </ToggleFiltersButton>
         )}
 
-        {!hideCreateButton && (
+        {!hideCreateButton && businessId && (
           <CreateButton
-            onClick={() => navigate("/admin/services/create-service")}
+            onClick={() => navigate(`/owner/services/${businessId}/create`)}
             aria-label="Crear nuevo servicio"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}

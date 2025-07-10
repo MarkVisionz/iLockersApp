@@ -138,7 +138,6 @@ export const ButtonLogin = styled.button`
 // Texto debajo del formulario
 export const SignupPrompt = styled.p`
   text-align: center;
-  margin-top: 0.5rem;
   color: #666;
 
   a {

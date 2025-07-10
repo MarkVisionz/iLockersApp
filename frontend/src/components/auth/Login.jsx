@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -25,7 +25,12 @@ import AppleLoginButton from "./AppleLoginButton";
 const Login = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { _id: authId } = useSelector((state) => state.auth);
+  const { isAuthenticated, isAdmin, role, defaultBusiness, authProvider } = useSelector((state) => state.auth);
+  const [loginSuccess, setLoginSuccess] = useState(null);
+
+  const handleLoginSuccess = (userData) => {
+    setLoginSuccess(userData);
+  };
 
   const {
     formData,
@@ -38,13 +43,27 @@ const Login = () => {
     handleInputChange,
     handleBlur,
     handleFirebaseLogin,
-  } = useLoginForm(dispatch, navigate);
+  } = useLoginForm(dispatch, navigate, handleLoginSuccess);
 
   useEffect(() => {
-    if (authId) {
-      navigate("/cart");
+    if (isAuthenticated && loginSuccess) {
+      console.log("Login.jsx: Manejo de redirección post-login:", {
+        isAdmin,
+        role,
+        defaultBusiness,
+        authProvider,
+        loginSuccess,
+      });
+
+      if (isAdmin) {
+        navigate("/admin/summary", { replace: true });
+      } else if (role === "owner" && defaultBusiness) {
+        navigate(`/owner/local-summary/${defaultBusiness}`, { replace: true });
+      } else {
+        navigate("/cart", { replace: true });
+      }
     }
-  }, [authId, navigate]);
+  }, [isAuthenticated, isAdmin, role, defaultBusiness, authProvider, loginSuccess, navigate]);
 
   useEffect(() => {
     if (errors.form) {
@@ -54,7 +73,11 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await handleFirebaseLogin();
+    try {
+      await handleFirebaseLogin();
+    } catch (error) {
+      toast.error(error.message || "Error al iniciar sesión");
+    }
   };
 
   return (

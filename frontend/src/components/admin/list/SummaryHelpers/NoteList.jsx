@@ -1,19 +1,21 @@
 import React, { useState } from "react";
 import styled from "styled-components";
 import moment from "moment";
-import axios from "axios";
-import { url, setHeaders } from "../../../../features/api";
+import { useDispatch } from "react-redux";
+import { notesEdit } from "../../../../features/notesSlice";
+import { toast } from "react-toastify";
 import PasswordConfirmationModal from "../../../PasswordConfirmationModal";
 import PaymentMethodModal from "../../../PaymentMethodModal";
 import AbonoModal from "../../../AbonoModal";
 import PaymentConfirmationModal from "../../../PaymentConfirmationModal";
-import { toast } from "react-toastify";
+import axios from "axios";
+import { url, setHeaders } from "../../../../features/api";
 
-const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
+const NoteList = ({ notes, businessId, onView, onDelete }) => {
+  const dispatch = useDispatch();
   const [showModal, setShowModal] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
-
   const [showAbonoModal, setShowAbonoModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -54,6 +56,10 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
   };
 
   const handleAbonar = (note) => {
+    if (!note || !note._id || !businessId) {
+      toast.error("Nota o negocio inválido.");
+      return;
+    }
     if (note.note_status === "pagado" || note.note_status === "entregado") {
       toast.error("No se pueden agregar abonos a notas pagadas o entregadas.");
       return;
@@ -72,6 +78,11 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
   };
 
   const handleConfirmAbono = async (amount, method) => {
+    if (!currentNote || !businessId) {
+      toast.error("Nota o negocio inválido.");
+      setShowAbonoModal(false);
+      return;
+    }
     const abonoNum = parseFloat(amount);
     if (!abonoNum || abonoNum <= 0) {
       toast.error("Ingrese un monto válido.");
@@ -82,43 +93,42 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
     const restante = currentNote.total - totalAbonado;
 
     if (abonoNum > restante) {
-      toast.error(`El abono excede el restante de $${restante.toFixed(2)}`);
+      toast.error(`El abono excede el restante de $${restante.toLocaleString("es-MX")}`);
       return;
     }
 
     try {
       const newAbono = {
         amount: abonoNum,
-        method: method,
-        date: new Date(),
+        method: method || abonoPaymentMethod,
+        date: new Date().toISOString(),
       };
-
-      const res = await axios.put(
-        `${url}/notes/${currentNote._id}`,
-        { newAbono },
-        setHeaders()
-      );
+      const payload = {
+        _id: currentNote._id,
+        businessId,
+        abonos: [newAbono],
+      };
+      console.log("Sending abono payload:", payload);
+      const res = await dispatch(notesEdit(payload)).unwrap();
 
       setLocalNotes((prevNotes) =>
-        prevNotes.map((note) =>
-          note._id === res.data._id ? res.data : note
-        )
+        prevNotes.map((note) => (note._id === res._id ? res : note))
       );
-
-      if (window.socket) {
-        window.socket.emit("noteUpdated", res.data);
-      }
 
       toast.success("Abono agregado correctamente");
       setShowAbonoModal(false);
       setAbonoPaymentMethod(null);
     } catch (err) {
       console.error("Error al agregar abono:", err);
-      toast.error("Error al agregar abono");
+      toast.error(err || "Error al agregar abono");
     }
   };
 
   const handleDispatch = async (note) => {
+    if (!note || !note._id || !businessId) {
+      toast.error("Nota o negocio inválido.");
+      return;
+    }
     if (note.paidAt || note.note_status === "pagado" || note.note_status === "entregado") {
       toast.error("La nota ya está pagada o entregada.");
       return;
@@ -127,33 +137,28 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
     const totalAbonado = note.abonos?.reduce((acc, ab) => acc + ab.amount, 0) || 0;
     const restante = note.total - totalAbonado;
 
-    if (restante <= 0 && note.abonos.length > 0) {
+    if (restante <= 0 && note.abonos?.length > 0) {
       setCurrentNote(note);
       setConfirmMessage(`¿Confirmas marcar la nota ${note.folio} como Pagada?`);
       setConfirmAction(() => async () => {
         try {
-          const res = await axios.put(
-            `${url}/notes/${note._id}`,
-            { 
-              note_status: "pagado", 
-              paidAt: new Date(), 
-              method: note.abonos[note.abonos.length - 1].method 
-            },
-            setHeaders()
-          );
+          const payload = {
+            _id: note._id,
+            businessId,
+            note_status: "pagado",
+            paidAt: new Date().toISOString(),
+            payment_method: note.abonos[note.abonos.length - 1].method,
+          };
+          const res = await dispatch(notesEdit(payload)).unwrap();
 
           setLocalNotes((prevNotes) =>
-            prevNotes.map((n) => (n._id === res.data._id ? res.data : n))
+            prevNotes.map((n) => (n._id === res._id ? res : n))
           );
-
-          if (window.socket) {
-            window.socket.emit("noteUpdated", res.data);
-          }
 
           toast.success("Nota marcada como Pagada");
         } catch (err) {
           console.error("Error al marcar como pagado:", err);
-          toast.error("Error al marcar como pagado");
+          toast.error(err || "Error al marcar como pagado");
         }
       });
       setShowConfirmModal(true);
@@ -165,6 +170,10 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
   };
 
   const confirmDispatch = async () => {
+    if (!currentNote || !businessId) {
+      toast.error("Nota o negocio inválido.");
+      return;
+    }
     if (!dispatchPaymentMethod) {
       toast.error("Selecciona un método de pago.");
       return;
@@ -177,38 +186,36 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
       const newAbono = {
         amount: restante,
         method: dispatchPaymentMethod,
-        date: new Date(),
+        date: new Date().toISOString(),
       };
-
-      const res = await axios.put(
-        `${url}/notes/${currentNote._id}`,
-        { 
-          newAbono, 
-          note_status: "pagado", 
-          paidAt: new Date(), 
-          method: dispatchPaymentMethod 
-        },
-        setHeaders()
-      );
+      const payload = {
+        _id: currentNote._id,
+        businessId,
+        note_status: "pagado",
+        paidAt: new Date().toISOString(),
+        payment_method: dispatchPaymentMethod,
+        abonos: [newAbono],
+      };
+      const res = await dispatch(notesEdit(payload)).unwrap();
 
       setLocalNotes((prevNotes) =>
-        prevNotes.map((n) => (n._id === res.data._id ? res.data : n))
+        prevNotes.map((n) => (n._id === res._id ? res : n))
       );
-
-      if (window.socket) {
-        window.socket.emit("noteUpdated", res.data);
-      }
 
       toast.success("Nota marcada como Pagada");
       setShowPaymentConfirmationModal(false);
       setDispatchPaymentMethod(null);
     } catch (err) {
       console.error("Error al marcar como pagado:", err);
-      toast.error("Error al marcar como pagado");
+      toast.error(err || "Error al marcar como pagado");
     }
   };
 
   const handleDeliver = async (note) => {
+    if (!note || !note._id || !businessId) {
+      toast.error("Nota o negocio inválido.");
+      return;
+    }
     if (note.deliveredAt || note.note_status === "entregado") {
       toast.error("La nota ya está entregada.");
       return;
@@ -226,28 +233,23 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
     setConfirmMessage(`¿Confirmas marcar la nota ${note.folio} como Entregada?`);
     setConfirmAction(() => async () => {
       try {
-        const res = await axios.put(
-          `${url}/notes/${note._id}`,
-          { 
-            note_status: "entregado", 
-            deliveredAt: new Date(), 
-            cleaning_status: "entregado" 
-          },
-          setHeaders()
-        );
+        const payload = {
+          _id: note._id,
+          businessId,
+          note_status: "entregado",
+          deliveredAt: new Date().toISOString(),
+          cleaning_status: "entregado",
+        };
+        const res = await dispatch(notesEdit(payload)).unwrap();
 
         setLocalNotes((prevNotes) =>
-          prevNotes.map((n) => (n._id === res.data._id ? res.data : n))
-        );
-
-        if (window.socket) {
-          window.socket.emit("noteUpdated", res.data);
-        }
+          prevNotes.map((n) => (n._id === res._id ? res : n))
+      );
 
         toast.success("Nota marcada como Entregada");
       } catch (err) {
         console.error("Error al marcar como entregado:", err);
-        toast.error("Error al marcar como entregado");
+        toast.error(err || "Error al marcar como entregado");
       }
     });
     setShowConfirmModal(true);
@@ -261,14 +263,14 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
     if (!note.abonos || note.abonos.length === 0) return "$0.00";
     const total = getTotalAbonos(note);
     const methods = [...new Set(note.abonos.map((ab) => ab.method))].join(", ");
-    return `$${total.toFixed(2)} (${methods})`;
+    return `$${total.toLocaleString("es-MX")} (${methods})`;
   };
 
   return (
     <NoteContainer>
       {localNotes.length ? (
         localNotes.map((note) => (
-          <NoteBox key={note._id} onClick={() => onView(note._id)}>
+          <NoteBox key={note._id} onClick={() => onView(note._id, businessId)}>
             <BadgeContainer>
               <CleaningBadge $status={note.note_status === "entregado" ? "entregado" : note.cleaning_status}>
                 {note.note_status === "entregado" ? "Entregado" : (
@@ -281,11 +283,11 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
             <NoteInfo>
               <NoteId>Folio: {note.folio}</NoteId>
               <NoteName>Nombre: {note.name}</NoteName>
-              <NoteAmount>Total: ${note.total.toFixed(2)}</NoteAmount>
+              <NoteAmount>Total: ${note.total.toLocaleString("es-MX")}</NoteAmount>
               {note.note_status !== "pagado" && note.note_status !== "entregado" && note.abonos?.length > 0 && (
                 <>
                   <NoteAbonos>Abonado: {getAbonosSummary(note)}</NoteAbonos>
-                  <NoteRestante>Restante: ${getRestante(note).toFixed(2)}</NoteRestante>
+                  <NoteRestante>Restante: ${getRestante(note).toLocaleString("es-MX")}</NoteRestante>
                 </>
               )}
               <NoteStatus>{renderStatus(note.note_status)}</NoteStatus>
@@ -405,7 +407,7 @@ const NoteList = ({ notes, onView, onDispatch, onDeliver, onDelete }) => {
   );
 };
 
-// Resto del código (renderStatus y estilos) se mantiene igual
+// Estilos (sin cambios)
 const renderStatus = (status) => {
   switch (status) {
     case "pendiente":
@@ -419,7 +421,6 @@ const renderStatus = (status) => {
   }
 };
 
-// Estilos (se mantienen igual)
 const NoteContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -646,15 +647,10 @@ const BadgeContainer = styled.div`
 
 const CleaningBadge = styled.span`
   background-color: ${({ $status }) =>
-    $status === "sucia"
-      ? "#ff9800"
-      : $status === "lavado"
-      ? "#2196f3"
-      : $status === "listo_para_entregar"
-      ? "#4caf50"
-      : $status === "entregado"
-      ? "#6c757d"
-      : "#6c757d"};
+    $status === "sucia" ? "#ff9800" :
+    $status === "lavado" ? "#2196f3" :
+    $status === "listo_para_entregar" ? "#4caf50" :
+    $status === "entregado" ? "#6c757d" : "#6c757d"};
   color: #fff;
   padding: 0.3rem 0.7rem;
   border-radius: 20px;

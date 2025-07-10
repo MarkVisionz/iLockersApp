@@ -1,512 +1,533 @@
-const { LaundryNote } = require("../models/laundryNote");
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
+const { auth, isBusinessOwner } = require("../middleware/auth");
+const LaundryNote = require("../models/laundryNote");
+const Service = require("../models/laundryServices");
+const { sendWhatsAppMessage } = require("../utils/sendWhatsApp");
 const moment = require("moment");
-const { sendWhatsAppMessage } = require("../utils/sendWhatsapp");
+const validateStatusTransition = require("../middleware/validateStatusTransition");
 
-// Helper to emit stats updates
-const emitStatsUpdate = async (req, type = "both") => {
-  const previousMonth = moment()
-    .month(moment().month() - 1)
-    .set("date", 1)
-    .format("YYYY-MM-DD HH:mm:ss");
+const VALID_PAYMENT_METHODS = ["efectivo", "tarjeta", "transferencia"];
+const VALID_NOTE_STATUS = ["pendiente", "pagado", "entregado"];
+const VALID_CLEANING_STATUS = ["sucia", "lavado", "listo_para_entregar", "entregado"];
+
+const isValidPhone = (phone) => /^\+?[0-9]{7,15}$/.test(phone);
+
+const validateNote = async (req, res, next) => {
   try {
-    const stats = {};
-    if (type === "notes" || type === "both") {
-      stats.notes = await LaundryNote.aggregate([
-        { $match: { createdAt: { $gte: new Date(previousMonth) } } },
-        { $project: { month: { $month: "$createdAt" } } },
-        { $group: { _id: "$month", total: { $sum: 1 } } },
-      ]);
+    const {
+      name,
+      phoneNumber,
+      folio,
+      total,
+      abonos = [],
+      services,
+      payment_method,
+      note_status,
+      cleaning_status,
+      businessId,
+      suavitelDesired,
+      suavitelShots,
+      suavitelPrice,
+    } = req.body;
+
+    const effectiveBusinessId = businessId || req.businessId;
+    if (!effectiveBusinessId || !mongoose.Types.ObjectId.isValid(effectiveBusinessId)) {
+      return res.status(400).json({ success: false, message: "BusinessId inválido" });
     }
-    if (type === "income" || type === "both") {
-      stats.income = await LaundryNote.aggregate([
-        { $match: { createdAt: { $gte: new Date(previousMonth) } } },
-        { $project: { month: { $month: "$createdAt" }, total: "$total" } },
-        { $group: { _id: "$month", total: { $sum: "$total" } } },
-      ]);
+
+    if (!name || name.length < 3) {
+      return res.status(400).json({ success: false, message: "Nombre del cliente requerido" });
     }
-    if (req.io) {
-      if (stats.notes) {
-        console.log("Emitting laundryStatsUpdated: notes", stats.notes);
-        req.io.emit("laundryStatsUpdated", { type: "notes", data: stats.notes });
-      }
-      if (stats.income) {
-        console.log("Emitting laundryStatsUpdated: income", stats.income);
-        req.io.emit("laundryStatsUpdated", { type: "income", data: stats.income });
-      }
+
+    if (phoneNumber && !isValidPhone(phoneNumber)) {
+      return res.status(400).json({ success: false, message: "Teléfono inválido" });
     }
-  } catch (err) {
-    console.error("Error emitting stats:", err.message);
+
+    if (!folio || typeof folio !== "string") {
+      return res.status(400).json({ success: false, message: "Folio requerido" });
+    }
+
+    if (!Array.isArray(services) || services.length === 0) {
+      return res.status(400).json({ success: false, message: "Debes agregar al menos un servicio" });
+    }
+
+    const serviceIds = services.map((s) => s.serviceId);
+    const validServices = await Service.find({ _id: { $in: serviceIds }, businessId: effectiveBusinessId });
+    if (validServices.length !== services.length) {
+      return res.status(400).json({ success: false, message: "Uno o más servicios son inválidos" });
+    }
+
+    if (note_status === "pagado" && !VALID_PAYMENT_METHODS.includes(payment_method)) {
+      return res.status(400).json({ success: false, message: "Método de pago inválido para nota pagada" });
+    }
+
+    if (abonos.length > 0 && !abonos.every((a) => VALID_PAYMENT_METHODS.includes(a.method))) {
+      return res.status(400).json({ success: false, message: "Método de pago inválido en abonos" });
+    }
+
+    if (abonos.reduce((sum, a) => sum + a.amount, 0) > total) {
+      return res.status(400).json({ success: false, message: "El abono no puede ser mayor al total" });
+    }
+
+    if (!VALID_NOTE_STATUS.includes(note_status)) {
+      return res.status(400).json({ success: false, message: "Estado de nota inválido" });
+    }
+
+    if (!VALID_CLEANING_STATUS.includes(cleaning_status)) {
+      return res.status(400).json({ success: false, message: "Estado de limpieza inválido" });
+    }
+
+    if (suavitelDesired && (typeof suavitelShots !== "number" || suavitelShots < 0)) {
+      return res.status(400).json({ success: false, message: "Cantidad de shots de suavitel inválida" });
+    }
+
+    if (suavitelDesired && (typeof suavitelPrice !== "number" || suavitelPrice < 0)) {
+      return res.status(400).json({ success: false, message: "Precio de suavitel inválido" });
+    }
+
+    req.body.businessId = effectiveBusinessId;
+    next();
+  } catch (error) {
+    console.error("Error en validación:", error);
+    res.status(500).json({ success: false, message: "Error en validación" });
   }
 };
 
-// ✅ CREATE A NOTE
-router.post("/", async (req, res) => {
-  const {
-    name,
-    folio,
-    date,
-    services,
-    observations,
-    abonos,
-    suavitelDesired,
-    total,
-    note_status,
-    cleaning_status,
-    paidAt,
-    deliveredAt,
-    phoneNumber,
-    method,
-  } = req.body;
-
+const validateCleaningStatus = async (req, res, next) => {
   try {
-    const laundryNote = new LaundryNote({
-      name,
-      folio,
-      date,
-      services,
-      observations,
-      abonos: Array.isArray(abonos) ? abonos : [],
-      suavitelDesired,
-      total,
-      note_status: note_status || "pendiente",
-      cleaning_status: cleaning_status || "sucia",
-      paidAt,
-      deliveredAt,
-      phoneNumber,
-      method: note_status === "pagado" ? method : null,
+    const { cleaning_status, businessId } = req.body;
+    const effectiveBusinessId = businessId || req.businessId;
+
+    if (!effectiveBusinessId || !mongoose.Types.ObjectId.isValid(effectiveBusinessId)) {
+      return res.status(400).json({ success: false, message: "BusinessId inválido" });
+    }
+
+    if (!cleaning_status || !VALID_CLEANING_STATUS.includes(cleaning_status)) {
+      return res.status(400).json({ success: false, message: "Estado de limpieza inválido" });
+    }
+
+    if (cleaning_status === "entregado") {
+      return res.status(400).json({
+        success: false,
+        message: "No se puede cambiar a 'entregado' directamente. Use note_status.",
+      });
+    }
+
+    req.body.businessId = effectiveBusinessId;
+    next();
+  } catch (error) {
+    console.error("Error en validación de cleaning_status:", error);
+    res.status(400).json({ success: false, message: "Error en validación de cleaning_status" });
+  }
+};
+
+const validatePaymentUpdate = async (req, res, next) => {
+  try {
+    const { note_status, abonos, payment_method, businessId } = req.body;
+    const effectiveBusinessId = businessId || req.businessId;
+
+    console.log("Validating payment update:", {
+      noteId: req.params.id,
+      note_status,
+      abonos,
+      payment_method,
+      businessId: effectiveBusinessId,
     });
 
-    const savedLaundryNote = await laundryNote.save();
+    if (!effectiveBusinessId || !mongoose.Types.ObjectId.isValid(effectiveBusinessId)) {
+      console.error("Invalid businessId:", effectiveBusinessId);
+      return res.status(400).json({ success: false, message: "BusinessId inválido" });
+    }
 
-    // ✅ Enviar mensaje WhatsApp si hay número válido
-    if (phoneNumber) {
-      const totalAbonos = (abonos || []).reduce(
-        (sum, ab) => sum + ab.amount,
-        0
-      );
-      const pendiente = total - totalAbonos;
+    if (!req.params.id || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      console.error("Invalid noteId:", req.params.id);
+      return res.status(400).json({ success: false, message: "NoteId inválido" });
+    }
 
-      const unitMap = {
-        lavado: "kg",
-        secadora: "kg",
-        promomartes: "kg",
-        hamaca: "pza",
-        cubrecolchon: "pza",
-        "toallas/sabanas": "kg",
-        "cortinas/manteles": "kg",
-        tennis: "pza",
-        lavadoexpress: "kg",
-        extras: "shot",
-        edredon: "pza",
-        almohada: "pza",
-        cobija: "pza",
-      };
+    if (note_status && !VALID_NOTE_STATUS.includes(note_status)) {
+      return res.status(400).json({ success: false, message: "Estado de nota inválido" });
+    }
 
-      const formatServiceName = (str) =>
-        str
-          .replace(/_/g, " ")
-          .replace(/-/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .replace(/\b\w/g, (c) => c.toUpperCase());
+    if (abonos && (!Array.isArray(abonos) || !abonos.every((a) => VALID_PAYMENT_METHODS.includes(a.method) && typeof a.amount === "number" && a.amount > 0))) {
+      return res.status(400).json({ success: false, message: "Abonos inválidos" });
+    }
 
-      const formatServicesToText = (services) => {
-        return Object.entries(services)
-          .flatMap(([serviceName, data]) => {
-            const unit = unitMap[serviceName.toLowerCase()] || "";
-            const formattedName = formatServiceName(serviceName);
+    if (note_status === "pagado" && !VALID_PAYMENT_METHODS.includes(payment_method)) {
+      return res.status(400).json({ success: false, message: "Método de pago inválido para nota pagada" });
+    }
 
-            // Caso 1: servicio con tallas (anidado)
-            if (typeof data === "object" && !("quantity" in data)) {
-              return Object.entries(data).map(([subtype, val]) => {
-                const qty = val.quantity || 0;
-                const price = val.unitPrice || 0;
-                const total = (qty * price).toFixed(2);
-                if (qty > 0) {
-                  return `• ${formattedName} (${formatServiceName(
-                    subtype
-                  )}): ${qty} ${unit} x $${price} = $${total}`;
-                }
-                return null;
-              });
-            }
+    req.body.businessId = effectiveBusinessId;
+    next();
+  } catch (error) {
+    console.error("Error en validación de pago:", {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(400).json({ success: false, message: "Error en validación de pago" });
+  }
+};
 
-            // Caso 2: servicio simple
-            if (data?.quantity > 0) {
-              const qty = data.quantity;
-              const price = data.unitPrice || 0;
-              const total = (qty * price).toFixed(2);
-              return `• ${formattedName}: ${qty} ${unit} x $${price} = $${total}`;
-            }
+router.post("/", auth, isBusinessOwner, validateNote, async (req, res) => {
+  try {
+    const note = new LaundryNote(req.body);
+    await note.save();
+    console.log("Emitting noteCreated:", { businessId: req.body.businessId, data: note.toObject() });
+    req.io?.emit("noteCreated", {
+      businessId: req.body.businessId,
+      event: "noteCreated",
+      data: note.toObject(),
+    });
 
-            return null;
-          })
-          .filter(Boolean)
-          .join(", ");
-      };
-
-      const serviciosTexto = formatServicesToText(services);
-
-      const components = [
-        {
-          type: "body",
-          parameters: [
-            { type: "text", text: name || "Cliente" },
-            { type: "text", text: folio },
-            { type: "text", text: serviciosTexto || "Sin servicios" },
-            { type: "text", text: `$${total.toFixed(2)}` },
-            { type: "text", text: phoneNumber },
-          ],
-        },
-      ];
-
+    if (req.body.phoneNumber) {
       try {
-        await sendWhatsAppMessage({
-          to: phoneNumber.startsWith("52") ? phoneNumber : `52${phoneNumber}`,
-          templateName: "nueva_nota",
-          components,
+        const servicesWithUnits = await Promise.all(
+          req.body.services.map(async (svc) => {
+            const service = await Service.findById(svc.serviceId);
+            if (!service) return null;
+
+            if (service.type === "simple") {
+              return {
+                name: svc.name,
+                quantity: svc.quantity,
+                price: svc.price,
+                unit: svc.unit || service.unit || "pza",
+              };
+            } else {
+              const size = service.sizes.find((s) => svc.name.includes(`(${s.name})`));
+              return {
+                name: svc.name,
+                quantity: svc.quantity,
+                price: svc.price,
+                unit: svc.unit || size?.unit || "pza",
+              };
+            }
+          })
+        ).then((results) => results.filter(Boolean));
+
+        const formatServiceName = (str) =>
+          str
+            .replace(/_/g, " ")
+            .replace(/-/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+
+        const serviciosTexto = servicesWithUnits.map((svc) => {
+          const total = (svc.quantity * svc.price).toFixed(2);
+          return `• ${formatServiceName(svc.name)}: ${svc.quantity} ${svc.unit} x $${svc.price} = $${total}`;
         });
-        console.log("✅ WhatsApp enviado: nueva_nota");
-      } catch (whatsErr) {
-        console.error(
-          "❌ Error al enviar WhatsApp:",
-          whatsErr.response?.data || whatsErr.message
-        );
-        savedLaundryNote.whatsappError =
-          whatsErr.response?.data?.error?.message || whatsErr.message;
+
+        if (req.body.suavitelDesired && req.body.suavitelShots > 0) {
+          serviciosTexto.push(
+            `• Suavitel: ${req.body.suavitelShots} shot${req.body.suavitelShots > 1 ? "s" : ""} x $${req.body.suavitelPrice} = $${(req.body.suavitelShots * req.body.suavitelPrice).toFixed(2)}`
+          );
+        }
+
+        await sendWhatsAppMessage({
+          to: req.body.phoneNumber.startsWith("52") ? req.body.phoneNumber : `52${req.body.phoneNumber}`,
+          templateName: "nueva_nota",
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: req.body.name || "Cliente" },
+                { type: "text", text: req.body.folio },
+                { type: "text", text: serviciosTexto.join(", ") || "Sin servicios" },
+                { type: "text", text: `$${req.body.total.toFixed(2)}` },
+                { type: "text", text: req.body.phoneNumber },
+              ],
+            },
+          ],
+        });
+      } catch (whatsAppError) {
+        console.error("Error al enviar mensaje de WhatsApp:", whatsAppError.message);
       }
     }
 
-    if (req.io) {
-      console.log("Emitting noteCreated:", savedLaundryNote._id, savedLaundryNote.folio);
-      req.io.emit("noteCreated", savedLaundryNote);
-      await emitStatsUpdate(req, "both");
-    }
-
-    res.status(200).send(savedLaundryNote);
+    res.status(201).json({ success: true, message: "nota creada", data: note });
   } catch (error) {
-    console.error("Error saving laundry note:", error.message);
-    res.status(500).send({ message: error.message });
+    console.error("Error al crear nota:", error);
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// ✅ EDIT NOTE
-router.put("/:id", async (req, res) => {
+router.put("/:id/cleaning-status", auth, isBusinessOwner, validateCleaningStatus, async (req, res) => {
   try {
-    console.log("PUT /notes/:id called:", {
-      id: req.params.id,
-      body: req.body,
-    });
-
-    const note = await LaundryNote.findById(req.params.id);
+    const { cleaning_status, businessId } = req.body;
+    const note = await LaundryNote.findOne({ _id: req.params.id, businessId });
     if (!note) {
-      console.log("Note not found for ID:", req.params.id);
-      return res.status(404).send("Note not found...");
+      return res.status(404).json({ success: false, message: "nota no encontrada" });
     }
 
-    const { note_status, cleaning_status, newAbono, method } = req.body;
+    note.cleaning_status = cleaning_status;
+    if (cleaning_status === "listo_para_entregar" && note.phoneNumber) {
+      try {
+        const totalAbonos = (note.abonos || []).reduce((sum, ab) => sum + ab.amount, 0);
+        const pendiente = note.total - totalAbonos;
+        const estatus = note.note_status === "pagado" ? "Pagado" : "Pendiente";
 
-    // ✅ Actualizar status de pago
+        const templateName = note.note_status === "pagado" ? "ropa_pagada" : "ropa_lista";
+        let components;
+
+        if (templateName === "ropa_pagada") {
+          components = [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: note.name || "Cliente" },
+                { type: "text", text: note.folio },
+                { type: "text", text: estatus },
+                { type: "text", text: `$${note.total.toFixed(2)}` },
+              ],
+            },
+          ];
+        } else {
+          components = [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: note.name || "Cliente" },
+                { type: "text", text: note.folio },
+                { type: "text", text: estatus },
+                { type: "text", text: `$${totalAbonos.toFixed(2)}` },
+                { type: "text", text: `$${pendiente.toFixed(2)}` },
+                { type: "text", text: `$${note.total.toFixed(2)}` },
+              ],
+            },
+          ];
+        }
+
+        await sendWhatsAppMessage({
+          to: note.phoneNumber.startsWith("52") ? note.phoneNumber : `52${note.phoneNumber}`,
+          templateName,
+          components,
+        });
+      } catch (whatsAppError) {
+        console.error("Error al enviar mensaje de WhatsApp:", whatsAppError.message);
+        note.whatsappError = whatsAppError.message;
+      }
+    }
+
+    const updatedNote = await note.save();
+    console.log("Emitting noteUpdated:", { businessId, data: updatedNote.toObject() });
+    req.io?.emit("noteUpdated", {
+      businessId,
+      event: "noteUpdated",
+      data: updatedNote.toObject(),
+    });
+    res.json({ success: true, message: "Estado de limpieza actualizado", data: updatedNote });
+  } catch (error) {
+    console.error("Error al actualizar cleaning_status:", error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.put("/:id/payment", auth, isBusinessOwner, validatePaymentUpdate, validateStatusTransition, async (req, res) => {
+  try {
+    const { note_status, abonos, payment_method, businessId } = req.body;
+    if (!req.note) {
+      console.error("req.note is undefined:", { noteId: req.params.id, businessId });
+      return res.status(404).json({ success: false, message: "Nota no encontrada en el contexto" });
+    }
+
+    const note = req.note;
+    console.log("Processing payment update for note:", { _id: note._id, folio: note.folio });
+
     if (note_status) {
-      console.log("Updating note_status to:", note_status);
-      if (note_status === "pagado" && note.note_status !== "pendiente") {
-        return res
-          .status(400)
-          .send("La nota debe estar Pendiente para marcar como Pagada.");
-      }
-      if (note_status === "entregado" && note.note_status !== "pagado") {
-        return res
-          .status(400)
-          .send("La nota debe estar Pagada para marcar como Entregada.");
-      }
-      if (note_status === "pagado") {
-        const totalAbonado =
-          (note.abonos || []).reduce((acc, ab) => acc + ab.amount, 0) +
-          (newAbono ? newAbono.amount : 0);
-        if (totalAbonado < note.total) {
-          return res
-            .status(400)
-            .send(`Falta pagar $${(note.total - totalAbonado).toFixed(2)}.`);
-        }
-        if (!note.paidAt) {
-          note.paidAt = new Date();
-          note.method = method || note.method;
-        }
+      if (note_status === "pagado" && !note.paidAt) {
+        note.paidAt = new Date();
+        note.payment_method = payment_method || note.payment_method;
       }
       if (note_status === "entregado" && !note.deliveredAt) {
         note.deliveredAt = new Date();
-        note.cleaning_status = "entregado"; // Actualizar cleaning_status
-
-        // ✅ Enviar WhatsApp con botón de confirmación (Flow)
+        note.cleaning_status = "entregado";
         if (note.phoneNumber) {
           try {
-            const formattedDate =
-              moment(note.deliveredAt).format("DD/MM/YYYY - HH:mm") + " hrs";
-
+            const formattedDate = moment(note.deliveredAt).format("DD/MM/YYYY - HH:mm") + " hrs";
             const components = [
               {
                 type: "body",
                 parameters: [
-                  { type: "text", text: note.name || "Cliente" },             // {{1}} Nombre
-                  { type: "text", text: note.folio },                         // {{2}} Folio
-                  { type: "text", text: `$${note.total.toFixed(2)}` },        // {{3}} Total
-                  { type: "text", text: formattedDate },                      // {{4}} Fecha y hora
+                  { type: "text", text: note.name || "Cliente" },
+                  { type: "text", text: note.folio },
+                  { type: "text", text: `$${note.total.toFixed(2)}` },
+                  { type: "text", text: formattedDate },
                 ],
               },
               {
                 type: "button",
                 sub_type: "flow",
                 index: "0",
-                parameters: [
-                  {
-                    type: "payload",
-                    payload: "9730613807037945", // ✅ como string
-                  },
-                ],
+                parameters: [{ type: "payload", payload: "9730613807037945" }],
               },
             ];
-
             await sendWhatsAppMessage({
-              to: note.phoneNumber.startsWith("52")
-                ? note.phoneNumber
-                : `52${note.phoneNumber}`,
-              templateName: "testing", // <- tu template con botón
+              to: note.phoneNumber.startsWith("52") ? note.phoneNumber : `52${note.phoneNumber}`,
+              templateName: "testing",
               components,
             });
-
-            console.log("✅ WhatsApp con Flow enviado: testing");
           } catch (whatsErr) {
-            console.error(
-              "❌ Error enviando WhatsApp con Flow:",
-              whatsErr.response?.data || whatsErr.message
-            );
-            note.whatsappError =
-              whatsErr.response?.data?.error?.message || whatsErr.message;
+            console.error("Error enviando WhatsApp:", whatsErr.message);
+            note.whatsappError = whatsErr.message;
           }
         }
       }
-
       note.note_status = note_status;
     }
 
-    // ✅ Actualizar status de limpieza
-    if (cleaning_status) {
-      console.log("Updating cleaning_status to:", cleaning_status);
-      note.cleaning_status = cleaning_status;
-    }
-
-    if (
-      cleaning_status === "listo_para_entregar" &&
-      note.phoneNumber &&
-      note.cleaning_status !== "entregado"
-    ) {
-      try {
-        const totalAbonos = (note.abonos || []).reduce(
-          (sum, ab) => sum + ab.amount,
-          0
-        );
-        const pendiente = note.total - totalAbonos;
-        const estatus = note.note_status === "pagado" ? "Pagado" : "Pendiente";
-
-        const components = [
-          {
-            type: "body",
-            parameters: [
-              { type: "text", text: note.name || "Cliente" },
-              { type: "text", text: note.folio },
-              { type: "text", text: estatus },
-            ],
-          },
-        ];
-
-        // Si abonó algo, mostramos los campos opcionales
-        if (totalAbonos > 0) {
-          components[0].parameters.push(
-            { type: "text", text: `$${totalAbonos.toFixed(2)}` },
-            { type: "text", text: `$${pendiente.toFixed(2)}` }
-          );
-        } else {
-          // Si no abonó, manda guiones
-          components[0].parameters.push(
-            { type: "text", text: "-" },
-            { type: "text", text: "-" }
-          );
-        }
-
-        components[0].parameters.push({
-          type: "text",
-          text: `$${note.total.toFixed(2)}`,
-        });
-
-        await sendWhatsAppMessage({
-          to: note.phoneNumber.startsWith("52")
-            ? note.phoneNumber
-            : `52${note.phoneNumber}`,
-          templateName: "ropa_lista",
-          components,
-        });
-
-        console.log("✅ WhatsApp enviado: ropa_lista");
-      } catch (whatsErr) {
-        console.error(
-          "❌ Error enviando WhatsApp:",
-          whatsErr.response?.data || whatsErr.message
-        );
-        note.whatsappError =
-          whatsErr.response?.data?.error?.message || whatsErr.message;
-      }
-    }
-
-    // ✅ Agregar abono si existe
-    if (newAbono && newAbono.amount && newAbono.method) {
-      note.abonos.push({
-        amount: newAbono.amount,
-        method: newAbono.method,
-        date: newAbono.date || new Date(),
-      });
+    if (abonos && Array.isArray(abonos)) {
+      note.abonos = [...(note.abonos || []), ...abonos];
     }
 
     const updatedNote = await note.save();
-    console.log("Note updated:", updatedNote);
+    console.log("Emitting noteUpdated:", { businessId, data: updatedNote.toObject() });
+    req.io?.emit("noteUpdated", {
+      businessId,
+      event: "noteUpdated",
+      data: updatedNote.toObject(),
+    });
+    res.json({ success: true, message: "Pago actualizado", data: updatedNote });
+  } catch (error) {
+    console.error("Error al actualizar pago:", {
+      message: error.message,
+      stack: error.stack,
+      noteId: req.params.id,
+      businessId,
+    });
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
 
-    if (req.io) {
-      console.log(
-        "Emitting noteUpdated:",
-        updatedNote._id,
-        updatedNote.folio
-      );
-      req.io.emit("noteUpdated", updatedNote.toJSON());
-      await emitStatsUpdate(req, "both");
-    } else {
-      console.error("Socket.IO not available (req.io undefined)");
+router.put("/:id", auth, isBusinessOwner, validateNote, async (req, res) => {
+  try {
+    const note = await LaundryNote.findOne({ _id: req.params.id, businessId: req.body.businessId });
+    if (!note) {
+      return res.status(404).json({ success: false, message: "nota no encontrada" });
     }
 
-    res.status(200).send(updatedNote);
-  } catch (err) {
-    console.error("Error updating note:", err.message);
-    res.status(500).send(err);
-  }
-});
+    const restrictedFields = ['note_status', 'abonos', 'paidAt', 'deliveredAt', 'payment_method'];
+    const updateData = { ...req.body };
+    restrictedFields.forEach((field) => delete updateData[field]);
 
-// GET ALL NOTES
-router.get("/", async (req, res) => {
-  try {
-    const notes = await LaundryNote.find();
-    res.status(200).send(notes);
+    Object.assign(note, updateData);
+    const updatedNote = await note.save();
+    console.log("Emitting noteUpdated:", { businessId: req.body.businessId, data: updatedNote.toObject() });
+    req.io?.emit("noteUpdated", {
+      businessId: req.body.businessId,
+      event: "noteUpdated",
+      data: updatedNote.toObject(),
+    });
+    res.json({ success: true, message: "nota actualizada", data: updatedNote });
   } catch (error) {
-    console.log(error);
-    res.status(500).send(error);
+    console.error("Error al actualizar nota:", error);
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
-// DELETE NOTE
-router.delete("/:id", async (req, res) => {
+router.get("/", auth, isBusinessOwner, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    console.log("GET /api/notes - businessId:", businessId);
+    const notes = await LaundryNote.find({ businessId }).sort({ createdAt: -1 });
+    res.json({ success: true, data: notes });
+  } catch (error) {
+    console.error("Error al obtener notas:", error);
+    res.status(400).json({ success: false, message: "Error al obtener notas" });
+  }
+});
+
+router.get("/:id", auth, isBusinessOwner, async (req, res) => {
   try {
     const note = await LaundryNote.findById(req.params.id);
-    if (!note) return res.status(404).send("Note not found...");
-
-    const deletedNote = await LaundryNote.findByIdAndDelete(req.params.id);
-
-    if (req.io) {
-      console.log("Emitting noteDeleted:", deletedNote._id, deletedNote.folio);
-      req.io.emit("noteDeleted", deletedNote);
-      await emitStatsUpdate(req, "both");
+    if (!note) {
+      return res.status(404).json({ success: false, message: "nota no encontrada" });
     }
-
-    res.status(200).send(deletedNote);
+    if (!note.businessId.equals(req.businessId) && !req.user.isAdmin) {
+      return res.status(403).json({ success: false, message: "No autorizado" });
+    }
+    res.json({ success: true, data: note });
   } catch (error) {
-    res.status(500).send(error);
+    console.error("Error al obtener nota:", error);
+    res.status(400).json({ success: false, message: "Error al obtener nota" });
   }
 });
 
-// POST /api/notes/validate-password
-router.post("/validate-password", (req, res) => {
-  const { password } = req.body;
-  const isValid = password === process.env.ADMIN_PASSWORD;
-  return res.status(200).json({ valid: isValid });
-});
-
-// GET NOTE BY ID
-router.get("/findOne/:id", async (req, res) => {
+router.delete("/:id", auth, isBusinessOwner, async (req, res) => {
   try {
     const note = await LaundryNote.findById(req.params.id);
-    if (!note) return res.status(404).send("Note not found...");
-    res.status(200).send(note);
-  } catch (err) {
-    res.status(500).send(err);
+    if (!note) {
+      return res.status(404).json({ success: false, message: "nota no encontrada" });
+    }
+    if (!note.businessId.equals(req.businessId) && !req.user.isAdmin) {
+      return res.status(403).json({ success: false, message: "No autorizado" });
+    }
+    await LaundryNote.deleteOne({ _id: req.params.id });
+    console.log("Emitting noteDeleted:", { businessId: note.businessId, data: note.toObject() });
+    req.io?.emit("noteDeleted", {
+      businessId: note.businessId,
+      event: "noteDeleted",
+      data: note.toObject(),
+    });
+    res.json({ success: true, message: "nota eliminada", data: { noteId: note._id } });
+  } catch (error) {
+    console.error("Error al eliminar nota:", error);
+    res.status(400).json({ success: false, message: "Error al eliminar nota" });
   }
 });
 
-// GET INCOME STATS
-router.get("/income/stats", async (req, res) => {
-  const previousMonth = moment()
-    .month(moment().month() - 1)
-    .set("date", 1)
-    .format("YYYY-MM-DD HH:mm:ss");
-
+router.get("/stats/month", auth, isBusinessOwner, async (req, res) => {
   try {
-    const income = await LaundryNote.aggregate([
-      { $match: { createdAt: { $gte: new Date(previousMonth) } } },
-      {
-        $project: {
-          month: { $month: "$createdAt" },
-          total: "$total",
-        },
-      },
+    const businessId = req.businessId;
+    console.log("GET /api/notes/stats/month - businessId:", businessId);
+    const monthStats = await LaundryNote.aggregate([
+      { $match: { businessId: new mongoose.Types.ObjectId(businessId) } },
       {
         $group: {
-          _id: "$month",
+          _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": -1, "_id.month": -1 } },
+    ]);
+    console.log("Emitting statsUpdated for notes:", { businessId, data: { type: "notes", monthStats } });
+    req.io?.emit("statsUpdated", {
+      businessId,
+      event: "statsUpdated",
+      data: { type: "notes", monthStats },
+    });
+    res.json({ success: true, data: monthStats });
+  } catch (error) {
+    console.error("Error al obtener estadísticas:", error);
+    res.status(400).json({ success: false, message: "Error al obtener estadísticas" });
+  }
+});
+
+router.get("/stats/income", auth, isBusinessOwner, async (req, res) => {
+  try {
+    const businessId = req.businessId;
+    console.log("GET /api/notes/stats/income - businessId:", businessId);
+    const incomeStats = await LaundryNote.aggregate([
+      { $match: { businessId: new mongoose.Types.ObjectId(businessId) } },
+      {
+        $group: {
+          _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
           total: { $sum: "$total" },
         },
       },
+      { $sort: { "_id.year": -1, "_id.month": -1 } },
     ]);
-
-    if (req.io) {
-      console.log("Emitting laundryStatsUpdated: income", income);
-      req.io.emit("laundryStatsUpdated", { type: "income", data: income });
-    }
-
-    res.status(200).send(income);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err);
-  }
-});
-
-// GET NOTES STATS
-router.get("/stats", async (req, res) => {
-  const previousMonth = moment()
-    .month(moment().month() - 1)
-    .set("date", 1)
-    .format("YYYY-MM-DD HH:mm:ss");
-
-  try {
-    const notes = await LaundryNote.aggregate([
-      { $match: { createdAt: { $gte: new Date(previousMonth) } } },
-      {
-        $project: {
-          month: { $month: "$createdAt" },
-        },
-      },
-      {
-        $group: {
-          _id: "$month",
-          total: { $sum: 1 },
-        },
-      },
-    ]);
-
-    if (req.io) {
-      console.log("Emitting laundryStatsUpdated: notes", notes);
-      req.io.emit("laundryStatsUpdated", { type: "notes", data: notes });
-    }
-
-    res.status(200).send(notes);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err);
+    console.log("Emitting statsUpdated for income:", { businessId, data: { type: "income", incomeStats } });
+    req.io?.emit("statsUpdated", {
+      businessId,
+      event: "statsUpdated",
+      data: { type: "income", incomeStats },
+    });
+    res.json({ success: true, data: incomeStats });
+  } catch (error) {
+    console.error("Error al obtener ingresos:", error);
+    res.status(400).json({ success: false, message: "Error al obtener ingresos" });
   }
 });
 

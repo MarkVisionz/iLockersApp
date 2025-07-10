@@ -1,259 +1,278 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const mongoose = require("mongoose");
-const Service = require("../models/laundryServices");
+const mongoose = require('mongoose');
+const Service = require('../models/laundryServices');
+const Business = require('../models/business');
+const { auth, isBusinessOwner } = require('../middleware/auth');
 
-// Middleware de validación
+// Utilidad de validación para creación/edición de servicios
 const validateService = (req, res, next) => {
-  console.log("Payload recibido:", JSON.stringify(req.body, null, 2));
+  const services = Array.isArray(req.body.services) ? req.body.services : [req.body];
 
-  if (req.body.type === "simple") {
-    req.body.sizes = undefined;
-    if (
-      req.body.price === undefined ||
-      req.body.price === null ||
-      req.body.price < 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "El precio es requerido y debe ser no negativo para servicios simples",
-      });
-    }
-    req.body.price = Number(req.body.price);
-  } else if (req.body.type === "sized") {
-    req.body.price = undefined;
-    if (!req.body.sizes || req.body.sizes.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Debe agregar al menos una talla para servicios con tallas",
-      });
+  for (const service of services) {
+    // Validar businessId
+    if (!service.businessId || !mongoose.Types.ObjectId.isValid(service.businessId)) {
+      return res.status(400).json({ success: false, message: 'El ID del negocio es requerido y debe ser válido', code: 'INVALID_BUSINESS_ID' });
     }
 
-    req.body.sizes = req.body.sizes.map((size) => ({
-      id: size.id || new mongoose.Types.ObjectId().toString(),
-      name: size.name?.trim(),
-      price: Number(size.price),
-    }));
-  }
+    // Validar nombre
+    if (!service.name || service.name.trim().length < 3 || service.name.length > 50) {
+      return res.status(400).json({ success: false, message: 'El nombre debe tener entre 3 y 50 caracteres', code: 'INVALID_NAME' });
+    }
 
-  if (req.body.availableDays && !Array.isArray(req.body.availableDays)) {
-    return res.status(400).json({
-      success: false,
-      message: "availableDays debe ser un array",
-    });
+    // Validar tipo
+    if (!['simple', 'sized'].includes(service.type)) {
+      return res.status(400).json({ success: false, message: 'Tipo de servicio inválido', code: 'INVALID_TYPE' });
+    }
+
+    // Validaciones específicas según tipo
+    if (service.type === 'simple') {
+      service.sizes = undefined;
+      if (service.price === undefined || service.price === null || service.price < 0) {
+        return res.status(400).json({ success: false, message: 'El precio es requerido y debe ser no negativo para servicios simples', code: 'INVALID_PRICE' });
+      }
+      service.price = Number(service.price);
+    } else if (service.type === 'sized') {
+      service.price = undefined;
+      if (!service.sizes || !Array.isArray(service.sizes) || service.sizes.length === 0) {
+        return res.status(400).json({ success: false, message: 'Debe agregar al menos una talla', code: 'INVALID_SIZES' });
+      }
+      service.sizes = service.sizes.map(size => ({
+        id: size.id || new mongoose.Types.ObjectId().toString(),
+        name: size.name?.trim(),
+        price: Number(size.price),
+      }));
+    }
+
+    // Validar días disponibles (0-6)
+    if (service.availableDays && (!Array.isArray(service.availableDays) || service.availableDays.some(day => !Number.isInteger(day) || day < 0 || day > 6))) {
+      return res.status(400).json({ success: false, message: 'availableDays debe ser un arreglo de números entre 0 y 6', code: 'INVALID_AVAILABLE_DAYS' });
+    }
+
+    // Validar categoría
+    if (service.category && !['lavado', 'planchado', 'tintorería', 'otro'].includes(service.category)) {
+      return res.status(400).json({ success: false, message: 'Categoría inválida', code: 'INVALID_CATEGORY' });
+    }
+
+    // Validar descripción
+    if (service.description && service.description.length > 200) {
+      return res.status(400).json({ success: false, message: 'La descripción no puede exceder los 200 caracteres', code: 'INVALID_DESCRIPTION' });
+    }
   }
 
   next();
 };
 
-// GET Fetch Services
-router.get("/", async (req, res) => {
+// Obtener todos los servicios de un negocio con filtros opcionales
+router.get('/', auth, isBusinessOwner, async (req, res) => {
   try {
-    const { search = "", type = "" } = req.query;
-    const query = {};
-
-    if (search) query.name = { $regex: search, $options: "i" };
+    const businessId = req.businessId;
+    console.log("GET /api/services - businessId:", businessId);
+    const { search = '', type = '' } = req.query;
+    const query = { businessId: new mongoose.Types.ObjectId(businessId) };
+    if (search) query.name = { $regex: search, $options: 'i' };
     if (type) query.type = type;
 
     const services = await Service.find(query).sort({ createdAt: 1 }).lean();
-
+    console.log("Servicios encontrados:", services.length, services.map(service => ({ _id: service._id, name: service.name, businessId: service.businessId })));
     res.json({ success: true, data: services });
   } catch (error) {
-    console.error("Error en GET /api/services:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener los servicios",
-      error: error.message,
-    });
+    console.error('Error al obtener servicios:', error.message);
+    res.status(500).json({ success: false, message: 'Error al obtener servicios', code: 'SERVER_ERROR' });
   }
 });
 
-// GET Fetch ID
-router.get("/:id", async (req, res) => {
+// Obtener un servicio específico por ID
+router.get('/:id', auth, isBusinessOwner, async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ success: false, message: "ID de servicio no válido" });
+    const businessId = req.businessId;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id) || !mongoose.Types.ObjectId.isValid(businessId)) {
+      return res.status(400).json({ success: false, message: 'ID inválido', code: 'INVALID_ID' });
     }
-
-    const service = await Service.findById(req.params.id).lean();
-
+    const service = await Service.findOne({ _id: req.params.id, businessId }).lean();
     if (!service) {
-      return res.status(404).json({ success: false, message: "Servicio no encontrado" });
+      return res.status(404).json({ success: false, message: 'Servicio no encontrado', code: 'SERVICE_NOT_FOUND' });
     }
-
-    res.json({ success: true, message: "Servicio obtenido exitosamente", data: service });
+    res.json({ success: true, data: service });
   } catch (error) {
-    console.error("Error en GET /api/services/:id:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener el servicio",
-      error: error.message,
-    });
+    console.error('Error al obtener servicio:', error.message);
+    res.status(500).json({ success: false, message: 'Error al obtener el servicio', code: 'SERVER_ERROR' });
   }
 });
 
-// POST /api/services
-// Create Service
-router.post("/", validateService, async (req, res) => {
+// Crear un nuevo servicio
+router.post('/', auth, isBusinessOwner, validateService, async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-
-    const service = new Service(req.body);
-    await service.save();
-
-    req.io.emit("serviceCreated", service);
-
-    res.status(201).json({
-      success: true,
-      message: "Servicio creado exitosamente",
-      data: service,
+    session.startTransaction();
+    const service = new Service({
+      ...req.body,
+      businessId: req.businessId,
     });
+    await service.save({ session });
+
+    // Actualizar la colección Business
+    const business = await Business.findById(req.businessId).session(session);
+    if (!business) {
+      throw new Error('Negocio no encontrado');
+    }
+    business.services.push(service._id);
+    await business.save({ session });
+
+    await session.commitTransaction();
+    req.io?.emit('serviceCreated', { ...service.toObject(), businessId: req.businessId });
+    res.status(201).json({ success: true, message: 'Servicio creado', data: service });
   } catch (error) {
-    console.error("Error en POST /api/services:", error);
-
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err) => err.message);
-      return res.status(400).json({ success: false, message: "Error de validación", errors });
+    await session.abortTransaction();
+    console.error('Error al crear servicio:', error.message);
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ success: false, message: 'Error de validación', code: 'VALIDATION_ERROR', errors });
     }
-
     if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Ya existe un servicio con ese nombre",
-        error: error.message,
-      });
+      return res.status(400).json({ success: false, message: 'Nombre de servicio duplicado', code: 'DUPLICATE_NAME' });
     }
-
-    res.status(500).json({ success: false, message: "Error al crear el servicio", error: error.message });
+    res.status(500).json({ success: false, message: 'Error al crear servicio', code: 'SERVER_ERROR' });
+  } finally {
+    session.endSession();
   }
 });
 
-// Create Bulk
-router.post("/bulk", async (req, res) => {
+// Crear múltiples servicios (bulk)
+router.post('/bulk', auth, isBusinessOwner, async (req, res) => {
+  let session;
   try {
     const services = req.body.services;
-
-    if (!Array.isArray(services)) {
-      return res.status(400).json({ success: false, message: "Se espera un array de servicios." });
+    if (!Array.isArray(services) || services.length === 0) {
+      return res.status(400).json({ success: false, message: 'Se requiere un arreglo de servicios', code: 'INVALID_SERVICES' });
     }
 
-    const created = await Service.insertMany(services);
+    session = await mongoose.startSession();
+    session.startTransaction();
 
-    req.io.emit("servicesBulkCreated", created); // Puedes emitir todos o simplemente un trigger
+    const validated = services.map(service => ({
+      ...service,
+      businessId: req.businessId,
+      category: ['lavado', 'planchado', 'tintorería', 'otro'].includes(service.category) ? service.category : 'otro',
+    }));
 
+    const created = await Service.insertMany(validated, { session });
+
+    // Actualizar la colección Business
+    const business = await Business.findById(req.businessId).session(session);
+    if (!business) {
+      throw new Error('Negocio no encontrado');
+    }
+    business.services.push(...created.map(s => s._id));
+    await business.save({ session });
+
+    await session.commitTransaction();
+    req.io?.emit('servicesBulkCreated', created.map(s => ({ ...s.toObject(), businessId: req.businessId })));
     res.status(201).json({ success: true, count: created.length, data: created });
   } catch (error) {
-    console.error("Error en POST /services/bulk:", error);
-    res.status(500).json({ success: false, message: "Error al subir servicios masivos", error: error.message });
+    if (session?.inTransaction()) await session.abortTransaction();
+    console.error('Error al crear bulk:', error.message);
+    res.status(500).json({ success: false, message: 'Error al crear servicios masivos', code: 'SERVER_ERROR' });
+  } finally {
+    session?.endSession();
   }
 });
 
-
-// PUT /api/services/:id
-//Edit Service ID
-router.put("/:id", validateService, async (req, res) => {
+// Actualizar un servicio existente
+router.put('/:id', auth, isBusinessOwner, validateService, async (req, res) => {
   try {
-
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ success: false, message: "ID de servicio no válido" });
+      return res.status(400).json({ success: false, message: 'ID inválido', code: 'INVALID_ID' });
     }
-
     const updateData = { ...req.body, updatedAt: Date.now() };
-    const options = { new: true, runValidators: true, context: "query" };
-
-    const service = await Service.findByIdAndUpdate(req.params.id, updateData, options);
-
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, businessId: req.businessId },
+      updateData,
+      { new: true, runValidators: true }
+    );
     if (!service) {
-      return res.status(404).json({ success: false, message: "Servicio no encontrado" });
+      return res.status(404).json({ success: false, message: 'Servicio no encontrado', code: 'SERVICE_NOT_FOUND' });
     }
-
-    req.io.emit("serviceUpdated", service);
-
-    res.json({
-      success: true,
-      message: "Servicio actualizado exitosamente",
-      data: service,
-    });
+    req.io?.emit('serviceUpdated', { ...service.toObject(), businessId: req.businessId });
+    res.json({ success: true, message: 'Servicio actualizado', data: service });
   } catch (error) {
-    console.error("Error en PUT /api/services/:id:", error);
-
-    if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map((err) => err.message);
-      return res.status(400).json({ success: false, message: "Error de validación", errors });
+    console.error('Error al actualizar servicio:', error.message);
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ success: false, message: 'Error de validación', code: 'VALIDATION_ERROR', errors });
     }
-
     if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Ya existe un servicio con ese nombre",
-        error: error.message,
-      });
+      return res.status(400).json({ success: false, message: 'Nombre de servicio duplicado', code: 'DUPLICATE_NAME' });
     }
-
-    res.status(500).json({ success: false, message: "Error al actualizar el servicio", error: error.message });
+    res.status(500).json({ success: false, message: 'Error al actualizar servicio', code: 'SERVER_ERROR' });
   }
 });
 
-// DELETE /api/services/:id
-router.delete("/:id", async (req, res) => {
+// Eliminar un servicio específico
+router.delete('/:id', auth, isBusinessOwner, async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ success: false, message: "ID de servicio no válido" });
+    session.startTransaction();
+    const businessId = req.businessId;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id) || !mongoose.Types.ObjectId.isValid(businessId)) {
+      throw new Error('ID inválido');
     }
-
-    const service = await Service.findByIdAndDelete(req.params.id);
-
+    const service = await Service.findOneAndDelete({ _id: req.params.id, businessId }).session(session);
     if (!service) {
-      return res.status(404).json({ success: false, message: "Servicio no encontrado" });
+      throw new Error('Servicio no encontrado');
     }
 
-    req.io.emit("serviceDeleted", service);
+    // Actualizar la colección Business
+    await Business.findByIdAndUpdate(
+      businessId,
+      { $pull: { services: req.params.id } },
+      { session }
+    );
 
-    res.json({
-      success: true,
-      message: "Servicio eliminado exitosamente",
-      data: { _id: req.params.id },
-    });
+    await session.commitTransaction();
+    req.io?.emit('serviceDeleted', { ...service.toObject(), businessId });
+    res.json({ success: true, message: 'Servicio eliminado', data: { _id: req.params.id } });
   } catch (error) {
-    console.error("Error en DELETE /api/services/:id:", error);
-    res.status(500).json({
+    await session.abortTransaction();
+    console.error('Error al eliminar servicio:', error.message);
+    res.status(error.message === 'Servicio no encontrado' ? 404 : 500).json({
       success: false,
-      message: "Error al eliminar el servicio",
-      error: error.message,
+      message: error.message || 'Error al eliminar servicio',
+      code: error.message === 'Servicio no encontrado' ? 'SERVICE_NOT_FOUND' : 'SERVER_ERROR',
     });
+  } finally {
+    session.endSession();
   }
 });
 
-// DELETE /api/services (todos)
-router.delete("/", async (req, res) => {
+// Eliminar todos los servicios de un negocio
+router.delete('/', auth, isBusinessOwner, async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-    const result = await Service.deleteMany({});
+    session.startTransaction();
+    const businessId = req.businessId;
+    if (!mongoose.Types.ObjectId.isValid(businessId)) {
+      throw new Error('El ID del negocio es requerido y debe ser válido');
+    }
+    const result = await Service.deleteMany({ businessId }).session(session);
 
-    req.io.emit("servicesCleared");
-    
-    res.json({
-      success: true,
-      message: "Todos los servicios eliminados exitosamente",
-      data: { deletedCount: result.deletedCount },
-    });
+    // Actualizar la colección Business
+    await Business.findByIdAndUpdate(
+      businessId,
+      { $set: { services: [] } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    req.io?.emit('servicesCleared', { businessId });
+    res.json({ success: true, message: 'Todos los servicios eliminados', data: { deletedCount: result.deletedCount } });
   } catch (error) {
-    console.error("Error en DELETE /api/services:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al eliminar todos los servicios",
-      error: error.message,
-    });
+    await session.abortTransaction();
+    console.error('Error al eliminar servicios:', error.message);
+    res.status(500).json({ success: false, message: 'Error al eliminar servicios', code: 'SERVER_ERROR' });
+  } finally {
+    session.endSession();
   }
-});
-
-// Middleware de errores
-router.use((err, req, res, next) => {
-  console.error("Error middleware:", err.stack);
-  res.status(500).json({
-    success: false,
-    message: "Error interno del servidor",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
-  });
 });
 
 module.exports = router;

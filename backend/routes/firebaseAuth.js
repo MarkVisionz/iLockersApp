@@ -1,373 +1,398 @@
 const express = require("express");
 const admin = require("firebase-admin");
-const User = require("../models/user");
-const Order = require("../models/order");
-const genAuthToken = require("../utils/genAuthToken");
-const cors = require("cors");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
+const User = require("../models/user");
+const Order = require("../models/Order");
+const genAuthToken = require("../utils/genAuthToken");
 
 const router = express.Router();
-router.use(cors());
 
-// Inicialización de Firebase
+// 🔐 Inicializar Firebase Admin SDK
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-    }),
-  });
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      }),
+    });
+  } catch (error) {
+    console.error("Error al inicializar Firebase Admin SDK:", error.message);
+    throw new Error("Error en la inicialización de Firebase");
+  }
 }
 
-// 🔐 LOGIN con Firebase
+// 🔍 Middlewares de validación
+const validateLoginInput = (req, res, next) => {
+  const { token, name } = req.body;
+  if (!token)
+    return res.status(400).json({ success: false, message: "Token requerido" });
+  if (
+    name &&
+    (typeof name !== "string" || name.length < 3 || name.length > 50)
+  ) {
+    return res.status(400).json({ success: false, message: "Nombre inválido" });
+  }
+  next();
+};
+
+const validateRegisterInput = (req, res, next) => {
+  const { email, name, password } = req.body;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return res.status(400).json({ success: false, message: "Correo inválido" });
+  if (!name || name.length < 3 || name.length > 50)
+    return res.status(400).json({ success: false, message: "Nombre inválido" });
+  if (!password || password.length < 6)
+    return res
+      .status(400)
+      .json({ success: false, message: "Contraseña demasiado corta" });
+  next();
+};
+
+// 🔄 Función auxiliar para convertir un guest en usuario real
+const convertGuestToUser = async (user, updates, session) => {
+  const result = await User.updateOne(
+    { _id: user._id },
+    { $set: updates, $unset: { guestExpiresAt: "" } },
+    { session }
+  );
+  if (result.modifiedCount === 0)
+    throw new Error("No se pudo actualizar el usuario guest");
+  return await User.findById(user._id).session(session);
+};
+
+// 🔋 LOGIN con Firebase
 router.post("/firebase-login", async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  
   try {
-    const { token, name: userName } = req.body;
+    const { token, name } = req.body;
+    console.log("Procesando POST /auth/firebase-login:", {
+      email: req.body.email || "No proporcionado",
+      name,
+    });
 
     if (!token) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "Token requerido" });
+      console.log("Token no proporcionado");
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Token requerido",
+          code: "MISSING_TOKEN",
+        });
     }
 
-    // Verificación del token Firebase
-    const decoded = await admin.auth().verifyIdToken(token, true);
-    const { email, email_verified } = decoded;
-    const authProvider = decoded.firebase?.sign_in_provider || "password";
-    
-    // Determinar estado de verificación
-    const isOAuth = ["google.com", "facebook.com"].includes(authProvider);
-    const isVerified = isOAuth || email_verified;
+    // Verificar el ID token de Firebase
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    console.log("Firebase token decodificado:", {
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      provider: decodedToken.firebase?.sign_in_provider,
+    });
 
-    if (!email_verified && authProvider === "password") {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(403).json({
-        message: "Por favor verifica tu email antes de continuar",
-        email,
-      });
+    const provider = decodedToken.firebase?.sign_in_provider;
+    if (!["google.com", "facebook.com", "password"].includes(provider)) {
+      console.log("Proveedor no soportado:", provider);
+      return res
+        .status(401)
+        .json({
+          success: false,
+          message: "Proveedor no soportado",
+          code: "INVALID_PROVIDER",
+        });
     }
 
-    // Buscar usuario con transacción
-    let user = await User.findOne({ email }).session(session);
-    let isNew = false;
-
+    // Buscar o crear usuario en MongoDB
+    let user = await User.findOne({ email: decodedToken.email }).populate(
+      "businesses"
+    );
     if (!user) {
-      // Crear nuevo usuario
-      const name = userName || decoded.name || email.split("@")[0];
+      console.log("Creando nuevo usuario para email:", decodedToken.email);
       user = new User({
-        name,
-        email,
-        password: "firebase_oauth",
-        isAdmin: false,
-        isVerified: isVerified,
-        isGuest: false,
-        authProvider,
+        email: decodedToken.email,
+        name: name || decodedToken.email.split("@")[0],
+        authProvider: provider,
+        isVerified: true,
+        role: "user",
       });
+      await user.save();
+    } else if (user.authProvider !== provider) {
+      console.log(
+        "Conflicto de proveedor para email:",
+        decodedToken.email,
+        "Existente:",
+        user.authProvider
+      );
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Correo ya registrado con otro método de autenticación",
+          code: "PROVIDER_CONFLICT",
+        });
+    }
 
-      await user.save({ session });
-      isNew = true;
-      console.log(`✅ Nuevo usuario creado: ${email}`, {
-        provider: authProvider,
-        verified: isVerified
+    // Generar JWT local
+    const jwtPayload = {
+      _id: user._id,
+      email: user.email,
+      isAdmin: user.isAdmin || false,
+      role: user.role,
+      registrationStep: user.registrationStep || "pending",
+      authProvider: user.authProvider,
+      isVerified: user.isVerified,
+      defaultBusiness: user.defaultBusiness || null,
+    };
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET_KEY, {
+      expiresIn: "7d",
+    });
+    console.log("JWT generado:", {
+      userId: user._id,
+      email: user.email,
+      defaultBusiness: user.defaultBusiness,
+      businesses: user.businesses,
+    });
+
+    res.json({
+      success: true,
+      token: jwtToken,
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        defaultBusiness: user.defaultBusiness,
+        businesses: user.businesses,
+        isVerified: user.isVerified,
+      },
+    });
+  } catch (error) {
+    console.error("Error en /auth/firebase-login:", error.message);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Error al autenticar con Firebase",
+        code: "SERVER_ERROR",
+      });
+  }
+});
+
+// 🆕 REGISTRO con Firebase
+router.post("/firebase-register", validateRegisterInput, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { email, name, password, role, firebaseUid } = req.body;
+    console.log("Register request received:", {
+      email,
+      name,
+      role,
+      firebaseUid,
+    }); // Depuración
+
+    if (!name || name.trim().length < 3) {
+      throw { status: 400, message: "Nombre requerido, mínimo 3 caracteres" };
+    }
+
+    let user = await User.findOne({ email }).session(session);
+
+    if (user && !user.isGuest) {
+      throw { status: 400, message: "Correo ya registrado" };
+    }
+
+    if (user?.isGuest) {
+      user = await convertGuestToUser(
+        user,
+        {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password: await bcrypt.hash(password, 10),
+          isVerified: false,
+          isGuest: false,
+          authProvider: "password",
+          role,
+          registrationStep:
+            role === "owner" ? "email_verification" : "completed",
+          firebaseUid,
+        },
+        session
+      );
+      console.log("Usuario invitado convertido:", {
+        email,
+        name: name.trim(),
+        role,
       });
     } else {
-      // Verificar si es un guest y necesita conversión
-      if (user.isGuest) {
-        console.log(`🔄 Convirtiendo guest a usuario registrado: ${email}`);
-        
-        // Actualización directa en la base de datos
-        const updateResult = await User.updateOne(
-          { _id: user._id },
-          {
-            $set: {
-              authProvider,
-              isGuest: false,
-              isVerified: isVerified,
-              name: userName || decoded.name || user.name || email.split("@")[0],
-              password: authProvider === "password" ? "hashed_password" : "firebase_oauth"
-            },
-            $unset: { guestExpiresAt: "" }
-          }
-        ).session(session);
-
-        if (updateResult.modifiedCount === 0) {
-          throw new Error("No se pudo actualizar el usuario guest");
-        }
-
-        // Obtener el usuario actualizado
-        user = await User.findById(user._id).session(session);
-      }
-
-      // Actualizar nombre si es necesario
-      if (userName && user.name !== userName) {
-        await User.updateOne(
-          { _id: user._id },
-          { $set: { name: userName } }
-        ).session(session);
-        user.name = userName;
-      }
+      user = new User({
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+        password: await bcrypt.hash(password, 10),
+        isAdmin: false,
+        isVerified: false,
+        isGuest: false,
+        authProvider: "password",
+        role,
+        registrationStep: role === "owner" ? "email_verification" : "completed",
+        firebaseUid,
+      });
+      console.log("Creando nuevo usuario:", { email, name: name.trim(), role });
+      await user.save({ session });
     }
 
-    // Vincular órdenes de guest
     await Order.updateMany(
+      { "contact.email": email, userId: null },
       {
-        "contact.email": email,
-        userId: null,
-        isGuestOrder: true,
-      },
-      {
-        $set: {
-          userId: user._id,
-          isGuestOrder: false,
-        },
-        $unset: { guestId: "" }
+        $set: { userId: user._id, isGuestOrder: false },
+        $unset: { guestId: "" },
       },
       { session }
     );
 
-    // Generar token JWT
-    const jwtToken = genAuthToken({
+    const tokenJWT = genAuthToken({
       _id: user._id,
+      name: user.name,
       email: user.email,
       isAdmin: user.isAdmin,
       authProvider: user.authProvider,
-      isVerified: user.isVerified
+      isVerified: false,
+      role: user.role,
+      registrationStep: user.registrationStep,
     });
+    console.log("Token generado en /firebase-register:", tokenJWT); // Depuración
 
-    // Commit de la transacción
     await session.commitTransaction();
     session.endSession();
 
-    // Emitir evento si es nuevo usuario
-    if (isNew && req.io) {
-      req.io.emit("userCreated", {
+    res.status(201).json({
+      success: true,
+      token: tokenJWT,
+      user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         isAdmin: user.isAdmin,
+        isVerified: user.isVerified,
+        isGuest: user.isGuest,
         authProvider: user.authProvider,
-      });
-    }
-
-    // Respuesta con datos actualizados
-    const updatedUser = await User.findById(user._id);
-    console.log('Estado final del usuario:', {
-      authProvider: updatedUser.authProvider,
-      isGuest: updatedUser.isGuest,
-      isVerified: updatedUser.isVerified,
-      updatedAt: updatedUser.updatedAt
-    });
-
-    res.status(200).json({
-      token: jwtToken,
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        isAdmin: updatedUser.isAdmin,
-        isVerified: updatedUser.isVerified,
-        isGuest: updatedUser.isGuest,
-        authProvider: updatedUser.authProvider
+        role: user.role,
+        registrationStep: user.registrationStep,
+        firebaseUid: user.firebaseUid,
       },
+      requiresVerification: true,
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ Error en firebase-login:", {
+    console.error("Register Firebase Error:", {
       message: error.message,
       stack: error.stack,
-      user: error.user
+      email: req.body.email,
+      name: req.body.name,
     });
-    res.status(500).json({
-      message: "Error al procesar la autenticación",
-      details: error.message,
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Error interno",
     });
   }
 });
 
-// ✅ REGISTRO con Email/Password
-router.post("/firebase-register", async (req, res) => {
+// 📩 Verificar correo
+router.post("/verify-email", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const { email, name, password } = req.body;
-
-    if (!email || !name || !password) {
+    const { email } = req.body;
+    let user = await User.findOne({ email }).session(session);
+    if (!user) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(400).json({ message: "Faltan campos requeridos" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Usuario no encontrado" });
     }
 
-    // Buscar usuario existente
-    let user = await User.findOne({ email }).session(session);
+    const firebaseUser = await admin.auth().getUserByEmail(email);
 
-    if (user) {
-      if (user.isGuest) {
-        console.log(`🔄 Convirtiendo guest a usuario registrado: ${email}`);
-        
-        // Usuario password NO se marca como verificado automáticamente
-        const updateResult = await User.updateOne(
-          { _id: user._id },
-          {
-            $set: {
-              name,
-              password: await bcrypt.hash(password, 10), // Hashear la contraseña
-              isVerified: false, // Requiere verificación por email
-              isGuest: false,
-              authProvider: "password"
-            },
-            $unset: { guestExpiresAt: "" }
-          }
-        ).session(session);
-
-        if (updateResult.modifiedCount === 0) {
-          throw new Error("No se pudo actualizar el usuario guest");
-        }
-
-        user = await User.findById(user._id).session(session);
-      } else {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(400).json({ message: "El correo ya está registrado" });
-      }
-    } else {
-      // Crear nuevo usuario con email/password (no verificado inicialmente)
-      user = new User({
-        email,
-        name,
-        password: await bcrypt.hash(password, 10), // Hashear la contraseña
-        isAdmin: false,
-        isVerified: false, // Requiere verificación
-        isGuest: false,
-        authProvider: "password",
-      });
-
-      await user.save({ session });
-      console.log(`✅ Nuevo usuario registrado (pendiente verificación): ${email}`);
-      
-      // Aquí deberías enviar el email de verificación
-      // await sendVerificationEmail(email, user._id);
+    if (!firebaseUser.emailVerified) {
+      await session.abortTransaction();
+      session.endSession();
+      return res
+        .status(400)
+        .json({ success: false, message: "Email no verificado en Firebase" });
     }
 
-    // Vincular órdenes de guest
-    await Order.updateMany(
+    const nextStep = user.role === "owner" ? "business_setup" : "completed";
+
+    user = await User.findOneAndUpdate(
+      { email },
       {
-        "contact.email": email,
-        userId: null,
-        isGuestOrder: true,
+        isVerified: true,
+        registrationStep: nextStep,
+        lastLogin: new Date(),
       },
-      {
-        $set: {
-          userId: user._id,
-          isGuestOrder: false,
-        },
-        $unset: { guestId: "" }
-      },
-      { session }
+      { new: true, session }
     );
 
-    // Generar token JWT (con isVerified: false)
-    const jwtToken = genAuthToken({
+    const tokenJWT = genAuthToken({
       _id: user._id,
       email: user.email,
       isAdmin: user.isAdmin,
       authProvider: user.authProvider,
-      isVerified: false
+      isVerified: true,
+      role: user.role,
+      registrationStep: user.registrationStep, // Añadir
     });
+    console.log("Token generado:", tokenJWT);
 
     await session.commitTransaction();
     session.endSession();
 
-    // Verificación final
-    const updatedUser = await User.findById(user._id);
-    if (updatedUser.isGuest) {
-      console.error('❌ El usuario sigue siendo guest después de la conversión:', updatedUser);
-      throw new Error('La conversión de guest a usuario registrado falló');
-    }
-
-    res.status(201).json({
-      token: jwtToken,
+    res.status(200).json({
+      success: true,
+      token: tokenJWT,
       user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        isAdmin: updatedUser.isAdmin,
-        isVerified: updatedUser.isVerified,
-        isGuest: updatedUser.isGuest,
-        authProvider: updatedUser.authProvider
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        isVerified: user.isVerified,
+        isGuest: user.isGuest,
+        authProvider: user.authProvider,
+        role: user.role,
+        registrationStep: user.registrationStep,
+        firebaseUid: user.firebaseUid,
       },
-      requiresVerification: true // Indicar al frontend que necesita verificación
+      nextStep,
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error("❌ Error en firebase-register:", {
-      message: error.message,
-      stack: error.stack,
-      user: error.user
-    });
+    console.error("Verify Email Error:", error);
     res.status(500).json({
-      message: "Error al registrar usuario",
-      details: error.message,
+      success: false,
+      message: error.message || "Error al verificar email",
     });
   }
 });
 
-// 🔄 Endpoint para verificación de email
-router.post("/verify-email", async (req, res) => {
+// 📧 Enviar link de verificación
+router.post("/send-verification-email", async (req, res) => {
   try {
-    const { token } = req.body;
-    
-    // Aquí deberías verificar el token JWT o el token de verificación
-    // Esto es un ejemplo simplificado
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded._id;
-
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { $set: { isVerified: true } },
-      { new: true }
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
-    }
-
-    // Generar nuevo token con isVerified: true
-    const newToken = genAuthToken({
-      _id: updatedUser._id,
-      email: updatedUser.email,
-      isAdmin: updatedUser.isAdmin,
-      authProvider: updatedUser.authProvider,
-      isVerified: true
+    const { email } = req.body;
+    await admin.auth().generateEmailVerificationLink(email, {
+      url: process.env.CLIENT_URL || "http://localhost:3000",
     });
-
-    res.status(200).json({
-      token: newToken,
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        isAdmin: updatedUser.isAdmin,
-        isVerified: updatedUser.isVerified,
-        authProvider: updatedUser.authProvider
-      }
-    });
-
+    res
+      .status(200)
+      .json({ success: true, message: "Correo de verificación enviado" });
   } catch (error) {
-    console.error("❌ Error en verify-email:", error);
-    res.status(500).json({
-      message: "Error al verificar el email",
-      details: error.message,
-    });
+    console.error("Send Email Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

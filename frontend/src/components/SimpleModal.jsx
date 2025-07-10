@@ -1,17 +1,32 @@
 import React from "react";
 import styled from "styled-components";
 
-const SimpleConfirmationModal = ({ showModal, handleClose, handleConfirm, userName, itemType }) => {
+const SimpleConfirmationModal = ({
+  showModal,
+  handleClose,
+  handleConfirm,
+  userName,
+  itemType,
+}) => {
   if (!showModal) return null;
+
+  const getMessage = () => {
+    switch (itemType) {
+      case "producto":
+        return `¿Estás seguro de eliminar este producto: ${userName}?`;
+      case "usuario":
+        return `¿Estás seguro de eliminar este usuario: ${userName}?`;
+      case "negocio":
+        return `¿Estás seguro de eliminar este negocio: ${userName}?\nEsto eliminará todas las notas y servicios asociados.`;
+      default:
+        return `¿Estás seguro de eliminar este elemento: ${userName}?`;
+    }
+  };
 
   return (
     <ModalOverlay>
       <ModalContent>
-        <Message>
-          {itemType === 'producto' 
-            ? `¿Estás seguro de eliminar este producto: ${userName}?` 
-            : `¿Estás seguro de eliminar este usuario: ${userName}?`}
-        </Message>
+        <Message>{getMessage()}</Message>
         <ButtonContainer>
           <ConfirmButton onClick={handleConfirm}>Confirmar</ConfirmButton>
           <CancelButton onClick={handleClose}>Cancelar</CancelButton>
@@ -45,16 +60,12 @@ const ModalContent = styled.div`
   color: #333;
 `;
 
-const Title = styled.h3`
-  color: #007bff;
-  font-size: 1.4em;
-  margin-bottom: 15px;
-`;
-
 const Message = styled.p`
   color: #555;
   font-size: 1.1em;
   margin: 8px 0;
+  white-space: pre-line; /* Respeta los saltos de línea */
+  line-height: 1.5; /* Mejora la legibilidad */
 `;
 
 const ButtonContainer = styled.div`

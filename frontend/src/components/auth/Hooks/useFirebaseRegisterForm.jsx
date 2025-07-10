@@ -6,19 +6,18 @@ import {
 } from 'firebase/auth';
 import { auth } from '../../../features/firebase-config';
 import { useDispatch } from 'react-redux';
-import { setVerificationEmail as setEmailRedux } from '../../../features/authSlice';
+import { setVerificationEmail } from '../../../features/authSlice';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
-// Validadores
-const validateEmail = (email) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const validatePassword = (password) =>
-  password.length >= 8 &&
-  /[0-9]/.test(password) &&
-  /[A-Z]/.test(password);
+  password.length >= 8 && /[0-9]/.test(password) && /[A-Z]/.test(password);
 
-export const useFirebaseRegisterForm = () => {
+export const useFirebaseRegisterForm = (role = "customer") => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [errors, setErrors] = useState({ name: '', email: '', password: '', form: '' });
@@ -67,45 +66,58 @@ export const useFirebaseRegisterForm = () => {
     setIsSubmitting(true);
 
     try {
+      // 1. Registro en Firebase
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
 
+      // 2. Actualizar perfil en Firebase
       await updateProfile(userCredential.user, {
         displayName: formData.name,
       });
 
+      // 3. Enviar correo de verificación
       await sendEmailVerification(userCredential.user);
 
-      // Actualiza Redux y localStorage
+      // 4. Registrar en MongoDB
+      const backendResponse = await axios.post('/api/auth/firebase-register', {
+        email: formData.email,
+        name: formData.name,
+        password: formData.password,
+        role: role,
+        firebaseUid: userCredential.user.uid
+      });
+
+      if (!backendResponse.data.success) {
+        throw new Error(backendResponse.data.message || 'Error al registrar en el backend');
+      }
+
+      // 5. Guardar en Redux + localStorage
+      dispatch(setVerificationEmail(formData.email));
       localStorage.setItem("pendingVerificationEmail", formData.email);
-      dispatch(setEmailRedux(formData.email));
+      localStorage.setItem("pendingVerificationRole", role);
+
+      // 6. Redirigir a verificación
+      navigate('/verify-email');
 
     } catch (error) {
-      handleBackendError(error);
+      const firebaseErrors = {
+        'auth/email-already-in-use': { email: 'Este correo ya está registrado' },
+        'auth/invalid-email': { email: 'Correo inválido' },
+        'auth/weak-password': { password: 'La contraseña es muy débil' },
+        'auth/network-request-failed': { form: 'Error de red. Verifica tu conexión' },
+      };
+
+      const mapped = firebaseErrors[error.code] || 
+                    (error.response?.data?.errors ? 
+                     { form: error.response.data.message } : 
+                     { form: error.message || "Error en el registro" });
+
+      setErrors((prev) => ({ ...prev, ...mapped }));
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleBackendError = (error) => {
-    const firebaseErrors = {
-      'auth/email-already-in-use': { email: 'Este correo ya está registrado' },
-      'auth/invalid-email': { email: 'Correo inválido' },
-      'auth/weak-password': { password: 'La contraseña es muy débil' },
-      'auth/network-request-failed': { form: 'Error de red. Verifica tu conexión' },
-    };
-
-    const mapped = firebaseErrors[error.code];
-    if (mapped) {
-      setErrors((prev) => ({ ...prev, ...mapped }));
-    } else {
-      setErrors((prev) => ({
-        ...prev,
-        form: error.message || "Error en el registro",
-      }));
     }
   };
 
@@ -125,9 +137,6 @@ export const useFirebaseRegisterForm = () => {
     handleBlur,
     handleSubmit,
     setShowPassword,
-    resetForm,
-    validateForm,
-    handleBackendError,
-    setIsSubmitting
+    resetForm
   };
 };

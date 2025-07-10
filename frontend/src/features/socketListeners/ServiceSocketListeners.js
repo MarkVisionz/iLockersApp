@@ -1,4 +1,3 @@
-// setupServiceSocketListeners.js - Versión optimizada
 import {
   serviceAdded,
   serviceUpdated,
@@ -8,48 +7,83 @@ import {
 import socket from "../socket";
 import { toast } from "react-toastify";
 
+// Setup de listeners de servicios (tiempo real con Socket.IO)
 const setupServiceSocketListeners = (dispatch) => {
   if (!socket) {
-    console.warn("Socket no está disponible");
+    console.warn("⚠️ Socket no disponible.");
     return () => {};
   }
 
-  // Handlers específicos
+  // 🔄 Limpiar listeners previos para evitar duplicados
+  socket.off("serviceCreated");
+  socket.off("serviceUpdated");
+  socket.off("serviceDeleted");
+  socket.off("servicesCleared");
+  socket.off("servicesBulkCreated");
+
+  // 🟢 Nuevo servicio
   const handleServiceCreated = (newService) => {
-    dispatch(serviceAdded(newService));
-    toast.success(`Nuevo servicio: ${newService.name}`);
+    try {
+      dispatch(serviceAdded(newService));
+      toast.success(`Nuevo servicio creado: ${newService.name}`);
+    } catch (error) {
+      console.error("Error en serviceCreated:", error);
+      toast.error("Error al agregar servicio");
+    }
   };
 
+  // 🟡 Servicio actualizado
   const handleServiceUpdated = (updatedService) => {
-    dispatch(serviceUpdated(updatedService));
-    toast.info(`Servicio actualizado: ${updatedService.name}`);
+    try {
+      dispatch(serviceUpdated(updatedService));
+      toast.info(`Servicio actualizado: ${updatedService.name}`);
+    } catch (error) {
+      console.error("Error en serviceUpdated:", error);
+      toast.error("Error al actualizar servicio");
+    }
   };
 
+  // 🔴 Servicio eliminado
   const handleServiceDeleted = (deletedService) => {
-    dispatch(serviceDeleted(deletedService._id));
-    toast.warning(`Servicio eliminado: ${deletedService.name}`);
+    try {
+      dispatch(serviceDeleted(deletedService._id));
+      toast.warning(`Servicio eliminado: ${deletedService.name}`);
+    } catch (error) {
+      console.error("Error en serviceDeleted:", error);
+      toast.error("Error al eliminar servicio");
+    }
   };
 
+  // 🚫 Todos los servicios eliminados
   const handleServicesCleared = () => {
-    dispatch(clearAllServices());
-    toast.warning("Todos los servicios fueron eliminados");
+    try {
+      dispatch(clearAllServices());
+      toast.warning("Todos los servicios fueron eliminados");
+    } catch (error) {
+      console.error("Error en servicesCleared:", error);
+      toast.error("Error al limpiar servicios");
+    }
   };
 
+  // 📦 Servicios creados en bulk
   const handleBulkCreated = (createdServices) => {
-    createdServices.forEach((service) => {
-      dispatch(serviceAdded(service));
-    });
-    toast.success(`Se crearon ${createdServices.length} servicios correctamente`);
+    try {
+      createdServices.forEach((s) => dispatch(serviceAdded(s)));
+      toast.success(`Se crearon ${createdServices.length} servicios`);
+    } catch (error) {
+      console.error("Error en servicesBulkCreated:", error);
+      toast.error("Error al crear servicios en lote");
+    }
   };
 
-  // Registrar listeners
+  // 🎧 Registrar todos los listeners
   socket.on("serviceCreated", handleServiceCreated);
   socket.on("serviceUpdated", handleServiceUpdated);
   socket.on("serviceDeleted", handleServiceDeleted);
   socket.on("servicesCleared", handleServicesCleared);
   socket.on("servicesBulkCreated", handleBulkCreated);
 
-  // Retornar función de limpieza
+  // 🧹 Cleanup para cuando se desmonta el componente
   return () => {
     socket.off("serviceCreated", handleServiceCreated);
     socket.off("serviceUpdated", handleServiceUpdated);

@@ -1,15 +1,10 @@
 import socket from "../socket";
-import { 
-  noteAdded, 
-  noteUpdated, 
-  noteDeleted, 
-  updateStats 
-} from "../notesSlice";
+import { noteAdded, noteUpdated, noteDeleted, updateStats } from "../notesSlice";
 import { toast } from "react-toastify";
 
 const setupLaundrySocketListeners = (dispatch) => {
   if (!socket) {
-    console.warn('Socket connection not available');
+    console.warn("Socket connection not available");
     return () => {};
   }
 
@@ -19,37 +14,52 @@ const setupLaundrySocketListeners = (dispatch) => {
   socket.off("noteDeleted");
   socket.off("laundryStatsUpdated");
 
-  // Handlers con notificaciones toast
-  const handleNoteCreated = (newNote) => {
-    console.log("Socket: noteCreated", newNote._id, newNote.folio);
+  const handleNoteCreated = (eventData) => {
+    const newNote = eventData.data || eventData;
+    console.log("Socket: noteCreated", {
+      _id: newNote._id,
+      folio: newNote.folio,
+      name: newNote.name,
+      fullData: newNote,
+    });
     dispatch(noteAdded(newNote));
-    toast.success(`Nueva nota de lavandería creada: ${newNote.folio}`);
+    toast.success(`Nueva nota de lavandería creada: ${newNote.folio || "Sin folio"}`);
   };
 
-  const handleNoteUpdated = (updatedNote) => {
-    console.log("Socket: noteUpdated", updatedNote._id, updatedNote.folio);
+  const handleNoteUpdated = (eventData) => {
+    const updatedNote = eventData.data || eventData;
+    console.log("Socket: noteUpdated", {
+      _id: updatedNote._id,
+      folio: updatedNote.folio,
+      name: updatedNote.name,
+      fullData: updatedNote,
+    });
     dispatch(noteUpdated(updatedNote));
-    toast.info(`Nota actualizada: ${updatedNote.name}`);
+    toast.info(`Nota actualizada: ${updatedNote.folio || "Sin folio"}`);
   };
 
-  const handleNoteDeleted = (deletedNote) => {
-    console.log("Socket: noteDeleted", deletedNote._id, deletedNote.folio);
+  const handleNoteDeleted = (eventData) => {
+    const deletedNote = eventData.data || eventData;
+    console.log("Socket: noteDeleted", {
+      _id: deletedNote._id,
+      folio: deletedNote.folio,
+      name: deletedNote.name,
+      fullData: deletedNote,
+    });
     dispatch(noteDeleted(deletedNote));
-    toast.warning(`Nota eliminada: ${deletedNote.name}`);
+    toast.warning(`Nota eliminada: ${deletedNote.folio || "Sin folio"}`);
   };
 
   const handleStatsUpdated = ({ type, data }) => {
-    console.log("Socket: laundryStatsUpdated", type);
+    console.log("Socket: laundryStatsUpdated", { type, data });
     dispatch(updateStats({ type, data }));
   };
 
-  // Registrar listeners
   socket.on("noteCreated", handleNoteCreated);
   socket.on("noteUpdated", handleNoteUpdated);
   socket.on("noteDeleted", handleNoteDeleted);
   socket.on("laundryStatsUpdated", handleStatsUpdated);
 
-  // Handle connection events
   socket.on("connect", () => {
     console.log("Socket connected");
     toast.info("Conectado al servidor en tiempo real");
@@ -60,7 +70,6 @@ const setupLaundrySocketListeners = (dispatch) => {
     toast.warn("Desconectado del servidor. Intentando reconectar...");
   });
 
-  // Retornar función de limpieza
   return () => {
     socket.off("noteCreated", handleNoteCreated);
     socket.off("noteUpdated", handleNoteUpdated);

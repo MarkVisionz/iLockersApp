@@ -1,30 +1,32 @@
 import styled from "styled-components";
 import { useState, useMemo, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { getPeriodDates } from "./Helpers/dateUtils";
 import PeriodSection from "./Helpers/PeriodSection";
 import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
-import { LoadingSpinner } from "../../LoadingAndError";
+import { LoadingSpinner, ErrorMessage } from "../../LoadingAndError";
 import moment from "moment";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const Transactions = () => {
+const Transactions = ({ businessId }) => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const notes = useSelector((state) => state.notes.items);
-  const isLoading = useSelector((state) => state.notes.status) === "pending";
-  const error =
-    useSelector((state) => state.notes.status) === "rejected"
-      ? "Error al cargar las notas"
-      : null;
+  const { items: notes = [], status, error } = useSelector((state) => state.notes);
+  const { businesses } = useSelector((state) => state.auth);
+
+  const isValidBusiness = businesses.some((b) => b._id === businessId);
 
   const [reportStartDate, setReportStartDate] = useState("");
   const [reportEndDate, setReportEndDate] = useState("");
   const [exportSelectedPeriod, setExportSelectedPeriod] = useState("daily");
   const [showExportSection, setShowExportSection] = useState(false);
-  const [periodSelected, setPeriodSelected] = useState("daily");
+
+  const filteredNotes = useMemo(() => {
+    const filtered = notes.filter((note) => note.businessId === businessId);
+    console.log(`Filtered ${filtered.length} notes for businessId: ${businessId}`);
+    return filtered;
+  }, [notes, businessId]);
 
   const { startDate: exportStartDate, endDate: exportEndDate } = useMemo(
     () => getPeriodDates(exportSelectedPeriod, reportStartDate, reportEndDate),
@@ -32,18 +34,19 @@ const Transactions = () => {
   );
 
   const filterNotesByPeriod = (startDate, endDate) => {
-    return notes.reduce(
+    return filteredNotes.reduce(
       (acc, note) => {
         const noteDate = moment(note.createdAt);
         const paymentDate = note.paidAt ? moment(note.paidAt) : null;
 
-        // Incluir notas creadas en el periodo
         if (noteDate.isBetween(startDate, endDate, undefined, "[]")) {
           acc.createdNotes.push(note);
         }
 
-        // Incluir notas pagadas (cualquier nota con paidAt)
-        if (note.paidAt && paymentDate.isBetween(startDate, endDate, undefined, "[]")) {
+        if (
+          note.paidAt &&
+          paymentDate.isBetween(startDate, endDate, undefined, "[]")
+        ) {
           acc.paidNotes.push(note);
         }
 
@@ -53,23 +56,11 @@ const Transactions = () => {
     );
   };
 
-  const dailyStartDate = useMemo(() => moment().startOf("day"), []);
-  const dailyEndDate = useMemo(() => moment().endOf("day"), []);
-  const weeklyStartDate = useMemo(() => moment().startOf("isoWeek"), []);
-  const weeklyEndDate = useMemo(() => moment().endOf("isoWeek"), []);
-  const monthlyStartDate = useMemo(() => moment().startOf("month"), []);
-  const monthlyEndDate = useMemo(() => moment().endOf("month"), []);
-
-  const dailyFilteredNotes = filterNotesByPeriod(dailyStartDate, dailyEndDate);
-  const weeklyFilteredNotes = filterNotesByPeriod(weeklyStartDate, weeklyEndDate);
-  const monthlyFilteredNotes = filterNotesByPeriod(monthlyStartDate, monthlyEndDate);
-
   const calculateTotals = (filteredNotes) => {
     return filteredNotes.reduce(
       (acc, note) => {
-        acc.totalSales += note.total;
-        // Sumar al cashInHand si la nota tiene paidAt
-        acc.cashInHand += note.paidAt ? note.total : 0;
+        acc.totalSales += note.total || 0;
+        acc.cashInHand += note.paidAt ? note.total || 0 : 0;
         return acc;
       },
       { totalSales: 0, cashInHand: 0 }
@@ -77,13 +68,16 @@ const Transactions = () => {
   };
 
   const latestTransactions = useMemo(() => {
-    return [...notes]
+    return [...filteredNotes]
       .sort((a, b) => moment(b.createdAt) - moment(a.createdAt))
       .slice(0, 5);
-  }, [notes]);
+  }, [filteredNotes]);
 
   const prepareExportData = () => {
-    const { createdNotes, paidNotes } = filterNotesByPeriod(exportStartDate, exportEndDate);
+    const { createdNotes, paidNotes } = filterNotesByPeriod(
+      exportStartDate,
+      exportEndDate
+    );
     const uniqueNotes = new Set();
     const combinedNotes = [];
 
@@ -95,14 +89,14 @@ const Transactions = () => {
     });
 
     return combinedNotes.map((note) => ({
-      Folio: note.folio,
-      "Nombre del Cliente": note.name,
-      Cantidad: note.total,
+      Folio: note.folio || "N/A",
+      "Nombre del Cliente": note.name || "Sin nombre",
+      Cantidad: note.total || 0,
       "Fecha de Creación": moment(note.createdAt).format("DD/MM/YYYY"),
       "Fecha de Pago": note.paidAt
         ? moment(note.paidAt).format("DD/MM/YYYY")
         : "No Pagado",
-      Estado: note.note_status,
+      Estado: note.note_status || "Desconocido",
     }));
   };
 
@@ -116,10 +110,6 @@ const Transactions = () => {
     toast.success("Reporte exportado exitosamente.");
   };
 
-  const toggleExportSection = () => {
-    setShowExportSection((prev) => !prev);
-  };
-
   const handleExportPeriodChange = useCallback((e) => {
     setExportSelectedPeriod(e.target.value);
     if (e.target.value !== "custom") {
@@ -131,7 +121,9 @@ const Transactions = () => {
   const handleExport = () => {
     if (exportSelectedPeriod === "custom") {
       if (!reportStartDate || !reportEndDate) {
-        toast.error("Por favor, selecciona ambas fechas para el reporte personalizado.");
+        toast.error(
+          "Por favor, selecciona ambas fechas para el reporte personalizado."
+        );
         return;
       }
 
@@ -149,27 +141,66 @@ const Transactions = () => {
     }
 
     const exportData = prepareExportData();
-    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format("YYYYMMDD_HHmmss")}`;
+    const fileName = `Reporte_${exportSelectedPeriod}_${moment().format(
+      "YYYYMMDD_HHmmss"
+    )}`;
     exportToExcel(exportData, fileName);
   };
 
-  if (isLoading) return <LoadingSpinner />;
-  if (error)
+  const toggleExportSection = () => {
+    setShowExportSection((prev) => !prev);
+  };
+
+  const dailyStartDate = useMemo(() => moment().startOf("day"), []);
+  const dailyEndDate = useMemo(() => moment().endOf("day"), []);
+  const weeklyStartDate = useMemo(() => moment().startOf("isoWeek"), []);
+  const weeklyEndDate = useMemo(() => moment().endOf("isoWeek"), []);
+  const monthlyStartDate = useMemo(() => moment().startOf("month"), []);
+  const monthlyEndDate = useMemo(() => moment().endOf("month"), []);
+
+  const dailyFilteredNotes = filterNotesByPeriod(dailyStartDate, dailyEndDate);
+  const weeklyFilteredNotes = filterNotesByPeriod(
+    weeklyStartDate,
+    weeklyEndDate
+  );
+  const monthlyFilteredNotes = filterNotesByPeriod(
+    monthlyStartDate,
+    monthlyEndDate
+  );
+
+  if (!isValidBusiness) {
     return (
-      <StyledTransactions>
-        <ErrorMessage>{error}</ErrorMessage>
-      </StyledTransactions>
+      <ErrorContainer>
+        <ErrorMessage>Negocio no encontrado o no autorizado</ErrorMessage>
+      </ErrorContainer>
     );
+  }
+
+  if (status === "pending" && !filteredNotes.length) {
+    return <LoadingSpinner message="Cargando transacciones..." />;
+  }
+
+  if (status === "rejected") {
+    return (
+      <ErrorContainer>
+        <ErrorMessage>
+          Error al cargar transacciones: {error || "Por favor intenta de nuevo"}
+        </ErrorMessage>
+      </ErrorContainer>
+    );
+  }
 
   return (
     <StyledTransactions>
       <Header>
-        <Title>Resumen de Datos</Title>
+        <Title>Resumen de Transacciones</Title>
         <ButtonContainer>
           <ToggleExportButton onClick={toggleExportSection}>
             {showExportSection ? "Ocultar Reportes" : "Mostrar Reportes"}
           </ToggleExportButton>
-          <CreateNoteButton onClick={() => navigate("/laundry-note")}>
+          <CreateNoteButton
+            onClick={() => navigate("/laundry-note", { state: { businessId } })}
+          >
             Crear Nota
           </CreateNoteButton>
         </ButtonContainer>
@@ -215,9 +246,7 @@ const Transactions = () => {
           )}
 
           <ExportButtons>
-            <ExportButton onClick={handleExport} aria-label="Exportar reporte">
-              Exportar Reporte
-            </ExportButton>
+            <ExportButton onClick={handleExport}>Exportar Reporte</ExportButton>
           </ExportButtons>
         </ReportFilterContainer>
       )}
@@ -246,14 +275,14 @@ const Transactions = () => {
         />
       </PeriodsContainer>
 
-      <TitleLast>Últimas Transacciones</TitleLast>
+      <Title>Últimas Transacciones</Title>
       {latestTransactions.length > 0 ? (
         <TransactionList>
-          {latestTransactions.map((note, index) => (
-            <TransactionItem key={index}>
-              <CustomerName>{note.name}</CustomerName>
+          {latestTransactions.map((note) => (
+            <TransactionItem key={note._id}>
+              <CustomerName>{note.name || "Sin nombre"}</CustomerName>
               <Amount>
-                {note.total.toLocaleString("es-MX", {
+                {(note.total || 0).toLocaleString("es-MX", {
                   style: "currency",
                   currency: "MXN",
                 })}
@@ -271,24 +300,18 @@ const Transactions = () => {
 
 const StyledTransactions = styled.div`
   padding: 1rem;
-  border-radius: 5px;
+  border-radius: 8px;
   background-color: #f9f9f9;
   color: #333;
-  transition: background-color 0.3s ease, color 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
-const Title = styled.h3`
-  margin-bottom: 1rem;
-  color: #333;
-  text-align: center;
-`;
-
-const TitleLast = styled.h3`
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  color: #333;
-  text-align: center;
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
 `;
 
 const Header = styled.div`
@@ -297,6 +320,12 @@ const Header = styled.div`
   justify-content: center;
   align-items: center;
   margin-bottom: 1.5rem;
+`;
+
+const Title = styled.h3`
+  margin: 1rem 0;
+  color: #333;
+  text-align: center;
 `;
 
 const ButtonContainer = styled.div`
@@ -313,44 +342,9 @@ const ToggleExportButton = styled.button`
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
-
-  &:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-    background: linear-gradient(45deg, #3a5bb8, #4b70e2);
-  }
-
-  &:active {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
 `;
 
-const CreateNoteButton = styled.button`
-  padding: 0.9rem;
-  background: linear-gradient(45deg, #4b70e2, #3a5bb8);
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
-
-  &:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-    background: linear-gradient(45deg, #3a5bb8, #4b70e2);
-  }
-
-  &:active {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-`;
+const CreateNoteButton = styled(ToggleExportButton)``;
 
 const ReportFilterContainer = styled.div`
   display: flex;
@@ -362,65 +356,18 @@ const ReportFilterContainer = styled.div`
   padding: 1.5rem;
   border-radius: 12px;
   background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: max-height 0.3s ease, opacity 0.3s ease;
 `;
 
 const PeriodSelector = styled.div`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-
-  label {
-    margin-bottom: 0.3rem;
-    font-weight: bold;
-    color: #333;
-  }
-
-  select {
-    padding: 0.5rem 0.7rem;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-    transition: border-color 0.3s, box-shadow 0.3s;
-
-    &:focus {
-      border-color: #4b70e2;
-      box-shadow: 0 0 5px rgba(75, 112, 226, 0.5);
-      outline: none;
-    }
-  }
 `;
 
 const CustomDateRange = styled.div`
   display: flex;
   justify-content: center;
   gap: 1rem;
-  margin-top: 0.5rem;
-
-  div {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-
-    label {
-      margin-bottom: 0.3rem;
-      font-weight: bold;
-      color: #333;
-    }
-
-    input {
-      padding: 0.5rem 0.7rem;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      transition: border-color 0.3s, box-shadow 0.3s;
-
-      &:focus {
-        border-color: #4b70e2;
-        box-shadow: 0 0 5px rgba(75, 112, 226, 0.5);
-        outline: none;
-      }
-    }
-  }
 `;
 
 const ExportButtons = styled.div`
@@ -438,32 +385,12 @@ const ExportButton = styled.button`
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease;
-
-  &:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-    background: linear-gradient(45deg, #3a5bb8, #4b70e2);
-  }
-
-  &:active {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
 `;
 
 const PeriodsContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-`;
-
-const ErrorMessage = styled.div`
-  color: red;
-  text-align: center;
-  margin: 1rem 0;
-  font-weight: bold;
 `;
 
 const TransactionList = styled.div`
@@ -479,25 +406,17 @@ const TransactionItem = styled.div`
   background: #eef2ff;
   padding: 1rem 1.2rem;
   border-radius: 10px;
-  transition: box-shadow 0.5s ease, transform 0.4s ease;
-
-  &:hover {
-    box-shadow: 0 6px 12px rgba(75, 112, 226, 0.2);
-    transform: translateY(-1px);
-  }
 `;
 
 const CustomerName = styled.span`
   flex: 2;
   font-weight: 600;
-  font-size: 1rem;
 `;
 
 const Amount = styled.span`
   flex: 1;
   text-align: center;
   font-weight: 700;
-  font-size: 1rem;
   color: #28a745;
 `;
 

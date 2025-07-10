@@ -13,10 +13,12 @@ import ordersSlice from "./features/ordersSlice";
 import usersSlice from "./features/usersSlice";
 import notesReducer from "./features/notesSlice";
 import servicesSlice from "./features/servicesSlice";
+import businessSlice from "./features/businessSlice";
+import authUserReducer from "./features/authUserSlice";
 
 import setupAllSocketListeners from "./features/socketListeners/AllSocketListeners";
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
     products: productsReducer,
     orders: ordersSlice,
@@ -26,6 +28,8 @@ const store = configureStore({
     services: servicesSlice,
     [productsApi.reducerPath]: productsApi.reducer,
     notes: notesReducer,
+    business: businessSlice,
+    authUser: authUserReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(productsApi.middleware),

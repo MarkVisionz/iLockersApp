@@ -1,107 +1,120 @@
 const mongoose = require("mongoose");
 
-const serviceSchema = new mongoose.Schema({
+const sizeSchema = new mongoose.Schema({
+  id: { type: String, required: true },
   name: {
     type: String,
-    required: [true, "El nombre del servicio es requerido"],
+    required: true,
     trim: true,
-    maxlength: [50, "El nombre no puede exceder los 50 caracteres"],
-  },
-  type: {
-    type: String,
-    enum: {
-      values: ["simple", "sized"],
-      message: "Tipo de servicio inválido. Use 'simple' o 'sized'",
-    },
-    required: [true, "El tipo de servicio es requerido"],
+    maxlength: [30, "El nombre de la talla no puede exceder los 30 caracteres"],
   },
   price: {
     type: Number,
+    required: true,
     min: [0, "El precio no puede ser negativo"],
-    required: function () {
-      return this.type === "simple";
-    },
-    default: undefined, // Cambiado de null a undefined
   },
-
-  sizes: {
-    type: [
-      {
-        id: {
-          type: String,
-          required: true, // Siempre requerido si existe el array
-          default: () => new mongoose.Types.ObjectId().toString(), // Generar ID consistente
-        },
-        name: {
-          type: String,
-          required: true,
-          trim: true,
-          maxlength: [
-            30,
-            "El nombre de la talla no puede exceder los 30 caracteres",
-          ],
-        },
-        price: {
-          type: Number,
-          required: true,
-          min: [0, "El precio no puede ser negativo"],
-        },
-      },
-    ],
-    required: function () {
-      return this.type === "sized";
-    },
-    default: undefined,
-  },
-  availableDays: {
-    type: [Number],
-    validate: {
-      validator: function (days) {
-        // Permitir array vacío o con días válidos
-        return days.length === 0 || days.every((day) => day >= 0 && day <= 6);
-      },
-      message: "Los días deben ser valores entre 0 (Domingo) y 6 (Sábado)",
-    },
-    default: [], // Asegurar que siempre haya un array
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    immutable: true,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  businessId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Business",
-    required: [true, "El ID del negocio es requerido"],
+  unit: {
+    type: String,
+    default: 'pza', // Unidad por defecto para tallas
   },
 });
 
-serviceSchema.index({ name: 1 });
-serviceSchema.index({ type: 1 });
-serviceSchema.index({ createdAt: -1 });
-
-// serviceSchema.pre("save", function (next) {
-//   this.updatedAt = Date.now();
-//   if (this.type === "sized" && this.price === null) {
-//     this.price = undefined;
-//   }
-//   next();
-// });
+const serviceSchema = new mongoose.Schema(
+  {
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Business",
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [50, "El nombre no puede exceder los 50 caracteres"],
+    },
+    type: {
+      type: String,
+      enum: ["simple", "sized"],
+      required: true,
+    },
+    price: {
+      type: Number,
+      min: [0, "El precio no puede ser negativo"],
+      required: function () {
+        return this.type === "simple";
+      },
+      default: undefined,
+    },
+    sizes: {
+      type: [sizeSchema],
+      required: function () {
+        return this.type === "sized";
+      },
+      validate: {
+        validator: function (v) {
+          return this.type === "sized" ? v.length > 0 : true;
+        },
+        message: "Se requiere al menos una talla para servicios con tallas",
+      },
+      default: function () {
+        return this.type === "sized" ? [] : undefined;
+      },
+    },
+    availableDays: {
+      type: [Number],
+      validate: {
+        validator: (days) => days.every((day) => day >= 0 && day <= 6),
+        message: "Los días deben ser entre 0 (Domingo) y 6 (Sábado)",
+      },
+      default: [],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      immutable: true,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    unit: {
+      type: String,
+      default: 'pza', // Unidad por defecto para servicios simples
+      required: function() { return this.type === 'simple'; }
+    }
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: function (doc, ret) {
+        delete ret.__v;
+        return ret;
+      },
+    },
+  }
+);
 
 serviceSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
-  // Limpieza condicional de campos
+  if (this.isModified("name")) {
+    this.name = this.name.trim().replace(/\b\w/g, (l) => l.toUpperCase());
+  }
   if (this.type === "simple") {
     this.sizes = undefined;
   } else if (this.type === "sized") {
     this.price = undefined;
   }
-
   next();
 });
+
+serviceSchema.index({ businessId: 1, name: 1 }, { unique: true });
+serviceSchema.index({ type: 1 });
+serviceSchema.index({ createdAt: -1 });
+serviceSchema.index({ isActive: 1 });
 
 module.exports = mongoose.model("Service", serviceSchema);

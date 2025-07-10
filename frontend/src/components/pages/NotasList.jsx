@@ -9,7 +9,7 @@ import PaymentMethodModal from "../PaymentMethodModal";
 import { validate } from "../admin/list/validateNote";
 import moment from "moment";
 import styled, { keyframes } from "styled-components";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FloatingInput } from "../admin/CommonStyled";
 import { toast } from "react-toastify";
 import { FiArrowLeft, FiCheck, FiDollarSign, FiX } from "react-icons/fi";
@@ -32,20 +32,20 @@ const initialState = {
   folio: `FOLIO-${Math.floor(Math.random() * 1000000)}`,
   services: {},
   observations: "",
-  abono: 0,
+  abonos: [],
   suavitelDesired: false,
-  isPaid: false,
-  phoneNumber: "",
+  note_status: "pendiente",
+  phone: "",
   countryCode: "52",
-  paymentMethod: null,
-  abonoPaymentMethod: null,
+  payment_method: null,
   errors: {},
   prices: {},
 };
 
-const LaundryNote = () => {
+const NotasList = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [formState, setFormState] = useState(initialState);
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -57,27 +57,40 @@ const LaundryNote = () => {
   const { items: services, status: servicesStatus } = useSelector(
     (state) => state.services
   );
-  const loading = servicesStatus === "loading";
+  const { isAdmin } = useSelector((state) => state.auth);
+  const businessId = location.state?.businessId;
+
+  // Validar businessId
+  useEffect(() => {
+    if (!businessId) {
+      toast.error("No se proporcionó un ID de negocio válido");
+      navigate(isAdmin ? "/admin/summary" : "/owner");
+    }
+  }, [businessId, navigate, isAdmin]);
 
   // Inicializar servicios
   useEffect(() => {
-    dispatch(fetchServices());
-  }, [dispatch]);
+    if (businessId) {
+      console.log("Despachando fetchServices para businessId:", businessId);
+      dispatch(fetchServices({ businessId }));
+    }
+  }, [dispatch, businessId]);
 
   // Configurar precios y servicios
   const initializeServices = useCallback(() => {
+    console.log("Inicializando servicios:", services);
     const { prices, servicesState } = services.reduce(
       (acc, service) => {
         const key = service.name.toLowerCase().replace(/\s+/g, "");
         if (service.type === "simple") {
           acc.prices[key] = service.price;
-          acc.servicesState[key] = 0;
+          acc.servicesState[key] = { quantity: 0, unit: service.unit || 'pza' };
         } else if (service.type === "sized") {
           acc.prices[key] = {};
           acc.servicesState[key] = {};
           service.sizes.forEach((size) => {
             acc.prices[key][size.name] = size.price;
-            acc.servicesState[key][size.name] = 0;
+            acc.servicesState[key][size.name] = { quantity: 0, unit: size.unit || 'pza' };
           });
         }
         return acc;
@@ -90,6 +103,7 @@ const LaundryNote = () => {
   useEffect(() => {
     if (services.length > 0) {
       const { prices, services: servicesState } = initializeServices();
+      console.log("Estado inicial de servicios:", servicesState);
       setFormState((prev) => ({
         ...prev,
         services: servicesState,
@@ -99,7 +113,7 @@ const LaundryNote = () => {
   }, [services, initializeServices]);
 
   // Calcular totales con filtrado por día
-  const { filteredServices, orderTotal, remainingAmount } = useMemo(() => {
+  const { filteredServices, orderTotal, remainingAmount, suavitelShots, suavitelPrice } = useMemo(() => {
     const today = new Date().getDay();
     const filtered = {};
 
@@ -108,33 +122,36 @@ const LaundryNote = () => {
         (s) => s.name.toLowerCase().replace(/\s+/g, "") === key
       );
       if (
-        !service.availableDays ||
-        (Array.isArray(service.availableDays) &&
-          service.availableDays.length === 0) ||
-        (Array.isArray(service.availableDays) &&
-          service.availableDays.includes(today))
+        service &&
+        (!service.availableDays ||
+          (Array.isArray(service.availableDays) &&
+            service.availableDays.length === 0) ||
+          (Array.isArray(service.availableDays) &&
+            service.availableDays.includes(today)))
       ) {
         filtered[key] = value;
       }
     });
 
+    console.log("Servicios filtrados:", filtered);
+
     const subtotal = Object.entries(filtered).reduce((acc, [key, value]) => {
-      if (typeof value === "object") {
+      if (typeof value === "object" && !("quantity" in value)) {
         return (
           acc +
-          Object.entries(value).reduce((sizeAcc, [size, qty]) => {
-            return sizeAcc + qty * (formState.prices[key]?.[size] || 0);
+          Object.entries(value).reduce((sizeAcc, [size, val]) => {
+            return sizeAcc + val.quantity * (formState.prices[key]?.[size] || 0);
           }, 0)
         );
       }
-      return acc + value * (formState.prices[key] || 0);
+      return acc + value.quantity * (formState.prices[key] || 0);
     }, 0);
 
     const suavitelPrice =
       services
         .find((s) => s.name.toLowerCase() === "extras")
         ?.sizes?.find((s) => s.name === "Suavitel")?.price || 15;
-    const kilos = filtered.lavado || filtered.promomartes || 0;
+    const kilos = filtered.lavado?.quantity || filtered.promomartes?.quantity || 0;
     const suavitelShots = formState.suavitelDesired ? Math.ceil(kilos / 6) : 0;
     const suavitelCost = suavitelShots * suavitelPrice;
 
@@ -142,7 +159,9 @@ const LaundryNote = () => {
     return {
       filteredServices: filtered,
       orderTotal: total,
-      remainingAmount: total - formState.abono,
+      remainingAmount: total - formState.abonos.reduce((sum, a) => sum + a.amount, 0),
+      suavitelShots,
+      suavitelPrice,
     };
   }, [formState, services]);
 
@@ -188,8 +207,8 @@ const LaundryNote = () => {
   const handleRemoveAbono = () => {
     setFormState((prev) => ({
       ...prev,
-      abono: 0,
-      abonoPaymentMethod: null,
+      abonos: [],
+      payment_method: null,
     }));
     setTempAbono(0);
   };
@@ -199,16 +218,20 @@ const LaundryNote = () => {
       ...prev,
       ...(modalType === "payment"
         ? {
-            isPaid: true,
-            paymentMethod: method,
-            abono: 0,
-            abonoPaymentMethod: null,
+            note_status: "pagado",
+            payment_method: method,
+            abonos: [],
           }
         : {
-            abono: tempAbono,
-            abonoPaymentMethod: method,
-            isPaid: false,
-            paymentMethod: null,
+            abonos: [
+              {
+                amount: tempAbono,
+                method: method,
+                date: moment().toISOString(),
+              },
+            ],
+            note_status: "pendiente",
+            payment_method: null,
           }),
     }));
     setShowPaymentModal(false);
@@ -216,33 +239,39 @@ const LaundryNote = () => {
   };
 
   const prepareServicesForAPI = useCallback(() => {
-    return Object.entries(formState.services).reduce(
-      (acc, [service, value]) => {
-        if (typeof value === "object") {
-          const sizes = Object.entries(value)
-            .filter(([_, qty]) => qty > 0)
-            .reduce(
-              (sizeAcc, [size, qty]) => ({
-                ...sizeAcc,
-                [size]: {
-                  quantity: qty,
-                  unitPrice: formState.prices[service][size],
-                },
-              }),
-              {}
-            );
-          if (Object.keys(sizes).length > 0) acc[service] = sizes;
-        } else if (value > 0) {
-          acc[service] = {
-            quantity: value,
-            unitPrice: formState.prices[service],
-          };
-        }
-        return acc;
-      },
-      {}
-    );
-  }, [formState]);
+    return Object.entries(formState.services).reduce((acc, [key, value]) => {
+      const service = services.find(
+        (s) => s.name.toLowerCase().replace(/\s+/g, "") === key
+      );
+      if (!service) return acc;
+
+      if (service.type === "simple" && value.quantity > 0) {
+        acc.push({
+          serviceId: service._id,
+          name: service.name,
+          price: service.price,
+          quantity: value.quantity,
+          unit: service.unit || 'pza',
+        });
+      } else if (service.type === "sized") {
+        Object.entries(value).forEach(([sizeName, val]) => {
+          if (val.quantity > 0) {
+            const size = service.sizes.find((s) => s.name === sizeName);
+            if (size) {
+              acc.push({
+                serviceId: service._id,
+                name: `${service.name} (${sizeName})`,
+                price: size.price,
+                quantity: val.quantity,
+                unit: size.unit || 'pza',
+              });
+            }
+          }
+        });
+      }
+      return acc;
+    }, []);
+  }, [formState.services, services]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -253,33 +282,9 @@ const LaundryNote = () => {
       return;
     }
 
-    if (formState.isPaid && !formState.paymentMethod) {
-      toast.error("Selecciona un método de pago para el pago total.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (formState.abono > 0 && !formState.abonoPaymentMethod) {
-      toast.error("Selecciona un método de pago para el abono.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (formState.abono > orderTotal) {
-      toast.error("El abono no puede ser mayor al total de la orden.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (formState.isPaid && formState.abono > 0) {
-      toast.error("No puedes marcar la nota como pagada y agregar un abono.");
-      setIsSubmitting(false);
-      return;
-    }
-
     const validationErrors = validate(
       formState.name,
-      formState.abono,
+      formState.abonos.reduce((sum, a) => sum + a.amount, 0),
       formState.services
     );
     if (Object.keys(validationErrors).length > 0) {
@@ -289,32 +294,36 @@ const LaundryNote = () => {
     }
 
     try {
-      await dispatch(
-        notesCreate({
-          name: formState.name,
-          folio: formState.folio,
-          date: moment().toISOString(),
-          services: prepareServicesForAPI(),
-          observations: formState.observations,
-          abonos:
-            formState.abono > 0
-              ? [
-                  {
-                    amount: formState.abono,
-                    date: moment().toISOString(),
-                    method: formState.abonoPaymentMethod || "efectivo",
-                  },
-                ]
-              : [],
-          suavitelDesired: formState.suavitelDesired,
-          total: orderTotal,
-          note_status: formState.isPaid ? "pagado" : "pendiente",
-          paidAt: formState.isPaid ? moment().toISOString() : null,
-          phoneNumber: `${formState.countryCode}${formState.phoneNumber}`,
-          paymentMethod: formState.paymentMethod || null,
-        })
-      ).unwrap();
+      const servicesForAPI = prepareServicesForAPI();
+      const phoneNumber = formState.phone ? `${formState.countryCode}${formState.phone}` : undefined;
+      if (phoneNumber && !/^\+?\d{7,15}$/.test(phoneNumber.replace(/[\s\-()]/g, ""))) {
+        toast.error("Número de teléfono inválido. Debe tener entre 7 y 15 dígitos.");
+        setIsSubmitting(false);
+        return;
+      }
 
+      const payload = {
+        businessId,
+        name: formState.name,
+        folio: formState.folio,
+        date: moment().toISOString(),
+        services: servicesForAPI,
+        observations: formState.observations,
+        abonos: formState.abonos,
+        suavitelDesired: formState.suavitelDesired,
+        suavitelShots,
+        suavitelPrice,
+        total: orderTotal,
+        note_status: formState.note_status,
+        cleaning_status: "sucia",
+        paidAt: formState.note_status === "pagado" ? moment().toISOString() : null,
+        phoneNumber,
+        payment_method: formState.note_status === "pagado" ? formState.payment_method : null,
+      };
+
+      console.log("Payload enviado a notesCreate:", payload);
+
+      await dispatch(notesCreate(payload)).unwrap();
       const { prices, services } = initializeServices();
       setFormState({
         ...initialState,
@@ -322,11 +331,14 @@ const LaundryNote = () => {
         services,
         prices,
       });
-      setTempAbono(0); 
+      setTempAbono(0);
       setShowModal(false);
+      toast.success("Nota creada exitosamente");
+      navigate(`/owner/local-summary/${businessId}`);
     } catch (error) {
-      setSubmitError("Error al crear la nota");
-      toast.error("Error al crear la nota");
+      const errorMessage = error.message || "Error al crear la nota";
+      setSubmitError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -335,19 +347,13 @@ const LaundryNote = () => {
   const renderServices = () => {
     if (!services.length) return null;
 
-    const simpleServices = services.filter(
-      (s) =>
-        filteredServices.hasOwnProperty(
-          s.name.toLowerCase().replace(/\s+/g, "")
-        ) && s.type === "simple"
-    );
+    console.log("Servicios disponibles:", services);
 
-    const sizedServices = services.filter(
-      (s) =>
-        filteredServices.hasOwnProperty(
-          s.name.toLowerCase().replace(/\s+/g, "")
-        ) && s.type === "sized"
-    );
+    const simpleServices = services.filter((s) => s.type === "simple");
+    const sizedServices = services.filter((s) => s.type === "sized");
+
+    console.log("Servicios simples:", simpleServices);
+    console.log("Servicios con tallas:", sizedServices);
 
     return (
       <ServicesGrid>
@@ -362,21 +368,25 @@ const LaundryNote = () => {
                     key={key}
                     displayName={service.name}
                     price={service.price}
-                    quantity={filteredServices[key] || 0}
+                    quantity={formState.services[key]?.quantity || 0}
+                    unit={service.unit || 'pza'}
                     onIncrease={() =>
-                      handleServiceChange(
-                        key,
-                        (formState.services[key] || 0) + 1
-                      )
+                      handleServiceChange(key, {
+                        quantity: (formState.services[key]?.quantity || 0) + 1,
+                        unit: service.unit || 'pza',
+                      })
                     }
                     onDecrease={() =>
-                      handleServiceChange(
-                        key,
-                        Math.max((formState.services[key] || 0) - 1, 0)
-                      )
+                      handleServiceChange(key, {
+                        quantity: Math.max((formState.services[key]?.quantity || 0) - 1, 0),
+                        unit: service.unit || 'pza',
+                      })
                     }
                     onQuantityChange={(value) =>
-                      handleServiceChange(key, value)
+                      handleServiceChange(key, {
+                        quantity: value,
+                        unit: service.unit || 'pza',
+                      })
                     }
                   />
                 );
@@ -395,15 +405,22 @@ const LaundryNote = () => {
                   <ServiceWithSize
                     key={key}
                     displayName={service.name}
-                    sizes={service.sizes.map((s) => s.name)}
+                    sizes={service.sizes.map((s) => ({
+                      name: s.name,
+                      price: s.price,
+                      unit: s.unit || 'pza',
+                    }))}
                     prices={Object.fromEntries(
                       service.sizes.map((s) => [s.name, s.price])
                     )}
-                    quantities={filteredServices[key] || {}}
+                    quantities={formState.services[key] || {}}
                     onQuantityChange={(size, value) =>
                       handleServiceChange(key, {
                         ...formState.services[key],
-                        [size]: Math.max(value, 0),
+                        [size]: {
+                          quantity: Math.max(value, 0),
+                          unit: service.sizes.find((s) => s.name === size).unit || 'pza',
+                        },
                       })
                     }
                   />
@@ -416,6 +433,10 @@ const LaundryNote = () => {
     );
   };
 
+  if (!businessId) {
+    return <ErrorContainer>No se proporcionó un ID de negocio válido</ErrorContainer>;
+  }
+
   if (servicesStatus === "loading")
     return <LoadingContainer>Cargando servicios...</LoadingContainer>;
   if (servicesStatus === "failed")
@@ -425,7 +446,7 @@ const LaundryNote = () => {
     <MainContainer>
       <CardContainer>
         <HeaderSection>
-          <BackButton onClick={() => navigate("/admin/notes-summary")}>
+          <BackButton onClick={() => navigate(`/owner/local-summary/${businessId}`)}>
             <FiArrowLeft size={20} />
             <span>Regresar al Menú</span>
           </BackButton>
@@ -494,7 +515,7 @@ const LaundryNote = () => {
                     type="number"
                     id="tempAbono"
                     name="tempAbono"
-                    value={tempAbono || ""} // Esto hace que el input esté vacío inicialmente
+                    value={tempAbono || ""}
                     onChange={(e) => {
                       const value = parseFloat(e.target.value);
                       setTempAbono(isNaN(value) ? 0 : Math.max(0, value));
@@ -521,7 +542,7 @@ const LaundryNote = () => {
               </ActionButton>
             </AbonoGroup>
 
-            {formState.abono > 0 && (
+            {formState.abonos.length > 0 && (
               <PaymentInfo>
                 <div
                   style={{
@@ -531,8 +552,8 @@ const LaundryNote = () => {
                   }}
                 >
                   <div>
-                    <strong>Abono:</strong> ${formState.abono.toFixed(2)} (
-                    {formState.abonoPaymentMethod})
+                    <strong>Abono:</strong> ${formState.abonos[0].amount.toFixed(2)} (
+                    {formState.abonos[0].method})
                   </div>
                   <RemoveAbonoButton onClick={handleRemoveAbono}>
                     <FiX size={18} />
@@ -545,10 +566,10 @@ const LaundryNote = () => {
           <PaymentSection>
             <ActionButton
               onClick={handleMarkAsPaid}
-              disabled={formState.isPaid || orderTotal <= 0}
-              variant={formState.isPaid ? "disabled" : "primary"}
+              disabled={formState.note_status === "pagado" || orderTotal <= 0}
+              variant={formState.note_status === "pagado" ? "disabled" : "primary"}
             >
-              {formState.isPaid ? (
+              {formState.note_status === "pagado" ? (
                 <>
                   <FiCheck size={18} />
                   Pagado
@@ -557,9 +578,9 @@ const LaundryNote = () => {
                 "Marcar como Pagado"
               )}
             </ActionButton>
-            {formState.isPaid && (
+            {formState.note_status === "pagado" && (
               <PaymentInfo>
-                <strong>Pagado:</strong> Método {formState.paymentMethod}
+                <strong>Pagado:</strong> Método {formState.payment_method}
               </PaymentInfo>
             )}
           </PaymentSection>
@@ -577,7 +598,7 @@ const LaundryNote = () => {
                 }
               />
               <CheckboxCustom />
-              <span>¿Desea Suavitel?</span>
+              <span>¿Desea Suavitel? {suavitelShots > 0 ? `(${suavitelShots} shot${suavitelShots > 1 ? 's' : ''} x $${suavitelPrice} = $${(suavitelShots * suavitelPrice).toFixed(2)})` : ''}</span>
             </CheckboxLabel>
           </CheckboxGroup>
 
@@ -586,7 +607,7 @@ const LaundryNote = () => {
               <span>Total:</span>
               <strong>${orderTotal.toFixed(2)}</strong>
             </TotalAmount>
-            {formState.abono > 0 && (
+            {formState.abonos.length > 0 && (
               <RemainingAmount>
                 <span>Monto Pendiente:</span>
                 <strong>${remainingAmount.toFixed(2)}</strong>
@@ -602,7 +623,7 @@ const LaundryNote = () => {
               }
               const errors = validate(
                 formState.name,
-                formState.abono,
+                formState.abonos.reduce((sum, a) => sum + a.amount, 0),
                 formState.services
               );
               if (Object.keys(errors).length > 0) {
@@ -611,7 +632,7 @@ const LaundryNote = () => {
                 setShowModal(true);
               }
             }}
-            disabled={loading || isSubmitting || orderTotal <= 0}
+            disabled={servicesStatus === "loading" || isSubmitting || orderTotal <= 0}
           >
             {isSubmitting ? (
               "Guardando..."
@@ -631,15 +652,15 @@ const LaundryNote = () => {
         handleSubmit={handleSubmit}
         name={formState.name}
         total={orderTotal}
-        phoneNumber={formState.phoneNumber}
+        phoneNumber={formState.phone}
         countryCode={formState.countryCode}
-        onPhoneChange={(number) =>
-          setFormState((prev) => ({ ...prev, phoneNumber: number }))
-        }
+        onPhoneChange={(number) => {
+          setFormState((prev) => ({ ...prev, phone: number }));
+        }}
         onCountryCodeChange={(code) =>
           setFormState((prev) => ({ ...prev, countryCode: code }))
         }
-        loading={loading || isSubmitting}
+        loading={servicesStatus === "loading" || isSubmitting}
         error={submitError}
         folio={formState.folio}
       />
@@ -691,7 +712,7 @@ const CardContainer = styled.div`
 
 const HeaderSection = styled.div`
   padding: 1.5rem 2rem;
-  background: linear-gradient(45deg, #4b70e2, #3a5bb8);
+  background: linear-gradient(45deg, #007bff, #0056b3);
   color: white;
 
   @media (max-width: 768px) {
@@ -875,7 +896,6 @@ const PaymentSection = styled.div`
   border: 1px solid #e2e8f0;
 `;
 
-// Reemplaza el AbonoInput existente con este código
 const AbonoGroup = styled.div`
   display: flex;
   gap: 1rem;
@@ -1088,15 +1108,6 @@ const SubmitButton = styled.button`
   }
 `;
 
-const LoadingContainer = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  font-size: 1.2rem;
-  color: #64748b;
-`;
-
 const ErrorContainer = styled.div`
   display: flex;
   justify-content: center;
@@ -1106,4 +1117,13 @@ const ErrorContainer = styled.div`
   color: #dc2626;
 `;
 
-export default LaundryNote;
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: #64748b;
+`;
+
+export default NotasList;

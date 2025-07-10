@@ -6,301 +6,394 @@ import { toast } from "react-toastify";
 const initialState = {
   items: [],
   currentNote: null,
-  stats: {
-    notes: [],
-    income: [],
-  },
-  status: null,
-  statsStatus: null,
-  fetchNoteStatus: null,
-  createStatus: null,
-  editStatus: null,
-  deleteStatus: null,
+  stats: { notes: [], income: [] },
+  status: "idle",
+  statsStatus: "idle",
+  fetchNoteStatus: "idle",
+  createStatus: "idle",
+  editStatus: "idle",
+  deleteStatus: "idle",
   error: null,
 };
 
-// Async Thunks
-const notesFetch = createAsyncThunk("notes/notesFetch", async () => {
-  try {
-    const response = await axios.get(`${url}/notes`);
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
-});
-
-const fetchNoteById = createAsyncThunk("notes/fetchNoteById", async (id) => {
-  try {
-    const response = await axios.get(
-      `${url}/notes/findOne/${id}`,
-      setHeaders()
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    toast.error(error.response?.data || "Failed to fetch note");
-    throw error;
-  }
-});
-
-const notesCreate = createAsyncThunk("notes/notesCreate", async (values) => {
-  try {
-    const response = await axios.post(`${url}/notes`, values, setHeaders());
-    return response.data;
-  } catch (error) {
-    console.log("Error details:", error.response);
-    toast.error(error.response?.data.message || "An error occurred");
-    throw error;
-  }
-});
-
-const notesEdit = createAsyncThunk("notes/notesEdit", async (values) => {
-  try {
-    const response = await axios.put(
-      `${url}/notes/${values._id}`,
-      values,
-      setHeaders()
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    toast.error(error.response?.data.message || "Failed to update note");
-    throw error;
-  }
-});
-
-const notesDelete = createAsyncThunk("notes/notesDelete", async (id) => {
-  try {
-    const response = await axios.delete(`${url}/notes/${id}`, setHeaders());
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    toast.error(error.response?.data.message || "Failed to delete note");
-    throw error;
-  }
-});
-
-const fetchNotesStats = createAsyncThunk("notes/fetchNotesStats", async () => {
-  try {
-    const response = await axios.get(`${url}/notes/stats`, setHeaders());
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
-});
-
-const fetchIncomeStats = createAsyncThunk(
-  "notes/fetchIncomeStats",
-  async () => {
+export const notesFetch = createAsyncThunk(
+  "notes/notesFetch",
+  async ({ businessId }, { getState, rejectWithValue }) => {
     try {
-      const response = await axios.get(
-        `${url}/notes/income/stats`,
-        setHeaders()
-      );
-      return response.data;
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue("No hay token de autenticación");
+      }
+      console.log("Enviando solicitud de notas con businessId:", businessId);
+      const response = await axios.get(`${url}/notes`, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId,
+        },
+      });
+      console.log("Notas recibidas para businessId:", businessId, response.data);
+      return response.data.data || [];
     } catch (error) {
-      console.log(error);
-      throw error;
+      const message = error.response?.data?.message || "Error al obtener notas";
+      console.error("Error en notesFetch:", {
+        message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(message);
+      return rejectWithValue(message);
     }
   }
 );
 
-// Slice
+export const fetchNoteById = createAsyncThunk(
+  "notes/fetchNoteById",
+  async ({ id, businessId }, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      const response = await axios.get(`${url}/notes/${id}`, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId,
+        },
+      });
+      console.log("Nota recibida:", response.data);
+      return response.data.data;
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al obtener nota";
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+export const notesCreate = createAsyncThunk(
+  "notes/notesCreate",
+  async (values, { getState, rejectWithValue, dispatch }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      const response = await axios.post(`${url}/notes`, values, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId: values.businessId,
+        },
+      });
+      console.log("Nota creada:", response.data);
+      dispatch(notesFetch({ businessId: values.businessId })); // Recargar notas
+      return response.data.data;
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al crear nota";
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+export const notesEdit = createAsyncThunk(
+  "notes/notesEdit",
+  async (values, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      let endpoint = `${url}/notes/${values._id}`;
+      if (values.note_status || values.abonos) {
+        endpoint = `${url}/notes/${values._id}/payment`;
+      } else if (values.cleaning_status && !values.note_status && !values.abonos) {
+        endpoint = `${url}/notes/${values._id}/cleaning-status`;
+      }
+      console.log(`Solicitando actualización en endpoint: ${endpoint}`, values);
+      const response = await axios.put(endpoint, values, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId: values.businessId,
+        },
+      });
+      console.log("Nota actualizada:", response.data);
+      return response.data.data;
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al actualizar nota";
+      console.error('Error en notesEdit:', {
+        message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+export const notesDelete = createAsyncThunk(
+  "notes/notesDelete",
+  async ({ id, businessId }, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      const response = await axios.delete(`${url}/notes/${id}`, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId,
+        },
+      });
+      console.log("Nota eliminada:", response.data);
+      return response.data.data || { _id: id };
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al eliminar nota";
+      console.error('Error en notesDelete:', {
+        message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+export const fetchNotesStats = createAsyncThunk(
+  "notes/fetchNotesStats",
+  async ({ businessId }, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      console.log('Solicitando estadísticas para businessId:', businessId);
+      const response = await axios.get(`${url}/notes/stats/month`, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId,
+        },
+      });
+      console.log("Estadísticas recibidas:", response.data);
+      return response.data.data || [];
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al obtener estadísticas";
+      console.error('Error en fetchNotesStats:', message);
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
+export const fetchIncomeStats = createAsyncThunk(
+  "notes/fetchIncomeStats",
+  async ({ businessId }, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      if (!auth.token) {
+        return rejectWithValue('No hay token de autenticación');
+      }
+      console.log('Solicitando ingresos para businessId:', businessId);
+      const response = await axios.get(`${url}/notes/stats/income`, {
+        ...setHeaders(),
+        headers: {
+          ...setHeaders().headers,
+          businessId,
+        },
+      });
+      console.log("Ingresos recibidos:", response.data);
+      return response.data.data || [];
+    } catch (error) {
+      const message = error.response?.data?.message || "Error al obtener ingresos";
+      console.error('Error en fetchIncomeStats:', message);
+      toast.error(message);
+      return rejectWithValue(message);
+    }
+  }
+);
+
 const notesSlice = createSlice({
   name: "notes",
   initialState,
   reducers: {
     noteAdded: (state, action) => {
       const newNote = action.payload;
-      const newNoteId = String(newNote._id);
-      const existingIndex = state.items.findIndex(
-        (note) => String(note._id) === newNoteId
-      );
-      if (existingIndex === -1) {
-        state.items.push(newNote);
-      } else {
-        state.items[existingIndex] = newNote;
+      const id = String(newNote._id);
+      const exists = state.items.some((note) => String(note._id) === id);
+      if (!exists) {
+        state.items = [newNote, ...state.items];
       }
     },
     noteUpdated: (state, action) => {
-      const updatedNote = action.payload;
-      state.items = state.items.map((note) =>
-        String(note._id) === String(updatedNote._id) ? updatedNote : note
+      const updated = action.payload;
+      state.items = state.items.map((n) =>
+        String(n._id) === String(updated._id) ? updated : n
       );
-      if (state.currentNote?._id === updatedNote._id) {
-        state.currentNote = updatedNote;
+      if (state.currentNote?._id === updated._id) {
+        state.currentNote = updated;
       }
     },
     noteDeleted: (state, action) => {
-      state.items = state.items.filter(
-        (note) => String(note._id) !== String(action.payload._id)
-      );
-      if (state.currentNote?._id === action.payload._id) {
+      const id = String(action.payload._id);
+      state.items = state.items.filter((n) => String(n._id) !== id);
+      if (state.currentNote?._id === id) {
         state.currentNote = null;
       }
     },
     updateStats: (state, action) => {
       const { type, data } = action.payload;
-      if (type === "notes") {
-        state.stats.notes = data;
-      } else if (type === "income") {
-        state.stats.income = data;
-      }
+      if (type === "notes") state.stats.notes = data;
+      if (type === "income") state.stats.income = data;
       state.statsStatus = "success";
     },
     resetError: (state) => {
+      state.error = null;
+      state.status = "idle";
+      state.statsStatus = "idle";
+      state.fetchNoteStatus = "idle";
+      state.createStatus = "idle";
+      state.editStatus = "idle";
+      state.deleteStatus = "idle";
+    },
+    resetNotes: (state) => {
+      state.items = [];
+      state.currentNote = null;
+      state.stats = { notes: [], income: [] };
+      state.status = "idle";
+      state.statsStatus = "idle";
       state.error = null;
     },
   },
   extraReducers: (builder) => {
     builder
-      // notesFetch
       .addCase(notesFetch.pending, (state) => {
         state.status = "pending";
+        state.error = null;
       })
       .addCase(notesFetch.fulfilled, (state, action) => {
         state.status = "success";
-        const uniqueNotes = [];
-        const seenIds = new Set();
-        for (const note of action.payload) {
-          const noteId = String(note._id);
-          if (!seenIds.has(noteId)) {
-            seenIds.add(noteId);
-            uniqueNotes.push(note);
-          }
-        }
-        state.items = uniqueNotes;
+        state.items = action.payload || [];
+        state.error = null;
       })
       .addCase(notesFetch.rejected, (state, action) => {
         state.status = "rejected";
-        state.error = action.error.message;
-        toast.error("Failed to fetch notes");
+        state.error = action.payload;
       })
-      // fetchNoteById
       .addCase(fetchNoteById.pending, (state) => {
         state.fetchNoteStatus = "pending";
+        state.error = null;
       })
       .addCase(fetchNoteById.fulfilled, (state, action) => {
         state.fetchNoteStatus = "success";
         state.currentNote = action.payload;
-        const noteId = String(action.payload._id);
-        const existingIndex = state.items.findIndex(
-          (note) => String(note._id) === noteId
-        );
-        if (existingIndex === -1) {
-          state.items.push(action.payload);
-        } else {
-          state.items[existingIndex] = action.payload;
-        }
+        state.error = null;
       })
       .addCase(fetchNoteById.rejected, (state, action) => {
         state.fetchNoteStatus = "rejected";
-        state.error = action.error.message;
+        state.error = action.payload;
       })
-      // notesCreate
       .addCase(notesCreate.pending, (state) => {
         state.createStatus = "pending";
+        state.error = null;
       })
       .addCase(notesCreate.fulfilled, (state, action) => {
         state.createStatus = "success";
-        const noteId = String(action.payload._id);
-        const existingIndex = state.items.findIndex(
-          (note) => String(note._id) === noteId
-        );
-        if (existingIndex === -1) {
-          state.items.push(action.payload);
-        } else {
-          state.items[existingIndex] = action.payload;
-        }
+        state.error = null;
       })
-      .addCase(notesCreate.rejected, (state) => {
+      .addCase(notesCreate.rejected, (state, action) => {
         state.createStatus = "rejected";
+        state.error = action.payload;
       })
-      // notesEdit
       .addCase(notesEdit.pending, (state, action) => {
         state.editStatus = "pending";
-        const { _id, cleaning_status } = action.meta.arg;
-        state.items = state.items.map((note) =>
-          String(note._id) === String(_id)
-            ? { ...note, cleaning_status }
-            : note
-        );
+        const { _id, cleaning_status, note_status } = action.meta.arg;
+        if (cleaning_status) {
+          state.items = state.items.map((note) =>
+            String(note._id) === String(_id) ? { ...note, cleaning_status } : note
+          );
+        }
+        if (note_status) {
+          state.items = state.items.map((note) =>
+            String(note._id) === String(_id) ? { ...note, note_status } : note
+          );
+        }
+        state.error = null;
       })
       .addCase(notesEdit.fulfilled, (state, action) => {
         state.editStatus = "success";
         const updatedNote = action.payload;
-        state.items = state.items.map((note) =>
-          String(note._id) === String(updatedNote._id) ? updatedNote : note
+        state.items = state.items.map((n) =>
+          String(n._id) === String(updatedNote._id) ? updatedNote : n
         );
         if (state.currentNote?._id === updatedNote._id) {
           state.currentNote = updatedNote;
         }
+        state.error = null;
       })
       .addCase(notesEdit.rejected, (state, action) => {
         state.editStatus = "rejected";
-        state.error = action.error.message;
-        state.items = state.items.map((note) =>
-          String(note._id) === String(action.meta.arg._id)
-            ? { ...note, cleaning_status: note.cleaning_status }
-            : note
-        );
+        state.error = action.payload;
       })
-      // notesDelete
       .addCase(notesDelete.pending, (state) => {
         state.deleteStatus = "pending";
+        state.error = null;
       })
       .addCase(notesDelete.fulfilled, (state, action) => {
         state.deleteStatus = "success";
-        state.items = state.items.filter(
-          (note) => String(note._id) !== String(action.payload._id)
-        );
-        if (state.currentNote?._id === action.payload._id) {
+        const id = String(action.payload._id || action.meta.arg.id);
+        state.items = state.items.filter((note) => String(note._id) !== id);
+        if (state.currentNote?._id === id) {
           state.currentNote = null;
         }
+        state.error = null;
       })
-      .addCase(notesDelete.rejected, (state) => {
+      .addCase(notesDelete.rejected, (state, action) => {
         state.deleteStatus = "rejected";
+        state.error = action.payload;
       })
-      // fetchNotesStats
       .addCase(fetchNotesStats.pending, (state) => {
         state.statsStatus = "pending";
+        state.error = null;
       })
       .addCase(fetchNotesStats.fulfilled, (state, action) => {
         state.statsStatus = "success";
-        state.stats.notes = action.payload;
+        state.stats.notes = action.payload || [];
+        state.error = null;
       })
       .addCase(fetchNotesStats.rejected, (state, action) => {
         state.statsStatus = "rejected";
-        state.error = action.error.message;
+        state.error = action.payload;
       })
-      // fetchIncomeStats
       .addCase(fetchIncomeStats.pending, (state) => {
         state.statsStatus = "pending";
+        state.error = null;
       })
       .addCase(fetchIncomeStats.fulfilled, (state, action) => {
         state.statsStatus = "success";
-        state.stats.income = action.payload;
+        state.stats.income = action.payload || [];
+        state.error = null;
       })
       .addCase(fetchIncomeStats.rejected, (state, action) => {
         state.statsStatus = "rejected";
-        state.error = action.error.message;
+        state.error = action.payload;
       });
   },
 });
 
-export const { noteAdded, noteUpdated, noteDeleted, updateStats, resetError } =
-  notesSlice.actions;
-
-export {
-  notesFetch,
-  fetchNoteById,
-  notesCreate,
-  notesEdit,
-  notesDelete,
-  fetchNotesStats,
-  fetchIncomeStats,
-};
+export const {
+  noteAdded,
+  noteUpdated,
+  noteDeleted,
+  updateStats,
+  resetError,
+  resetNotes,
+} = notesSlice.actions;
 
 export default notesSlice.reducer;

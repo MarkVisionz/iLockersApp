@@ -1,8 +1,9 @@
 const jwt = require("jsonwebtoken");
 const admin = require("firebase-admin");
+const mongoose = require("mongoose");
 const User = require("../models/user");
 
-// Configuración opcional de Firebase (solo si existen las variables)
+// Inicializar Firebase Admin si no está ya inicializado
 if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -13,213 +14,202 @@ if (process.env.FIREBASE_PROJECT_ID && !admin.apps.length) {
   });
 }
 
+// ✅ Middleware principal: autentica con JWT o Firebase
 const auth = async (req, res, next) => {
   try {
     const token =
       req.header("x-auth-token") ||
-      (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+      (req.headers.authorization?.startsWith("Bearer ") &&
+        req.headers.authorization.split(" ")[1]);
+
+    console.log('Token recibido:', token ? 'Presente' : 'Ausente');
 
     if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Acceso denegado. No autenticado.",
-        code: "MISSING_TOKEN",
-      });
+      return res.status(401).json({ success: false, message: "Token requerido", code: "MISSING_TOKEN" });
     }
 
     const jwtSecretKey = process.env.JWT_SECRET_KEY;
-    if (!jwtSecretKey) throw new Error("Falta JWT_SECRET_KEY en .env");
+    if (!jwtSecretKey) throw new Error("Falta JWT_SECRET_KEY");
 
+    // Intentar verificar como JWT
     try {
-      // ✅ PRIMERO intentar como JWT
       const decoded = jwt.verify(token, jwtSecretKey);
+      console.log('JWT decodificado:', decoded);
+      const user = await User.findById(decoded._id);
+      if (!user) throw new Error("Usuario no encontrado");
       req.user = {
-        ...decoded,
-        authProvider: decoded.authProvider || "password",
+        _id: user._id,
+        email: user.email,
+        isAdmin: user.isAdmin,
+        isVerified: user.isVerified,
+        role: user.role,
+        defaultBusiness: user.defaultBusiness ? user.defaultBusiness.toString() : null,
+        authProvider: user.authProvider || "password",
       };
+      console.log('Usuario autenticado (JWT):', req.user);
       return next();
     } catch (jwtError) {
-      console.log("JWT inválido, intentando Firebase...");
+      console.log("JWT inválido, intentando Firebase:", jwtError.message);
     }
 
-    // Si no fue JWT válido, intentar como token de Firebase
+    // Intentar verificar como Firebase
     if (admin.apps.length) {
       try {
         const decodedToken = await admin.auth().verifyIdToken(token);
-        const validProviders = ["google.com", "facebook.com", "password"];
-        if (!validProviders.includes(decodedToken.firebase.sign_in_provider)) {
-          return res.status(401).json({
-            success: false,
-            message: "Proveedor de autenticación no soportado",
-            code: "INVALID_PROVIDER",
-          });
-        }
+        console.log('Firebase token decodificado:', decodedToken);
+        const provider = decodedToken.firebase?.sign_in_provider;
 
-        // 🔥 Buscar usuario real
-        if (!decodedToken.email) {
-          return res.status(401).json({
-            success: false,
-            message: "Token inválido (falta email)",
-            code: "INVALID_FIREBASE_TOKEN",
-          });
+        if (!["google.com", "facebook.com", "password"].includes(provider)) {
+          return res.status(401).json({ success: false, message: "Proveedor no soportado", code: "INVALID_PROVIDER" });
         }
 
         const userInDb = await User.findOne({ email: decodedToken.email });
         if (!userInDb) {
-          return res.status(404).json({
-            success: false,
-            message: "Usuario no encontrado",
-            code: "USER_NOT_FOUND",
-          });
+          return res.status(404).json({ success: false, message: "Usuario no encontrado", code: "USER_NOT_FOUND" });
         }
 
         req.user = {
           _id: userInDb._id,
           email: userInDb.email,
           isAdmin: userInDb.isAdmin,
-          authProvider: decodedToken.firebase.sign_in_provider,
           isVerified: userInDb.isVerified,
+          role: userInDb.role,
+          defaultBusiness: userInDb.defaultBusiness ? userInDb.defaultBusiness.toString() : null,
+          authProvider: provider,
         };
-
+        console.log('Usuario autenticado (Firebase):', req.user);
         return next();
       } catch (firebaseError) {
-        console.error("Error validando token Firebase:", firebaseError.message);
-        return res.status(401).json({
-          success: false,
-          message: "Token inválido",
-          code: "INVALID_TOKEN",
-        });
+        console.error("Firebase Error:", firebaseError.message);
       }
     }
 
-    // Si no se pudo autenticar de ninguna forma
-    return res.status(401).json({
-      success: false,
-      message: "No se pudo autenticar el token",
-      code: "AUTH_FAILED",
-    });
+    return res.status(401).json({ success: false, message: "Token inválido", code: "INVALID_TOKEN" });
   } catch (err) {
-    console.error("Error en autenticación:", err.message);
-    return res.status(401).json({
-      success: false,
-      message: "Autenticación fallida",
-      code: "AUTH_ERROR",
-    });
+    console.error("Error en auth:", err.message);
+    return res.status(401).json({ success: false, message: "Error de autenticación", code: "AUTH_ERROR" });
   }
 };
 
-
-// Middleware para validar guestId
+// ✅ Middleware para usuarios invitados (guest)
 const guestAuth = async (req, res, next) => {
   try {
     const guestId = req.params.guestId || req.body.guestId || req.query.guestId;
     if (!guestId) {
-      return res.status(400).json({
-        success: false,
-        message: "GuestId es requerido",
-        code: "MISSING_GUEST_ID",
-      });
+      return res.status(400).json({ success: false, message: "GuestId requerido", code: "MISSING_GUEST_ID" });
     }
 
-    const guest = await User.findOne({ guestId, isGuest: true });
-    if (!guest) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario guest no encontrado",
-        code: "GUEST_NOT_FOUND",
-      });
-    }
-
+    const guest = await User.findOne({ _id: guestId, isGuest: true });
+    if (!guest) return res.status(404).json({ success: false, message: "Guest no encontrado", code: "GUEST_NOT_FOUND" });
     if (guest.guestExpiresAt < new Date()) {
-      return res.status(403).json({
-        success: false,
-        message: "Sesión de guest expirada",
-        code: "GUEST_EXPIRED",
-      });
+      return res.status(403).json({ success: false, message: "Sesión guest expirada", code: "GUEST_EXPIRED" });
     }
 
     req.guest = guest;
     next();
   } catch (err) {
     console.error("Error en guestAuth:", err.message);
-    return res.status(500).json({
-      success: false,
-      message: "Error en validación de guest",
-      code: "GUEST_AUTH_ERROR",
-    });
+    return res.status(500).json({ success: false, message: "Error validando guest", code: "GUEST_AUTH_ERROR" });
   }
 };
 
-// For User Profile
+// ✅ Middleware para validar que el usuario accede a su propio perfil
 const isUser = async (req, res, next) => {
   try {
-    // Ejecutar auth si no hay req.user
-    if (!req.user) {
-      await new Promise((resolve, reject) => {
-        auth(req, res, (err) => (err ? reject(err) : resolve()));
-      });
-    }
+    if (!req.user) await auth(req, res, () => {});
+    const tokenId = String(req.user._id);
+    const paramId = String(req.params.id);
 
-    const userIdFromToken = String(req.user._id);
-    const userIdFromParams = String(req.params.id);
+    if (tokenId === paramId || req.user.isAdmin) return next();
 
-    // Logs solo en desarrollo
-    if (process.env.NODE_ENV !== "production") {
-      console.log("🔐 Middleware isUser:");
-      console.log("🆔 Token ID:", userIdFromToken);
-      console.log("🆔 Params ID:", userIdFromParams);
-    }
-
-    if (userIdFromToken === userIdFromParams || req.user.isAdmin) {
-      return next();
-    }
-
-    return res.status(403).json({
-      success: false,
-      message: "Acceso denegado. No autorizado.",
-      code: "UNAUTHORIZED",
-    });
-  } catch (error) {
-    console.error("Error en isUser:", error.message);
-    return res.status(401).json({
-      success: false,
-      message: "Error de autenticación",
-      code: "AUTH_ERROR",
-    });
+    return res.status(403).json({ success: false, message: "Acceso denegado", code: "UNAUTHORIZED" });
+  } catch (err) {
+    console.error("Error en isUser:", err.message);
+    return res.status(401).json({ success: false, message: "Error de autenticación", code: "AUTH_ERROR" });
   }
 };
 
-// For Admin
+// ✅ Middleware para administradores del sistema
 const isAdmin = async (req, res, next) => {
   try {
-    if (!req.user) {
-      await new Promise((resolve, reject) => {
-        auth(req, res, (err) => (err ? reject(err) : resolve()));
-      });
+    if (!req.user) await auth(req, res, () => {});
+    if (req.user?.isAdmin) return next();
+
+    return res.status(403).json({ success: false, message: "Solo para administradores", code: "ADMIN_REQUIRED" });
+  } catch (err) {
+    console.error("Error en isAdmin:", err.message);
+    return res.status(401).json({ success: false, message: "Error de autenticación", code: "AUTH_ERROR" });
+  }
+};
+
+// ✅ Middleware para dueños de negocios (owners)
+const isBusinessOwner = async (req, res, next) => {
+  try {
+    if (!req.user) await auth(req, res, () => {});
+    const businessId = req.headers.businessid || req.headers.businessId || req.params.businessId || req.body.businessId || req.query.businessId;
+    console.log("isBusinessOwner - Headers:", req.headers);
+    console.log("isBusinessOwner - businessId recibido:", businessId);
+    console.log("isBusinessOwner - user:", req.user);
+
+    if (!businessId) {
+      console.error("isBusinessOwner - BusinessId requerido");
+      return res.status(400).json({ success: false, message: "BusinessId requerido", code: "MISSING_BUSINESS_ID" });
     }
 
-    if (req.user && req.user.isAdmin) {
-      return next();
+    if (!mongoose.Types.ObjectId.isValid(businessId)) {
+      console.error("isBusinessOwner - BusinessId inválido:", businessId);
+      return res.status(400).json({ success: false, message: "BusinessId inválido", code: "INVALID_BUSINESS_ID" });
     }
 
-    return res.status(403).json({
-      success: false,
-      message: "Acceso denegado. Solo para administradores.",
-      code: "ADMIN_REQUIRED",
-    });
-  } catch (error) {
-    console.error("Error en isAdmin:", error.message);
-    return res.status(401).json({
-      success: false,
-      message: "Error de autenticación",
-      code: "AUTH_ERROR",
-    });
+    const business = await mongoose.model("Business").findById(businessId);
+    if (!business) {
+      console.error("isBusinessOwner - Negocio no encontrado:", businessId);
+      return res.status(404).json({ success: false, message: "Negocio no encontrado", code: "BUSINESS_NOT_FOUND" });
+    }
+
+    const user = await User.findById(req.user._id).populate("businesses");
+    const isOwner = user.businesses.some((b) => b._id.equals(business._id));
+
+    if (!isOwner && !req.user.isAdmin) {
+      console.error("isBusinessOwner - No autorizado para businessId:", businessId, "userId:", req.user._id);
+      return res.status(403).json({ success: false, message: "No autorizado para este negocio", code: "UNAUTHORIZED" });
+    }
+
+    if (!business.isActive) {
+      console.error("isBusinessOwner - Negocio no activo:", businessId);
+      return res.status(403).json({ success: false, message: "Negocio no activo", code: "BUSINESS_INACTIVE" });
+    }
+
+    req.businessId = businessId;
+    next();
+  } catch (err) {
+    console.error("Error en isBusinessOwner:", err.message);
+    return res.status(500).json({ success: false, message: "Error en autenticación", code: "AUTH_ERROR" });
+  }
+};
+
+// ✅ Middleware que bloquea acceso si el usuario no ha terminado su registro
+const checkRegistrationStep = async (req, res, next) => {
+  try {
+    if (!req.user) await auth(req, res, () => {});
+    const user = await User.findById(req.user._id);
+
+    if (user.role === "owner" && user.registrationStep !== "completed") {
+      return res.status(403).json({ success: false, message: "Registro de negocio incompleto", code: "REGISTRATION_INCOMPLETE" });
+    }
+
+    next();
+  } catch (err) {
+    console.error("Error en checkRegistrationStep:", err.message);
+    return res.status(401).json({ success: false, message: "Error de autenticación", code: "AUTH_ERROR" });
   }
 };
 
 module.exports = {
   auth,
   guestAuth,
-  isAdmin,
   isUser,
+  isAdmin,
+  isBusinessOwner,
+  checkRegistrationStep,
 };

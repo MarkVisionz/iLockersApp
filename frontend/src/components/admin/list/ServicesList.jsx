@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
   fetchServices,
   deleteService,
   clearAllServicesThunk,
+  resetServices,
 } from "../../../features/servicesSlice";
 import { ErrorMessage, LoadingSpinner } from "../../LoadingAndError";
 import FilterBar from "./ListHelpers/ServiceHelper/FilterBar";
@@ -17,9 +18,11 @@ import SimpleConfirmationModal from "../../SimpleModal";
 const ServicesList = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const services = useSelector((state) => state.services.items);
-  const status = useSelector((state) => state.services.status);
-  const error = useSelector((state) => state.services.error);
+  const { businessId, activeTab } = useOutletContext();
+  const { businesses, user, isAdmin } = useSelector((state) => state.auth);
+  const { items: services, status, error } = useSelector((state) => state.services);
+
+  const effectiveBusinessId = isAdmin ? null : businessId;
 
   const [loading, setLoading] = useState({ action: false });
   const [sortConfig, setSortConfig] = useState({ field: "", direction: "ascending" });
@@ -31,19 +34,51 @@ const ServicesList = () => {
   const itemsPerPage = 5;
 
   useEffect(() => {
-    if (status === "idle") {
-      dispatch(fetchServices());
+    console.log("ServicesList useEffect:", {
+      status,
+      activeTab,
+      effectiveBusinessId,
+      businessId,
+      businesses: businesses.map((b) => b._id),
+    });
+
+    if (!effectiveBusinessId && !isAdmin) {
+      console.warn("No se proporcionó un businessId válido");
+      return;
     }
-  }, [dispatch, status]);
+
+    if (activeTab === "services") {
+      console.log(`Despachando resetServices y fetchServices para businessId: ${effectiveBusinessId}`);
+      dispatch(resetServices());
+      dispatch(fetchServices({ businessId: effectiveBusinessId })).then((action) => {
+        if (fetchServices.fulfilled.match(action)) {
+          console.log("Servicios cargados en ServicesList:", action.payload);
+        } else {
+          console.error("Error al cargar servicios:", action.payload);
+        }
+      });
+    }
+  }, [dispatch, effectiveBusinessId, activeTab]);
 
   const filteredServices = useMemo(() => {
     const lowerCaseQuery = searchQuery.toLowerCase();
-    return services.filter((service) =>
-      [service.name, service.type, service.price?.toString(), service._id]
-        .filter(Boolean)
-        .some((val) => val.toString().toLowerCase().includes(lowerCaseQuery))
+    const filtered = services.filter(
+      (service) =>
+        (!effectiveBusinessId || String(service.businessId) === String(effectiveBusinessId)) &&
+        [service.name, service.type, service.price?.toString(), service._id, service.category]
+          .filter(Boolean)
+          .some((val) => val.toString().toLowerCase().includes(lowerCaseQuery))
     );
-  }, [services, searchQuery]);
+    console.log(`Filtered ${filtered.length} services for businessId: ${effectiveBusinessId}`, {
+      allServices: services.length,
+      filteredServices: filtered.map((service) => ({
+        _id: service._id,
+        name: service.name,
+        businessId: service.businessId,
+      })),
+    });
+    return filtered;
+  }, [services, searchQuery, effectiveBusinessId]);
 
   const sortedServices = useMemo(() => {
     if (!sortConfig.field) return filteredServices;
@@ -52,7 +87,7 @@ const ServicesList = () => {
       const { field, direction } = sortConfig;
       const order = direction === "ascending" ? 1 : -1;
 
-      if (field === "name" || field === "type") {
+      if (field === "name" || field === "type" || field === "category") {
         return a[field].localeCompare(b[field]) * order;
       } else if (field === "price") {
         const priceA = a.type === "simple" ? a.price : Math.min(...(a.sizes?.map((s) => s.price) || [0])) || 0;
@@ -82,13 +117,15 @@ const ServicesList = () => {
     setLoading((prev) => ({ ...prev, action: true }));
     try {
       if (itemToDelete === "all") {
-        await dispatch(clearAllServicesThunk()).unwrap();
+        await dispatch(clearAllServicesThunk({ businessId: effectiveBusinessId })).unwrap();
+        toast.success("Todos los servicios eliminados exitosamente");
       } else if (itemToDelete) {
-        await dispatch(deleteService(itemToDelete));
+        await dispatch(deleteService({ id: itemToDelete, businessId: effectiveBusinessId })).unwrap();
+        toast.success("Servicio eliminado exitosamente");
       }
     } catch (err) {
       console.error("Error al eliminar:", err);
-      toast.error("Error al eliminar el servicio.");
+      toast.error(err.message || "Error al eliminar el servicio.");
     } finally {
       setLoading((prev) => ({ ...prev, action: false }));
       setShowModal(false);
@@ -106,11 +143,27 @@ const ServicesList = () => {
     setShowModal(true);
   };
 
+  if (!isAdmin && !effectiveBusinessId) {
+    return (
+      <Container>
+        <ErrorMessage message="No se seleccionó un negocio válido" />
+      </Container>
+    );
+  }
+
   if (status === "loading") {
     return (
       <LoadingContainer>
         <LoadingSpinner />
       </LoadingContainer>
+    );
+  }
+
+  if (status === "rejected") {
+    return (
+      <Container>
+        <ErrorMessage message={error || "Error al cargar servicios"} />
+      </Container>
     );
   }
 
@@ -123,9 +176,10 @@ const ServicesList = () => {
         sortConfig={sortConfig}
         setSortConfig={setSortConfig}
         navigate={navigate}
+        businessId={effectiveBusinessId}
       />
 
-      {filteredServices.length > 0 && (
+      {filteredServices.length > 0 && !isAdmin && (
         <DeleteAllButton onClick={handleDeleteAll}>
           Borrar todos los servicios
         </DeleteAllButton>
@@ -137,21 +191,31 @@ const ServicesList = () => {
             <ServiceCard
               key={service._id}
               service={service}
+              businessId={effectiveBusinessId}
               loading={loading.action}
               handleDelete={() => handleDelete(service._id, "servicio")}
             />
           ))
         ) : (
-          <EmptyState>No hay servicios disponibles.</EmptyState>
+          <NoDataMessage>
+            <p>Tu negocio está listo, pero aún no tienes servicios registrados.</p>
+            <CreateNoteButton
+              onClick={() => navigate(`/owner/services/${effectiveBusinessId}/create`)}
+            >
+              Crear tu primer servicio
+            </CreateNoteButton>
+          </NoDataMessage>
         )}
       </ServicesContainer>
 
-      <Pagination
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        totalNotes={filteredServices.length}
-        itemsPerPage={itemsPerPage}
-      />
+      {sortedServices.length > itemsPerPage && (
+        <Pagination
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalNotes={sortedServices.length}
+          itemsPerPage={itemsPerPage}
+        />
+      )}
 
       <SimpleConfirmationModal
         showModal={showModal}
@@ -188,13 +252,6 @@ const ServicesContainer = styled.div`
   flex-direction: column;
 `;
 
-const EmptyState = styled.p`
-  margin: 0;
-  text-align: center;
-  font-style: italic;
-  color: #888;
-`;
-
 const DeleteAllButton = styled.button`
   margin: 1rem auto;
   background-color: #dc3545;
@@ -209,6 +266,25 @@ const DeleteAllButton = styled.button`
 
   &:hover {
     background-color: #b02a37;
+  }
+`;
+
+const NoDataMessage = styled.div`
+  text-align: center;
+  color: #666;
+  margin: 2rem 0;
+`;
+
+const CreateNoteButton = styled.button`
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 1rem;
+  &:hover {
+    background-color: #0056b3;
   }
 `;
 

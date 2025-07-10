@@ -13,10 +13,18 @@ const productsRoute = require("./routes/products");
 const notesRoute = require("./routes/laundryNotes");
 const products = require("./products");
 const firebaseAuth = require("./routes/firebaseAuth");
-const servcesRoutes = require("./routes/services");
+const servicesRoutes = require("./routes/services");
+const businessRoutes = require("./routes/business");
 
 require("./cron/cleanUnverifiedUsersJob");
 require("dotenv").config();
+
+// Importar modelos antes de cualquier middleware o ruta
+console.log("Importando modelos...");
+require("./models/user");
+require("./models/laundryServices");
+require("./models/business");
+console.log("Modelos importados");
 
 const app = express();
 const server = http.createServer(app);
@@ -60,7 +68,8 @@ app.use("/api/products", productsRoute);
 app.use("/api/users", users);
 app.use("/api/notes", notesRoute);
 app.use("/api/auth", firebaseAuth);
-app.use("/api/services", servcesRoutes);
+app.use("/api/services", servicesRoutes);
+app.use("/api/business", businessRoutes);
 
 app.get("/", (req, res) => {
   res.send("Welcome to our Online Laundry API...");

@@ -4,6 +4,7 @@ import styled, { css } from "styled-components";
 import { logoutUser } from "../features/authSlice";
 import { toast } from "react-toastify";
 import { useMediaQuery } from "react-responsive";
+import { useEffect } from "react";
 
 const NavBar = () => {
   const navigate = useNavigate();
@@ -15,11 +16,23 @@ const NavBar = () => {
   const isMobile = useMediaQuery({ maxWidth: 768 });
   const isVerySmallScreen = useMediaQuery({ maxWidth: 400 });
 
-  const handleLogout = () => {
-    dispatch(logoutUser(null));
-    navigate("/");
-    toast.warning("Sesión cerrada", { position: "bottom-left" });
+  const handleLogout = async () => {
+    try {
+      await dispatch(logoutUser()).unwrap();
+      navigate("/");
+      toast.warning("Sesión cerrada", { position: "bottom-left" });
+    } catch (error) {
+      toast.error("Error al cerrar sesión", { position: "bottom-left" });
+    }
   };
+
+  // Limpieza adicional para asegurar que el estado se resetea
+  useEffect(() => {
+    if (!auth.isAuthenticated && (auth.role || auth._id)) {
+      // Forzar recarga si el estado parece inconsistente
+      window.location.reload();
+    }
+  }, [auth.isAuthenticated, auth.role, auth._id]);
 
   return (
     <NavContainer $isHome={isHome}>
@@ -38,17 +51,25 @@ const NavBar = () => {
       </LogoLink>
 
       <NavContent $isMobile={isMobile}>
-        {auth._id ? (
+        {auth.isAuthenticated ? (
           <NavLinks $isMobile={isMobile}>
-            {!auth.isAdmin ? (
-              <NavButton to="/user/profile" $isMobile={isMobile}>Perfil</NavButton>
-            ) : (
+            {auth.role === "owner" && (
+              <NavButton to="/owner" $isMobile={isMobile}>
+                Resumen Local
+              </NavButton>
+            )}
+            {auth.role === "admin" && (
               <>
                 <NavButton to="/admin/summary" $isMobile={isMobile}>Admin</NavButton>
                 <NavButton to="/laundry-screen" $isMobile={isMobile}>Lavandería</NavButton>
               </>
             )}
-            <LogoutButton onClick={handleLogout} $isMobile={isMobile} aria-label="Cerrar sesión">Salir</LogoutButton>
+            {auth._id && (
+              <NavButton to={`/user/${auth._id}`} $isMobile={isMobile}>Perfil</NavButton>
+            )}
+            <LogoutButton onClick={handleLogout} $isMobile={isMobile} aria-label="Cerrar sesión">
+              Salir
+            </LogoutButton>
           </NavLinks>
         ) : (
           <AuthLinks $isMobile={isMobile}>
@@ -238,3 +259,4 @@ const BagQuantity = styled.span`
   align-items: center;
   justify-content: center;
 `;
+
